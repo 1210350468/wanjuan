@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it } from 'vitest'
-import { page } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import '../../../../index.css'
@@ -237,6 +237,35 @@ it('运行侧页开着时加批注，删掉最后一条批注后：运行侧页�
   expect(useStageStore.getState().sheet).toEqual({ kind: 'run', tab: 'history' })
 })
 
+it('运行侧页开着时加批注，切到另一章：正文整个换掉，不把运行侧页放回来', async () => {
+  await openChapter({ reviewed: false })
+  await act(async () => useStageStore.setState({ sheet: { kind: 'run', tab: 'history' } }))
+  await annotate('他第三次展开信纸。', '写出信纸上的字')
+  await expect.element(runSheet()).not.toBeInTheDocument()
+  const other = backend.addDraft({ status: 'draft', chapterNumber: 4, content: '第四章只有一句。' })
+  await act(async () => { await useDraftStore.getState().loadAllDrafts(SESSION.projectPath, SESSION) })
+
+  await act(async () => { await openDraftTab(useDraftStore.getState().draftsByChapter[4]!.find(candidate => candidate.id === other.id)!, '第 4 章', SESSION) })
+
+  await expect.element(page.getByText('第四章只有一句。')).toBeVisible()
+  await expect.element(dock()).not.toBeInTheDocument()
+  expect(useStageStore.getState().sheet).toBeNull()
+})
+
+it('运行侧页让位给批注后，本章被重读收起了侧页，再删掉批注：不放回运行侧页', async () => {
+  await openChapter({ reviewed: false })
+  await act(async () => useStageStore.setState({ sheet: { kind: 'run', tab: 'history' } }))
+  await annotate('他第三次展开信纸。', '写出信纸上的字')
+  const filePath = useEditorStore.getState().tabs.find(tab => tab.id === useEditorStore.getState().activeTabId)!.filePath!
+  await act(async () => useStageStore.setState({ chapterRequest: { session: SESSION, filePath } }))
+  await expect.element(dock()).toBeVisible()
+
+  await act(async () => dock().getByRole('button', { name: '删除批注 1' }).click())
+
+  await expect.element(dock()).not.toBeInTheDocument()
+  expect(useStageStore.getState().sheet).toBeNull()
+})
+
 it('作者先关掉审稿报告再加批注，用完后：侧栏仍空着，不替作者打开报告', async () => {
   await openChapter({ reviewed: true })
   await act(async () => page.getByRole('button', { name: '关闭审稿报告' }).click())
@@ -393,7 +422,37 @@ it('统一修改生成中把正文滚远、生成失败：修稿入口不锁死'
   await act(async () => { scroller.scrollTop = 0 })
 
   await expect.element(page.getByText(LOCK_HINT)).not.toBeInTheDocument()
+  await expect.element(dock().getByRole('button', { name: '统一修改（1）' })).toBeVisible()
   await expect.element(await refineItem()).toBeEnabled()
+})
+
+it('统一修改生成中作者改了正文、又滚到别处：结果停在预览时修稿入口仍锁着，点「回到预览」能找回预览并取消', async () => {
+  let finish!: () => void
+  const gate = new Promise<void>(resolve => { finish = resolve })
+  const long = [ORIGINAL, ...Array.from({ length: 200 }, (_, index) => `第 ${index + 1} 段：雨从傍晚开始就没有停过。`)].join('\n\n')
+  await startAnnotationRevision(false, undefined, gate, long)
+  await expect.element(page.getByText('正在生成', { exact: false })).toBeVisible()
+
+  const scroller = document.querySelector('.stage-ch-scroll')!
+  await act(async () => { scroller.scrollTop = scroller.scrollHeight })
+  await expect.poll(() => document.querySelector('.cm-selbar')).toBeNull()
+  await act(async () => page.getByText('第 200 段：雨从傍晚开始就没有停过。', { exact: true }).click())
+  await act(async () => userEvent.keyboard('又'))
+  await act(async () => finish())
+
+  await expect.element(page.getByText(LOCK_HINT)).toBeVisible()
+  await expect.element(await refineItem()).toBeDisabled()
+  await closeMenu()
+
+  await act(async () => page.getByRole('button', { name: '回到预览' }).click())
+  const preview = page.getByRole('toolbar', { name: '选中文字的操作' })
+  await expect.element(preview.getByText('正文或原目标已变化，结果未应用；你仍可复制预览内容')).toBeVisible()
+  await expect.element(page.getByRole('button', { name: '回到预览' })).not.toBeInTheDocument()
+
+  await act(async () => preview.getByRole('button', { name: '取消' }).click())
+
+  await expect.element(page.getByText(LOCK_HINT)).not.toBeInTheDocument()
+  await expect.element(dock().getByRole('button', { name: '统一修改（1）' })).toBeVisible()
 })
 
 it('取消统一修改后再恢复一次失败的运行：修稿入口不被锁住', async () => {
@@ -414,7 +473,7 @@ it('取消统一修改后再恢复一次失败的运行：修稿入口不被锁�
   await expect.element(page.getByText(LOCK_HINT)).not.toBeInTheDocument()
 })
 
-it('批注修改审阅摆着时早先发起的修稿生成完成：不自动打开修稿合并，审阅留着；取消后再打开', async () => {
+it('批注修改审阅摆着时早先发起的修稿生成完成：不自动打开修稿合并，审阅留着；取消后点「打开修稿合并」可以打开', async () => {
   const review = await openAnnotationReview()
 
   await act(async () => { backend.addRevision(backend.state.drafts.at(-1)!) })
@@ -425,6 +484,9 @@ it('批注修改审阅摆着时早先发起的修稿生成完成：不自动打�
   await expect.element(page.getByRole('region', { name: '修稿合并' })).not.toBeInTheDocument()
 
   await act(async () => review.getByRole('button', { name: '取消' }).click())
+  await expect.element(page.getByRole('button', { name: '打开修稿合并' })).toBeEnabled()
+  expect(document.querySelector('[role="region"][aria-label="修稿合并"]')).toBeNull()
+  await act(async () => page.getByRole('button', { name: '打开修稿合并' }).click())
 
   await expect.element(page.getByRole('region', { name: '修稿合并' })).toBeVisible()
 })
