@@ -1140,13 +1140,13 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
         if (!(error instanceof ReviewSourceDeletedError)) list.partial = true
       }
     }
-    const batchRoots = runs.filter(item => item.batchRoot)
-    if (!batchRoots.length) return list
+    const batchIds = draftEffects.resumableBatchIds(deps.projectId)
+    if (!batchIds.length) return list
     const { commits, unreadable } = draftEffects.listedBatchCommits()
     if (unreadable) list.partial = true
-    for (const run of batchRoots) {
+    for (const batchId of batchIds) {
       try {
-        const batch = draftEffects.readBatchHistory(run.handle.runId, deps.projectId, commits)
+        const batch = draftEffects.readBatchHistory(batchId, deps.projectId, commits)
         if (batch.sourceCurrent && batch.nextChapterNumber !== null) list.batches.push(batch)
       } catch { list.partial = true }
     }
