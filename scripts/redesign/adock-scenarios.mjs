@@ -3,11 +3,34 @@ import assert from 'node:assert/strict'
 import * as chapterView from './pages/chapter-view.mjs'
 import * as runSheet from './pages/run-sheet.mjs'
 import { seedStageSample } from './scenarios.mjs'
-import { STAGE_SAMPLE } from './stage-sample.mjs'
+import { countUnits, STAGE_SAMPLE } from './stage-sample.mjs'
 
 const PARAGRAPH = '守塔人说，雾钟是三十年前装上的，从那以后只坏过一次。那一次，北堤外沉了一条船，船名至今没人能在档案里找到。'
 const NOTE = '沉船写得更具体'
 const REVISED = STAGE_SAMPLE.drafts[3].text.replace('北堤外沉了一条船', '北堤外沉了一条运煤的双桅船')
+
+const LOCK_HINT = '批注修改还在等你处理，修稿会冲掉它。先接受或取消批注修改。'
+const MORE = Array.from({ length: 80 }, (_, index) => `第 ${index + 1} 次涨潮时，林岚又数了一遍台阶。`).join('\n\n')
+
+/** 第 3 章有一份待合并的修稿：改的是第一段，与批注的那段不重叠。 */
+const seedPendingRevision = context => seedStageSample(context, {
+  landOnChapter3: false,
+  beforeReload: async ({ page, invoke, path, session }) => {
+    for (const draft of await invoke(page, 'db:draft-list', 3, path, session)) {
+      assert.equal((await invoke(page, 'db:draft-delete', draft.id, path, session)).success, true)
+    }
+    const content = STAGE_SAMPLE.drafts[3].text
+    const created = await invoke(page, 'db:draft-create', { chapterNumber: 3, version: 1, source: 'write', content, wordCount: countUnits(content) }, path, session)
+    assert.equal(created.success, true, created.error)
+    const expectedSource = { id: created.id, chapterNumber: 3, version: 1, status: 'draft', content }
+    const review = await invoke(page, 'db:review-create', { baseDraftId: created.id, content: STAGE_SAMPLE.drafts[3].review, expectedSource }, path, session)
+    assert.equal(review.success, true, review.error)
+    const revised = content.replace('钟声比往常早了一刻', '钟声比往常早了整整一刻')
+    const revision = await invoke(page, 'db:revision-create', { baseDraftId: created.id, revisionType: 'review-fix', reviewSourceId: review.id,
+      content: revised, wordCount: countUnits(revised), expectedSource }, path, session)
+    assert.equal(revision.success, true, revision.error)
+  },
+})
 
 const dock = page => page.getByRole('region', { name: '本章批注' })
 const marks = page => chapterView.prose(page).locator('.cm-editor-annotation').count()
@@ -233,7 +256,7 @@ export const ADOCK_SCENARIOS = {
     measured.reviseDisabled = await revise.isDisabled()
     assert.equal(measured.reviseDisabled, true, '审阅摆着时「按 N 项意见修稿」不可点')
     measured.hint = await chapterView.view(page).locator('.stage-ch-hint').innerText()
-    assert.equal(measured.hint, '批注修改还在等你处理，修稿会冲掉它。先接受或取消批注修改。')
+    assert.equal(measured.hint, LOCK_HINT)
     await shoot('adock-l1-locked')
     await chapterView.view(page).getByRole('button', { name: '更多操作' }).click()
     const refine = page.getByRole('menuitem', { name: '直接修稿…' })
@@ -247,8 +270,76 @@ export const ADOCK_SCENARIOS = {
     measured.reviseDisabledAfterCancel = await revise.isDisabled()
     assert.equal(measured.reviseDisabledAfterCancel, false, '取消批注修改后修稿入口恢复')
     measured.hintAfterCancel = await chapterView.view(page).locator('.stage-ch-hint').innerText()
-    assert.notEqual(measured.hintAfterCancel, measured.hint)
+    assert.equal(measured.hintAfterCancel, '修稿结果会以差异给你确认，不会直接覆盖')
     await shoot('adock-l2-unlocked')
+    return measured
+  } },
+
+  'adock-lock-merge': { model: true, shell: 'stage', setup: seedPendingRevision, run: async ({ page, fake, shoot }) => {
+    const measured = {}
+    fake.replyReview(prompt => prompt.includes(NOTE) ? REVISED : null)
+    await chapterView.open(page, 3)
+    await chapterView.merge(page).getByRole('button', { name: '稍后再合并' }).click()
+    await chapterView.merge(page).waitFor({ state: 'detached' })
+    await annotate(page)
+    await dock(page).getByRole('button', { name: '统一修改（1）' }).click()
+    const review = page.getByRole('region', { name: '批注修改对比' })
+    await review.waitFor({ state: 'visible', timeout: 60_000 })
+
+    const openMerge = chapterView.view(page).getByRole('button', { name: '打开修稿合并' })
+    measured.openMergeDisabled = await openMerge.isDisabled()
+    assert.equal(measured.openMergeDisabled, true, '审阅摆着时「打开修稿合并」不可点')
+    measured.hint = await chapterView.hint(page).innerText()
+    assert.equal(measured.hint, LOCK_HINT)
+    await shoot('adock-m1-locked')
+
+    await review.getByRole('button', { name: '取消' }).click()
+    await review.waitFor({ state: 'hidden' })
+    measured.openMergeDisabledAfterCancel = await openMerge.isDisabled()
+    assert.equal(measured.openMergeDisabledAfterCancel, false, '取消后「打开修稿合并」恢复可点')
+    await page.waitForTimeout(500)
+    measured.mergeAfterCancel = await chapterView.merge(page).count()
+    assert.equal(measured.mergeAfterCancel, 0, '取消后不替作者打开修稿合并')
+    measured.hintAfterCancel = await chapterView.hint(page).innerText()
+    assert.equal(measured.hintAfterCancel, '修稿已生成，逐段选择后完成合并')
+    await shoot('adock-m2-unlocked')
+    return measured
+  } },
+
+  'adock-reveal': { model: true, shell: 'stage', setup: seedStageSample, run: async ({ page, fake, shoot }) => {
+    const measured = {}
+    fake.replyReview(prompt => prompt.includes(NOTE) ? REVISED : null)
+    await chapterView.open(page, 3)
+    await annotate(page)
+    fake.gate.hold()
+    await dock(page).getByRole('button', { name: '统一修改（1）' }).click()
+    const toolbar = page.getByRole('toolbar', { name: '选中文字的操作' })
+    await toolbar.getByRole('status').waitFor({ state: 'visible' })
+
+    await chapterView.prose(page).locator('.cm-line').last().click()
+    await page.keyboard.press('ControlOrMeta+End')
+    await page.keyboard.insertText(`\n\n${MORE}`)
+    await toolbar.waitFor({ state: 'hidden' })
+    fake.gate.release()
+    const back = chapterView.view(page).getByRole('button', { name: '回到预览' })
+    await back.waitFor({ state: 'visible' })
+    await page.waitForTimeout(2000)
+    measured.hint = await chapterView.hint(page).innerText()
+    assert.equal(measured.hint, `${LOCK_HINT}回到预览`)
+    measured.toolbarWhileHidden = await toolbar.count()
+    assert.equal(measured.toolbarWhileHidden, 0, '预览滚出视口后看不见')
+    await shoot('adock-v1-hidden')
+
+    await back.click()
+    await toolbar.getByText('正文或原目标已变化，结果未应用；你仍可复制预览内容').waitFor({ state: 'visible', timeout: 60_000 })
+    measured.backAfterReveal = await back.count()
+    assert.equal(measured.backAfterReveal, 0, '预览摆出后不再给「回到预览」')
+    await shoot('adock-v2-revealed')
+
+    await toolbar.getByRole('button', { name: '取消' }).click()
+    await dock(page).waitFor({ state: 'visible' })
+    measured.hintAfterCancel = await chapterView.hint(page).innerText()
+    assert.ok(!measured.hintAfterCancel.startsWith(LOCK_HINT), '取消后解锁')
     return measured
   } },
 }
