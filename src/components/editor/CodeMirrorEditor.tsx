@@ -308,7 +308,8 @@ export default function CodeMirrorEditor({
     if (!view || !target) return
     const range = { from: Math.min(target.from, view.state.doc.length), to: Math.min(target.to, view.state.doc.length) }
     setSelectionRange(range)
-    view.dispatch({ effects: EditorView.scrollIntoView(range.from, { y: 'start' }) })
+    // 光标收到原处：气泡优先跟着浏览器里的选区走，作者另选的那段会把它又带走。
+    view.dispatch({ selection: { anchor: range.from }, effects: EditorView.scrollIntoView(range.from, { y: 'start' }) })
     setBubbleOpen(true)
   }, [])
   const previewHidden = annotationRevision === 'preview' && !bubbleInSight
