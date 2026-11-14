@@ -455,6 +455,25 @@ it('统一修改生成中作者改了正文、又滚到别处：结果停在预�
   await expect.element(dock().getByRole('button', { name: '统一修改（1）' })).toBeVisible()
 })
 
+it('统一修改生成中作者改了正文、另选了一段又滚开：点「回到预览」仍能摆出预览', async () => {
+  let finish!: () => void
+  const gate = new Promise<void>(resolve => { finish = resolve })
+  const long = [ORIGINAL, ...Array.from({ length: 200 }, (_, index) => `第 ${index + 1} 段：雨从傍晚开始就没有停过。`)].join('\n\n')
+  await startAnnotationRevision(false, undefined, gate, long)
+  const scroller = document.querySelector('.stage-ch-scroll')!
+  await act(async () => { scroller.scrollTop = scroller.scrollHeight })
+  await act(async () => page.getByText('第 200 段：雨从傍晚开始就没有停过。', { exact: true }).click())
+  await act(async () => userEvent.keyboard('又'))
+  await act(async () => page.getByText('第 195 段：雨从傍晚开始就没有停过。', { exact: true }).click({ clickCount: 3 }))
+  await act(async () => { scroller.scrollTop = scroller.scrollHeight / 2 })
+  await expect.poll(() => document.querySelector('.cm-selbar')).toBeNull()
+  await act(async () => finish())
+
+  await act(async () => page.getByRole('button', { name: '回到预览' }).click())
+
+  await expect.element(page.getByRole('toolbar', { name: '选中文字的操作' }).getByText('正文或原目标已变化，结果未应用；你仍可复制预览内容')).toBeVisible()
+})
+
 it('取消统一修改后再恢复一次失败的运行：修稿入口不被锁住', async () => {
   await startAnnotationRevision(false, undefined, new Promise(() => {}))
   await act(async () => page.getByRole('toolbar', { name: '选中文字的操作' }).getByRole('button', { name: '取消' }).click())
