@@ -479,6 +479,10 @@ describe('运行侧页', () => {
       await vi.waitFor(() => expect(invoke.mock.calls.filter(([channel]) => channel === 'generation:list-recovery')).toHaveLength(reads + 1))
       await act(async () => {})
     }
+    afterEach(async () => {
+      // 撤销提示条要 8 秒才走，关掉它，下一个用例的提示条才不会并进来
+      for (const close of document.querySelectorAll<HTMLButtonElement>('.pi-toast:not([data-exiting]) button[aria-label="关闭通知"]')) await act(async () => close.click())
+    })
     beforeEach(() => {
       abandoned = new Set()
       const fallback = invoke.getMockImplementation()!
@@ -509,7 +513,7 @@ describe('运行侧页', () => {
       await vi.waitFor(() => expect(titles()).toEqual(['第8章候选']))
       expect(abandonCalls()).toEqual([['蓝图', true], ['选区', true], ['修稿', true], ['批次', true], ['7', true]])
       await vi.waitFor(() => expect([...document.querySelectorAll('.pi-toast:not([data-exiting])')].map(toast => toast.textContent).filter(line => line?.includes('已不再恢复')))
-        .toEqual([expect.stringContaining('已不再恢复「第7章候选」')]))
+        .toEqual([expect.stringContaining('已不再恢复 5 张卡片')]))
 
       await reopen()
       expect(titles()).toEqual(['第8章候选'])
@@ -525,6 +529,19 @@ describe('运行侧页', () => {
       await act(async () => [...toast!.querySelectorAll('button')].find(item => item.textContent === '撤销')!.click())
       await vi.waitFor(() => expect(titles()).toContain('第6章修稿候选'))
       expect(abandonCalls()).toEqual([['修稿', true], ['修稿', false]])
+    })
+
+    it('提示条还在时又关一张（比如手滑点了两下）：并成一条，「撤销」两张都放回来', async () => {
+      await render()
+      await vi.waitFor(() => expect(titles()).toContain('第7章候选'))
+      await abandonIn('第7章候选')
+      await abandonIn('第8章候选')
+      await vi.waitFor(() => expect(titles()).not.toContain('第8章候选'))
+      const toast = () => [...document.querySelectorAll('.pi-toast:not([data-exiting])')].find(node => node.querySelector('.pi-toast-title')?.textContent === '已不再恢复 2 张卡片')
+      await vi.waitFor(() => expect(toast()).toBeTruthy())
+      await act(async () => [...toast()!.querySelectorAll('button')].find(item => item.textContent === '撤销')!.click())
+      await vi.waitFor(() => expect(titles()).toEqual(expect.arrayContaining(['第7章候选', '第8章候选'])))
+      expect(abandonCalls()).toEqual([['7', true], ['8', true], ['7', false], ['8', false]])
     })
 
     it('1.4.0 在本机「不再显示」过的卡，升级后迁成「不再恢复」，迁完删掉本机记录', async () => {

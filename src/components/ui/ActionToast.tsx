@@ -29,6 +29,8 @@ export interface ActionToastOptions {
   actions?: ActionToastAction[]
   /** 自动消失时间（毫秒），设 0 表示不自动消失。默认 8000 */
   duration?: number
+  /** 通知离开时调一次 */
+  onDismiss?: () => void
 }
 
 const INK_TONE: Record<ActionToastType, ToastTone> = { success: 'ok', info: 'info', warning: 'warn', error: 'danger', ai: 'info' }
@@ -39,6 +41,7 @@ function enqueue(options: ActionToastOptions): () => void {
     message: options.message,
     actions: options.actions?.map(action => ({ label: action.label, onClick: action.onClick, emphasis: action.variant === 'ghost' ? 'text' : 'secondary' })),
     duration: options.duration ?? 8000,
+    onDismiss: options.onDismiss,
   })
 }
 

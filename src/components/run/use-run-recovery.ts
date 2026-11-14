@@ -292,23 +292,44 @@ export function useRunRecovery(): RunRecovery {
       const handle = abandonHandle(entry)
       if (!handle) return
       await setRecoveryAbandoned(current, handle, true)
-      const { text } = useLocaleStore.getState()
-      closeUndo?.()
-      closeUndo = actionToast.show({
-        type: 'info',
-        message: text(`已不再恢复「${entry.title}」
-
-生成记录仍保留。`, `“${entry.title}” won't be recovered
-
-The generation record is kept.`),
-        actions: [{ label: text('撤销', 'Undo'), onClick: () => sameProjectSessionContext(current, currentSession()) ? setRecoveryAbandoned(current, handle, false) : undefined }],
-      })
+      showUndo(current, handle, entry.title)
     }),
   }
 }
 
-/** 带「撤销」的提示条不会自己消失，连着关几张卡时只留最后一张的撤销，侧页旁不堆一摞提示。 */
-let closeUndo: (() => void) | undefined
+let undo: { session: ProjectSessionContext; handles: MainGenerationRunHandle[]; titles: string[]; close: () => void } | undefined
+
+/** 撤销提示条还在时又关了几张卡，并成一条，「撤销」把这几张一起放回来；侧页旁不堆一摞提示，连点两下也都撤得回。 */
+function showUndo(session: ProjectSessionContext, handle: MainGenerationRunHandle, title: string) {
+  const merged = undo && sameProjectSessionContext(undo.session, session) ? undo : undefined
+  undo = undefined
+  merged?.close()
+  const handles = [...merged?.handles ?? [], handle], titles = [...merged?.titles ?? [], title]
+  const { text } = useLocaleStore.getState()
+  const message = titles.length === 1
+    ? text(`已不再恢复「${title}」
+
+生成记录仍保留。`, `“${title}” won't be recovered
+
+The generation record is kept.`)
+    : text(`已不再恢复 ${titles.length} 张卡片
+
+生成记录仍保留。`, `${titles.length} cards won't be recovered
+
+The generation records are kept.`)
+  const shown = {
+    session, handles, titles,
+    close: actionToast.show({
+      type: 'info', message,
+      onDismiss: () => { if (undo === shown) undo = undefined },
+      actions: [{ label: text('撤销', 'Undo'), onClick: async () => {
+        if (!sameProjectSessionContext(session, currentSession())) return
+        for (const item of handles) await setRecoveryAbandoned(session, item, false)
+      } }],
+    }),
+  }
+  undo = shown
+}
 
 /** 规划恢复稿还挂在蓝图页横幅和架构页提示上，三处一起重读。 */
 async function setRecoveryAbandoned(session: ProjectSessionContext, handle: MainGenerationRunHandle, abandoned: boolean): Promise<void> {

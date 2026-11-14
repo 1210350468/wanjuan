@@ -204,7 +204,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  // 「不再恢复」的撤销提示条不会自己消失，留着会和下一个用例的「撤销」重名
+  // 「不再恢复」的撤销提示条 8 秒后才消失，留着会和下一个用例的「撤销」重名
   const toasts = document.querySelectorAll<HTMLButtonElement>('.pi-toast:not([data-exiting]) button[aria-label="关闭通知"]')
   for (const close of toasts) await act(async () => close.click())
   if (toasts.length) await vi.waitFor(() => expect(document.querySelector('.pi-toast')).toBeNull())
