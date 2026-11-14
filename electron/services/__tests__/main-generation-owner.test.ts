@@ -3509,6 +3509,18 @@ describe('main draft persistence and batch lineage', () => {
       DraftRepository.delete(replacement)
       expect(runIds(f.owner.listRecovery().batches)).toEqual([batch.batchId])
     })
+    it('取消后续不上的批次不再列为可续（#686）', async () => {
+      const f = drafting()
+      f.db.exec("INSERT INTO blueprints(chapter_number,title) VALUES(2,'第二章')")
+      const batch = f.owner.beginBatch({ mode: 'draft_review', range: { startChapter: 1, endChapter: 2 }, targetUnits: 20,
+        uiActionNonce: 'batch', modelId: f.model.id, authorInputs, promptKeys: f.begin.promptKeys, skillStages: [] })
+      const child = await generate(f, { ...f.begin, authorInputs, batchId: batch.batchId, parentRootActionId: batch.rootHandle.rootActionId })
+      const saved = f.owner.commitDraft(child.request)
+      f.owner.cancel(child.run.handle)
+      await expect(generate(f, { ...f.begin, chapterNumber: 2, uiActionNonce: 'next', authorInputs, batchId: batch.batchId,
+        parentRootActionId: batch.rootHandle.rootActionId, selectedDraftIds: [saved.id] })).rejects.toThrow()
+      expect(f.reopen().listRecovery()).toMatchObject({ batches: [], partial: false })
+    })
     it('已保存的单章运行不列为可恢复，无论正文后来改没改过', async () => {
       const f = drafting()
       const current = await generate(f, { ...f.begin, uiActionNonce: 'current', authorInputs })
