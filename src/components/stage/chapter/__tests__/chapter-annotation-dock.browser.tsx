@@ -136,7 +136,7 @@ it('批注的原文滚出纸面后点「定位批注」：原文滚回可见范�
   await expect.poll(visible).toBe(true)
 })
 
-async function startAnnotationRevision(reviewed = false, beforeAnnotate?: () => Promise<void>, executeGate?: Promise<unknown>) {
+async function startAnnotationRevision(reviewed = false, beforeAnnotate?: () => Promise<void>, executeGate?: Promise<unknown>, content = ORIGINAL) {
   const answer = backend.invoke.getMockImplementation()!
   let recovery: { view: object; modelId: string; sourceStatus: string; context: object } | null = null
   backend.invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
@@ -163,7 +163,7 @@ async function startAnnotationRevision(reviewed = false, beforeAnnotate?: () => 
     }
     return answer(channel, ...args)
   })
-  await openChapter({ reviewed, content: ORIGINAL })
+  await openChapter({ reviewed, content })
   await beforeAnnotate?.()
   await annotate('他第三次展开信纸。', '写出信纸上的字')
   await act(async () => page.getByRole('button', { name: '统一修改（1）' }).click())
@@ -376,4 +376,69 @@ it('有不能再合并的旧修稿，批注修改审阅摆着：「查看修稿�
   await act(async () => review.getByRole('button', { name: '取消' }).click())
 
   await expect.element(view).toBeEnabled()
+})
+
+it('统一修改生成中把正文滚远、生成失败：修稿入口不锁死', async () => {
+  let fail!: (error: Error) => void
+  const gate = new Promise((_, reject) => { fail = reject })
+  gate.catch(() => {})
+  const long = [ORIGINAL, ...Array.from({ length: 200 }, (_, index) => `第 ${index + 1} 段：雨从傍晚开始就没有停过。`)].join('\n\n')
+  await startAnnotationRevision(false, undefined, gate, long)
+  await expect.element(page.getByText(LOCK_HINT)).toBeVisible()
+  const scroller = document.querySelector('.stage-ch-scroll')!
+  await act(async () => { scroller.scrollTop = scroller.scrollHeight })
+  await expect.poll(() => document.querySelector('.cm-selbar')).toBeNull()
+
+  await act(async () => fail(new Error('模型失败')))
+  await act(async () => { scroller.scrollTop = 0 })
+
+  await expect.element(page.getByText(LOCK_HINT)).not.toBeInTheDocument()
+  await expect.element(await refineItem()).toBeEnabled()
+})
+
+it('取消统一修改后再恢复一次失败的运行：修稿入口不被锁住', async () => {
+  await startAnnotationRevision(false, undefined, new Promise(() => {}))
+  await act(async () => page.getByRole('toolbar', { name: '选中文字的操作' }).getByRole('button', { name: '取消' }).click())
+  await expect.element(page.getByText(LOCK_HINT)).not.toBeInTheDocument()
+  const answer = backend.invoke.getMockImplementation()!
+  backend.invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
+    if (channel === 'editor-inline:read-recovery') throw new Error('读取失败')
+    return answer(channel, ...args)
+  })
+  const filePath = useEditorStore.getState().tabs.find(tab => tab.id === useEditorStore.getState().activeTabId)!.filePath!
+  const handle = { projectId: SESSION.projectId, epoch: SESSION.leaseId, rootActionId: 'root', runId: 'other' }
+
+  await act(async () => useStageStore.setState({ selectionRequest: { session: SESSION, filePath, handle, nonce: 1 } }))
+
+  await expect.element(page.getByRole('toolbar', { name: '选中文字的操作' }).getByText('无法恢复原运行')).toBeVisible()
+  await expect.element(page.getByText(LOCK_HINT)).not.toBeInTheDocument()
+})
+
+it('批注修改审阅摆着时早先发起的修稿生成完成：不自动打开修稿合并，审阅留着；取消后再打开', async () => {
+  const review = await openAnnotationReview()
+
+  await act(async () => { backend.addRevision(backend.state.drafts.at(-1)!) })
+  await reloadChapter()
+
+  await expect.element(page.getByRole('button', { name: '打开修稿合并' })).toBeDisabled()
+  await expect.element(review).toBeVisible()
+  await expect.element(page.getByRole('region', { name: '修稿合并' })).not.toBeInTheDocument()
+
+  await act(async () => review.getByRole('button', { name: '取消' }).click())
+
+  await expect.element(page.getByRole('region', { name: '修稿合并' })).toBeVisible()
+})
+
+it('批注修改审阅摆着时早先发起的修稿生成完成，作者接受全部：修改写进正文，那份修稿显示为不能再合并', async () => {
+  const review = await openAnnotationReview()
+  await act(async () => { backend.addRevision(backend.state.drafts.at(-1)!) })
+  await reloadChapter()
+  await expect.element(page.getByRole('button', { name: '打开修稿合并' })).toBeDisabled()
+
+  await act(async () => review.getByRole('button', { name: '接受全部' }).click())
+
+  await expect.element(review).not.toBeInTheDocument()
+  await expect.element(page.getByText('他第三次展开信纸，上面只有两个字：等我。')).toBeVisible()
+  await expect.element(page.getByText('有 1 份修稿不能再合并')).toBeVisible()
+  await expect.element(page.getByRole('region', { name: '修稿合并' })).not.toBeInTheDocument()
 })
