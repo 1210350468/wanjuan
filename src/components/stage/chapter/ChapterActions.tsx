@@ -22,6 +22,7 @@ import { deriveChapters, type ChapterFacts } from '../../../stores/navigation/st
 import { fetchChapterDrafts, useDraftStore } from '../../../stores/draft-store'
 import { useProjectStore } from '../../../stores/project-store'
 import { includedCount, useReviewChecklist } from '../../editor/review-checklist'
+import type { AnnotationRevision } from '../../editor/CodeMirrorEditor'
 import { reviewDimensions, type useDraftActions } from '../../editor/use-draft-actions'
 import { deleteDraftVersion } from '../../panels/sidebar/draft-deletion'
 import { deleteFinalizedChapter } from '../../panels/sidebar/finalized-chapter-deletion'
@@ -63,7 +64,7 @@ type Ask = 'refine' | 'finalize' | 'delete' | 'discard' | 'reopen' | null
  * 完成合并、定稿；直接修稿、删除这一稿、复制本章正文在「更多」里。审稿清单的状态也在这里，
  * 侧页的勾选数与主按钮的「按 N 项意见修稿」是同一份。挂载方以审稿报告的会话键作 key，报告变了清单随之重置。
  */
-export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, title, draft, facts, review, focus, annotating }: {
+export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, title, draft, facts, review, focus, annotation }: {
   sheetSlot: HTMLDivElement | null
   tab: EditorTab
   stage: ChapterStage
@@ -75,7 +76,7 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
   review: LatestReview | null
   focus: boolean
   /** 批注统一修改进行中：此时打开修稿合并会卸载正文，批注修改会丢。 */
-  annotating: boolean
+  annotation: AnnotationRevision | null
 }) {
   const text = useLocaleStore(s => s.text)
   const locale = useLocaleStore(s => s.locale)
@@ -122,8 +123,14 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
   }, [review, stage, filePath])
   const included = includedCount(checklist.items)
   const busy = draft.isChapterBusy
+  const annotating = annotation !== null
   const reviseLocked = busy || annotating
-  const lockHint = annotating ? text('批注修改还在等你处理，修稿会冲掉它。先接受或取消批注修改。', 'Your annotation edits are still pending, and a revision would discard them. Accept or cancel them first.') : null
+  const lockHint = annotating ? (
+    <>
+      {text('批注修改还在等你处理，修稿会冲掉它。先接受或取消批注修改。', 'Your annotation edits are still pending, and a revision would discard them. Accept or cancel them first.')}
+      {annotation.reveal && <Button variant="text" size="sm" onClick={annotation.reveal}>{text('回到预览', 'Back to preview')}</Button>}
+    </>
+  ) : null
   const generationModels = models.filter(isGenerationModel)
   const selectedReviseModel = reviseModelId ?? preferredGenerationModelId(models, refinementModelId)
   // 有几份能合并时取最新的一份；过期的修稿不占主流程，只能查看或丢弃。
@@ -150,8 +157,9 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
   useEffect(() => {
     if (stage !== 'merge' || !pending || mergeData || mergeLater || autoOpened.current === pending.id) return
     autoOpened.current = pending.id
-    openRevision(pending)
-  }, [stage, pending, mergeData, mergeLater, openRevision])
+    // 批注修改进行中到的修稿不自动打开，否则会卸载正文丢掉批注修改；之后由作者自己点「打开修稿合并」。
+    if (!annotating) openRevision(pending)
+  }, [stage, pending, mergeData, mergeLater, annotating, openRevision])
 
   const startReview = () => void draft.review(dims.filter(dim => checkedDims[dim.key]).map(dim => dim.promptLabel).join('、') || undefined)
 

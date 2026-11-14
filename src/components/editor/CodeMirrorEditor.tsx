@@ -56,12 +56,13 @@ export type CodeMirrorEditorProps = {
   onAnnotationAdded?: (first: boolean) => void
   /** 批注从有到无。卸载不算。 */
   onAnnotationsCleared?: () => void
-  /** preview：生成中或停在预览；review：审阅盖住正文；null：没在进行。 */
-  onAnnotationRevisionChange?: (phase: AnnotationRevisionPhase | null) => void
+  /** preview：生成中或停在预览；review：审阅盖住正文；null：没在进行。预览气泡看不见时带 reveal，调用后滚回原处摆出。 */
+  onAnnotationRevisionChange?: (revision: AnnotationRevision | null) => void
   chapterAnnotations?: boolean
 }
 
 export type AnnotationRevisionPhase = 'preview' | 'review'
+export type AnnotationRevision = { phase: AnnotationRevisionPhase; reveal?: () => void }
 
 type Label = readonly [string, string]
 
@@ -285,7 +286,7 @@ export default function CodeMirrorEditor({
       const view = editorRef.current?.view
       const coords = view?.coordsAtPos(view.state.selection.main.from)
       setBubblePos({ top: coords?.top ?? 150, left: coords?.left ?? 200, inView: true })
-      setAiResult(''); setAiError(uiText('无法恢复原运行', 'The original run could not be restored.')); setBubbleOpen(true)
+      setActiveAIAction(null); setAiResult(''); setAiError(uiText('无法恢复原运行', 'The original run could not be restored.')); setBubbleOpen(true)
     })
     // 句柄被取走（key 变空）时不作废进行中的恢复；换下一次交接或卸载才作废。
     // Navigation is explicit; later document changes are checked at acceptance.
@@ -297,12 +298,25 @@ export default function CodeMirrorEditor({
   const previewShown = bubbleOpen && bubblePos.inView && !!aiResult && !settingsOpen
   useEffect(() => { if (previewShown) inlineRef.current?.delivered() }, [previewShown, aiResult])
   useEffect(() => { if (!settingsOpen) inlineReview?.client.delivered() }, [settingsOpen, inlineReview])
-  const annotationRevision: AnnotationRevisionPhase | null = inlineReview ? 'review' : activeAIAction === 'batch-instruct' && aiResult !== null ? 'preview' : null
+  const bubbleInSight = bubbleOpen && bubblePos.inView
+  // 空串加报错是生成失败、没有可处理的结果，不再算进行中。
+  const batchPending = activeAIAction === 'batch-instruct' && aiResult !== null && !(aiResult === '' && aiError !== null)
+  const annotationRevision: AnnotationRevisionPhase | null = inlineReview ? 'review' : batchPending ? 'preview' : null
+  const revealPreview = useCallback(() => {
+    const view = editorRef.current?.view
+    const target = aiTargetRef.current
+    if (!view || !target) return
+    const range = { from: Math.min(target.from, view.state.doc.length), to: Math.min(target.to, view.state.doc.length) }
+    setSelectionRange(range)
+    view.dispatch({ effects: EditorView.scrollIntoView(range.from, { y: 'start' }) })
+    setBubbleOpen(true)
+  }, [])
+  const previewHidden = annotationRevision === 'preview' && !bubbleInSight
   useEffect(() => {
     if (!annotationRevision) return
-    onAnnotationRevisionChange?.(annotationRevision)
+    onAnnotationRevisionChange?.({ phase: annotationRevision, ...(previewHidden ? { reveal: revealPreview } : {}) })
     return () => onAnnotationRevisionChange?.(null)
-  }, [onAnnotationRevisionChange, annotationRevision])
+  }, [onAnnotationRevisionChange, annotationRevision, previewHidden, revealPreview])
   const annotated = annotations.length > 0
   const wasAnnotated = useRef(false)
   useEffect(() => {
@@ -719,7 +733,7 @@ export default function CodeMirrorEditor({
   }), [mode])
 
   const panelTitle = chapterAnnotations ? uiText('本章批注', 'Chapter annotations') : uiText('批注', 'Annotations')
-  const annotationPanel = editable && !inlineReview && aiResult === null && annotations.length > 0 ? (
+  const annotationPanel = editable && !annotationRevision && !(aiResult !== null && bubbleInSight) && annotations.length > 0 ? (
     <aside role="region" className="paper-ink cm-annotations" data-theme={inkThemeName} aria-label={panelTitle}>
       <div className="cm-annotations-head">
         <div className="cm-selbar-title">
