@@ -12,7 +12,7 @@ const REVISED = STAGE_SAMPLE.drafts[3].text.replace('北堤外沉了一条船', 
 const LOCK_HINT = '批注修改还在等你处理，修稿会冲掉它。先接受或取消批注修改。'
 const MORE = Array.from({ length: 80 }, (_, index) => `第 ${index + 1} 次涨潮时，林岚又数了一遍台阶。`).join('\n\n')
 
-/** 第 3 章有一份待合并的修稿：改的是第一段，与批注的那段不重叠。 */
+// 修稿只改第一段，与批注的那段不重叠。
 const seedPendingRevision = context => seedStageSample(context, {
   landOnChapter3: false,
   beforeReload: async ({ page, invoke, path, session }) => {

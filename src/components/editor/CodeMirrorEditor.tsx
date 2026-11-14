@@ -56,7 +56,7 @@ export type CodeMirrorEditorProps = {
   onAnnotationAdded?: (first: boolean) => void
   /** 批注从有到无。卸载不算。 */
   onAnnotationsCleared?: () => void
-  /** preview：生成中或停在预览；review：审阅盖住正文；null：没在进行。预览气泡看不见时带 reveal，调用后滚回原处摆出。 */
+  /** preview：生成中或停在预览；review：审阅盖住正文；null：没在进行。预览气泡看不见时才有 reveal，调用后滚回原处。 */
   onAnnotationRevisionChange?: (revision: AnnotationRevision | null) => void
   chapterAnnotations?: boolean
 }

@@ -154,12 +154,15 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
     void openPendingRevision(revision)
   }, [openPendingRevision])
   const autoOpened = useRef<number | null>(null)
+  // 批注修改中到的修稿记作已打开过：打开会卸载正文，结束后也不再自动打开，由作者自己点。
+  useEffect(() => {
+    if (annotating && pending) autoOpened.current = pending.id
+  }, [annotating, pending])
   useEffect(() => {
     if (stage !== 'merge' || !pending || mergeData || mergeLater || autoOpened.current === pending.id) return
     autoOpened.current = pending.id
-    // 批注修改进行中到的修稿不自动打开，否则会卸载正文丢掉批注修改；之后由作者自己点「打开修稿合并」。
-    if (!annotating) openRevision(pending)
-  }, [stage, pending, mergeData, mergeLater, annotating, openRevision])
+    openRevision(pending)
+  }, [stage, pending, mergeData, mergeLater, openRevision])
 
   const startReview = () => void draft.review(dims.filter(dim => checkedDims[dim.key]).map(dim => dim.promptLabel).join('、') || undefined)
 
