@@ -46,6 +46,7 @@ async function interruptedSelectionRun(documentText: string, executed: Promise<v
   const done = { handle: { ...handle, epoch: SESSION.leaseId }, status: 'running', artifacts: [], candidates: [{ ...handle, artifactId: '建议', textHash: 'h', text: SUGGESTION, status: 'completed', compositionEligible: true }], ledger: { physicalRequests: 1 } }
   let view: typeof pending | typeof done = pending
   let delivered = false
+  let abandonedAt: typeof pending | typeof done | null = null
   const recovery = () => {
     const filePath = origin()
     return { view, modelId: 'glm', sourceStatus: 'current', context: filePath === undefined ? base : { ...base, filePath } }
@@ -53,7 +54,10 @@ async function interruptedSelectionRun(documentText: string, executed: Promise<v
   const fixture = backend.invoke.getMockImplementation()!
   backend.invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
     switch (channel) {
-      case 'generation:list-recovery': return { planning: [], editors: delivered ? [] : [recovery()], reviews: [], drafts: [], batches: [], partial: false }
+      case 'generation:list-recovery': return { planning: [], editors: delivered || abandonedAt === view ? [] : [recovery()], reviews: [], drafts: [], batches: [], partial: false }
+      case 'generation:set-recovery-abandoned':
+        abandonedAt = (args[0] as { abandoned: boolean }).abandoned ? view : null
+        return undefined
       case 'db:recovery-candidate-list': return []
       case 'llm:list-models': return useLLMStore.getState().models
       case 'editor-inline:read-recovery': return recovery()
@@ -212,7 +216,7 @@ describe('运行侧页「继续原选区任务」', () => {
     expect(editorText()).toBe(`夜。${ORIGINAL}`)
   })
 
-  it('侧页续跑出的建议在关掉侧页再打开后仍在，点「不再显示」才不列出', async () => {
+  it('侧页续跑出的建议在关掉侧页再打开后仍在，点「不再恢复」才不列出', async () => {
     await interruptedSelectionRun(ORIGINAL.replace('雨从傍晚', '雪从傍晚'))
     await mount()
     await openChapter()
@@ -225,7 +229,7 @@ describe('运行侧页「继续原选区任务」', () => {
     await act(async () => useStageStore.setState({ sheet: { kind: 'run', tab: 'active' } }))
 
     await expect.element(card.getByText(SUGGESTION)).toBeVisible()
-    await act(async () => card.getByRole('button', { name: '不再显示' }).click())
+    await act(async () => card.getByRole('button', { name: '不再恢复' }).click())
     await expect.element(card).not.toBeInTheDocument()
     await act(async () => useStageStore.setState({ sheet: null }))
     await act(async () => useStageStore.setState({ sheet: { kind: 'run', tab: 'active' } }))
@@ -233,7 +237,7 @@ describe('运行侧页「继续原选区任务」', () => {
     await expect.element(card).not.toBeInTheDocument()
   })
 
-  it('续跑进行中点了「不再显示」：藏的是续跑前的卡片，续跑写出的新建议照常列出', async () => {
+  it('续跑进行中「不再恢复」不可点；续跑写出的新建议照常列出', async () => {
     let finish!: () => void
     await interruptedSelectionRun(ORIGINAL.replace('雨从傍晚', '雪从傍晚'), new Promise<void>(resolve => { finish = resolve }))
     await mount()
@@ -242,8 +246,7 @@ describe('运行侧页「继续原选区任务」', () => {
     const card = page.getByRole('article').filter({ hasText: '编辑器选区建议' })
     await act(async () => card.getByRole('button', { name: '继续原选区任务' }).click())
 
-    await act(async () => card.getByRole('button', { name: '不再显示' }).click())
-    await expect.element(card).not.toBeInTheDocument()
+    await expect.element(card.getByRole('button', { name: '不再恢复' })).toBeDisabled()
     await act(async () => finish())
 
     await expect.element(card.getByText(SUGGESTION)).toBeVisible()

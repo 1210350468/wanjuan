@@ -204,6 +204,10 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  // 「不再恢复」的撤销提示条不会自己消失，留着会和下一个用例的「撤销」重名
+  const toasts = document.querySelectorAll<HTMLButtonElement>('.pi-toast:not([data-exiting]) button[aria-label="关闭通知"]')
+  for (const close of toasts) await act(async () => close.click())
+  if (toasts.length) await vi.waitFor(() => expect(document.querySelector('.pi-toast')).toBeNull())
   await act(async () => root?.unmount())
   container?.remove()
   root = undefined
@@ -1227,7 +1231,7 @@ describe('蓝图页开着时在运行侧页放弃蓝图恢复稿（#608）', () 
     invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
       if (channel === 'generation:list-recovery') return { planning: open, editors: [], reviews: [], drafts: [], batches: [], partial: false }
       if (channel === 'generation:find-blueprint-recovery') return [...open].sort((a, b) => b.planningDraft.createdAtMs - a.planningDraft.createdAtMs)[0] ?? null
-      if (channel === 'generation:dismiss-planning-recovery') {
+      if (channel === 'generation:set-recovery-abandoned') {
         // 主进程收到请求就同步记下放弃，回复晚一点才到渲染端。
         const runId = (args[0] as { handle: { runId: string } }).handle.runId
         if (!dismissalFails) open = open.filter(item => item.handle.runId !== runId)
@@ -1254,8 +1258,7 @@ describe('蓝图页开着时在运行侧页放弃蓝图恢复稿（#608）', () 
   const bannerEdit = () => [...banner()!.querySelectorAll('button')].find(item => item.textContent === '编辑恢复稿')!
   const sheetButton = (name: string) => [...document.querySelector('.run-recovery > .run-card')!.querySelectorAll('button')].find(item => item.textContent === name)!
   async function dismissNewestInRunSheet() {
-    await act(async () => sheetButton('放弃…').click())
-    await act(async () => sheetButton('放弃').click())
+    await act(async () => sheetButton('不再恢复').click())
   }
   const openedRecoveryTabs = () => useEditorStore.getState().tabs.flatMap(tab => tab.planningRecovery ? [tab.planningRecovery.handle.runId] : [])
 
@@ -1282,7 +1285,7 @@ describe('蓝图页开着时在运行侧页放弃蓝图恢复稿（#608）', () 
     await dismissNewestInRunSheet()
     await act(async () => reply!.reject(new Error('GENERATION_PLANNING_RECOVERY_IN_FLIGHT')))
     await vi.waitFor(() => expect(document.querySelector('.run-recovery [role="alert"]')?.textContent).toBeTruthy())
-    expect(sheetButton('放弃…')).toBeTruthy()
+    expect(sheetButton('不再恢复')).toBeTruthy()
     await act(async () => bannerEdit().click())
     await vi.waitFor(() => expect(openedRecoveryTabs()).toEqual(['最新']))
   })

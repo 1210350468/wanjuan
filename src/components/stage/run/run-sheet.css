@@ -49,6 +49,12 @@
   gap: 2px;
 }
 
+/* 「不再恢复」贴卡片右上角，与左侧小标题同一行起头 */
+.run-card-head > .run-card-abandon {
+  flex: none;
+  margin: -4px -6px 0 0;
+}
+
 .run-card-titleline {
   display: flex;
   align-items: center;
