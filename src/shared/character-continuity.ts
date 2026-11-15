@@ -100,7 +100,7 @@ export function derivedRelationRuns(nodes: readonly ContinuityNode[]): Map<strin
 
 /**
  * 写第 chapter 章时已经生效的最新节点。传 Infinity 得到当前值。ids 只筛结果里的主语，判断冲突时两个方向的节点都算。
- * 定稿关系返回所在那一段的段首：后续章重述时节点不换，按节点记的豁免和已放进检查的节点才认得出。
+ * 定稿关系返回所在那一段的段首，不是最新一章的节点。
  * nodes 应来自只含有效节点的读取（派生节点的稿仍是定稿，见 ADR-0024、ADR-0025）。
  */
 export function latestNodesBefore(nodes: readonly ContinuityNode[], chapter: number, ids?: readonly string[]): LatestContinuityNodes {
@@ -183,7 +183,6 @@ function foldAdoptedRelations(changes: readonly CharacterTimelineChange[]): Char
 
 /**
  * 时间线只列变化：一段定稿关系只留段首。第一段的值和这一章之前就生效的设定相同时是重述，也不留。
- * 同章作者的决定（比如采用）发生在这条定稿记录之后，不算它之前的状态。
  * nodes 要带上这对人物两个方向的节点，只有一边时会把隔着对方说法的两段并成一段。
  */
 export function withoutRelationRestatements(nodes: readonly ContinuityNode[]): ContinuityNode[] {

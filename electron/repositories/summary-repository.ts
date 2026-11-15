@@ -443,9 +443,8 @@ function commitDerivedRelations(db: BetterSqlite3.Database, context: FinalizedCh
     const authorLinesAtExtraction = authorAtExtraction?.map(line => JSON.stringify([line.sourceId, line.targetId, line.relation])).sort()
     const matchesAuthor = !!authorAtExtraction?.some(line => line.relation === change.relation)
     const names = { sourceName: name(change.sourceId), targetName: name(change.targetId) }
-    // 这对人物还没有定稿记录时，重述作者设定不留节点：它没有建议可裁定，作者之后手改设定，它会一直和新设定并存。
-    if (matchesAuthor && !seriesNodes.some(node => node.effectiveChapter <= source.chapterNumber)) continue
-    // 其余重述都留节点，之后再定稿更早的章时这一章的说法仍挡在后面；算不算变化、出不出建议由读取端按段判断。
+    const firstRecordRestatesAuthor = matchesAuthor && !seriesNodes.some(node => node.effectiveChapter <= source.chapterNumber)
+    if (firstRecordRestatesAuthor) continue
     if (ownLatest?.value !== change.relation) appendDerivedRelationNode(db, { ...change, ...names, source, quote: change.evidence })
     if (authorLinesAtExtraction?.length && !matchesAuthor) candidates.push({ candidateKey: relationCandidateKey(source, change), source: structuredClone(source), sourceId: change.sourceId, targetId: change.targetId,
       ...names, value: change.relation, evidence: change.evidence, authorLinesAtCreation: authorLinesAtExtraction })
@@ -485,7 +484,6 @@ function relationDecisionPayloadHash(request: FinalizedRelationDecisionRequest):
   return sha256(JSON.stringify([request.draftId, request.candidateKey, request.expectedAuthorRelations, request.operationId, request.decision]))
 }
 
-/** 一段说法只出最早那张还有效的建议；作者拒绝过的段不再出。按章升序。 */
 function pendingRelationCandidates(db: BetterSqlite3.Database): PendingFinalizedRelationCandidate[] {
   const rows = db.prepare("SELECT draft_id AS draftId FROM summary_snapshots WHERE character_state_candidates<>'[]' ORDER BY chapter_number,draft_id")
     .all() as Array<{ draftId: number }>

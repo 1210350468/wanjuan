@@ -66,7 +66,6 @@ function appendNode(db: BetterSqlite3.Database, node: NodeWrite): void {
       MAX(CASE WHEN e.draft_id IS NULL OR d.status='finalized' THEN e.effective_chapter END) AS chapter,
       COALESCE(MAX(json_extract(e.evidence_json,'$.seq')),0) AS seq
     FROM character_continuity_events e LEFT JOIN drafts d ON d.id=e.draft_id`
-  // 派生关系的系列是一对人物，两个方向的节点主语不同，都要算进来。
   const series = (node.target
     ? db.prepare(`${position} WHERE e.subject_id IN (?,?) AND e.aspect='relation' AND json_extract(e.evidence_json,'$.relationshipId')=?`)
       .get(node.subjectId, node.target.id, node.evidence.relationshipId)
@@ -166,7 +165,7 @@ function parseNode(row: NodeRow): ContinuityNode {
 /**
  * 读有效节点，喂给 latestNodesBefore。挂稿的节点要求稿仍是定稿，被替换和进回收站的稿不再算数。
  * 退休角色不产生删除节点，这里统一排除，迁移基线里早已退休的角色也一并覆盖。
- * characterIds 取这些角色做主语或做关系对象的节点：一对人物的关系要两个方向都在才判断得了。
+ * characterIds 筛主语或关系对象的节点，null 不筛。
  */
 export function readCharacterContinuityNodes(db: BetterSqlite3.Database, characterIds: readonly string[] | null = null): ContinuityNode[] {
   return (db.prepare(`SELECT e.* FROM character_continuity_events e LEFT JOIN drafts d ON d.id=e.draft_id
