@@ -111,7 +111,7 @@ describe('定稿后处理步骤错误', () => {
     expect(describeFinalizationStepError('FINALIZATION_GENERATION_RESULT_UNUSABLE', en)).not.toMatch(/no new model request/)
   })
 
-  it('#717 没拿到结果时不断言请求失败：ARTIFACT_REQUIRED 与 OUTCOME_UNKNOWN 同一说明', () => {
+  it('#708 没拿到结果时不断言请求失败：ARTIFACT_REQUIRED 与 OUTCOME_UNKNOWN 同一说明', () => {
     for (const code of ['FINALIZATION_GENERATION_ARTIFACT_REQUIRED', 'FINALIZATION_GENERATION_OUTCOME_UNKNOWN']) {
       expect(describeFinalizationStepError(code, zh)).toBe('正文定稿已保存，这一步没有拿到模型的结果（例如连接中断）。请点「重试」重新生成这一步。')
       expect(describeFinalizationStepError(code, en)).not.toMatch(/did not finish|no new model request/i)
