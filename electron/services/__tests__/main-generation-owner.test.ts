@@ -3571,6 +3571,20 @@ describe('main draft persistence and batch lineage', () => {
       expect(f.reopen().listRecovery().batches.map(item => [item.batchId, item.nextChapterNumber])).toEqual([[batch.batchId, 3]])
       expect(new GenerationDraftEffects(f.fixture.db, new GenerationRunRepository(() => f.fixture.db)).unfinishedBatchChapters('project')).toEqual(new Set([1, 2]))
     })
+    it('放弃前已开的下一章接着写，批次也回到可续（#686）', async () => {
+      const f = drafting()
+      f.db.exec("INSERT INTO blueprints(chapter_number,title) VALUES(2,'第二章'),(3,'第三章')")
+      const batch = f.owner.beginBatch({ mode: 'draft_review', range: { startChapter: 1, endChapter: 3 }, targetUnits: 20,
+        uiActionNonce: 'batch', modelId: f.model.id, authorInputs, promptKeys: f.begin.promptKeys, skillStages: [] })
+      const first = f.owner.commitDraft((await generate(f, { ...f.begin, uiActionNonce: 'child', authorInputs, batchId: batch.batchId, parentRootActionId: batch.rootHandle.rootActionId })).request)
+      const next = f.owner.begin({ ...f.begin, chapterNumber: 2, uiActionNonce: 'next', authorInputs, batchId: batch.batchId,
+        parentRootActionId: batch.rootHandle.rootActionId, selectedDraftIds: [first.id] })
+      f.owner.setRecoveryAbandoned({ handle: batch.rootHandle, abandoned: true })
+      expect(f.owner.listRecovery().batches).toEqual([])
+
+      await f.owner.execute({ handle: next.handle, invocationNonce: 'next', task })
+      expect(runIds(f.owner.listRecovery().batches)).toEqual([batch.batchId])
+    })
     it('放弃后写出新文字才重新列出；重启后没落盘的尾段消失、内容变少不算（#686）', async () => {
       const f = drafting()
       const run = (await generate(f, { ...f.begin, uiActionNonce: 'run', authorInputs })).run.handle
