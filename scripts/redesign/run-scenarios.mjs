@@ -515,6 +515,7 @@ export const RUN_SCENARIOS = {
     const runs = await context.invoke(context.page, 'generation:list', session)
     assert.ok(runs.some(run => run.operation === 'chapter-draft' && run.status !== 'running'), '「不再恢复」不删记录，第 3 章的生成运行仍在库里')
     const recoverable = await context.invoke(context.page, 'generation:list-recovery', session)
+    assert.equal(recoverable.partial, false, '可恢复列表读全了')
     assert.ok(!recoverable.drafts.some(item => item.recovery.chapterNumber === 3), '「不再恢复」记在运行上，主进程不再把第 3 章候选列为可恢复')
   } },
 
