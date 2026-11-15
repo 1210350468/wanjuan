@@ -204,16 +204,14 @@ export function useBlueprintAiCheck(projectKey: string, blueprints: readonly Cha
   }
 
   const chapterFindings = (chapterNumber: number) => findings.filter(finding => finding.chapterNumber === chapterNumber)
+  /** 按章隐藏掉的结论不算「没发现」，只有模型确实没报（或都被豁免）才算安静。 */
+  const quiet = status.kind === 'done' && report !== null && !stale && [...report.chapters.keys()].every(unchanged) && report.result.findings.every(finding =>
+    exemptedFactKeys(exemptions, finding.chapterNumber).has(continuityFindingKey(finding.eventIds)))
 
   return {
     status, hasTimeline, busy, findings, chapterFindings, exempt, undo,
     checkedThroughChapter: report?.result.checkedThroughChapter ?? null,
-    /**
-     * 这次检查查完且没有可显示的结论时，因依据不成立丢掉了几条；0 才能说没问题。
-     * 按章隐藏掉的结论不算「没发现」，只有模型确实没报（或都被豁免）才是 0。其余情况为 null。
-     */
-    droppedWhenQuiet: status.kind === 'done' && report !== null && !stale && [...report.chapters.keys()].every(unchanged) && report.result.findings.every(finding =>
-      exemptedFactKeys(exemptions, finding.chapterNumber).has(continuityFindingKey(finding.eventIds))) ? report.result.droppedFindings : null,
+    droppedWhenQuiet: quiet ? report.result.droppedFindings : null,
     exempted: (chapterNumber: number | undefined) => exempted && exempted.finding.chapterNumber === chapterNumber && isProjectSessionCurrent(exempted.session) ? exempted : null,
     clearExempted: useCallback(() => setExempted(null), []),
     run,
