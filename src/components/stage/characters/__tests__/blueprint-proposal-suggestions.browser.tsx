@@ -35,8 +35,15 @@ const originalProject = useProjectStore.getState()
 const originalCharacters = useCharacterStore.getState()
 
 const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
-const button = (name: string) => [...host.querySelectorAll('button')].find(item => item.textContent?.trim() === name || item.getAttribute('aria-label')?.startsWith(name))
-const click = async (name: string) => { await act(async () => { button(name)!.click() }); await settle() }
+const button = (name: string) => {
+  const found = [...host.querySelectorAll('button')].filter(item => {
+    const label = item.getAttribute('aria-label')
+    return item.textContent?.trim() === name || label === name || label?.startsWith(`${name}：`)
+  })
+  if (found.length !== 1) throw new Error(`「${name}」对上 ${found.length} 个按钮`)
+  return found[0]
+}
+const click = async (name: string) => { await act(async () => { button(name).click() }); await settle() }
 const relationBox = (text = '雾灯人 → 林岚：暗中守护') => [...host.querySelectorAll('label')].find(label => label.textContent?.includes(text))?.querySelector('input')
 const calls = (channel: string) => invoke.mock.calls.filter(([name]) => name === channel).map(call => call[1])
 
@@ -95,6 +102,9 @@ it('多行建议的「检查」按钮读屏名称各带所属条目，分得清�
     '检查定稿关系建议：林岚 → 守塔人 · 第 3 章',
     '检查定稿关系建议：林岚 → 雾灯人 · 第 3 章',
   ])
+  await expect(click('检查蓝图角色决策')).rejects.toThrow()
+  await click('检查蓝图角色决策：第 14 章蓝图的新角色（1 位）')
+  expect(calls('character-proposal:read-pending-finalized')).toMatchObject([{ proposalBatchId: 'cpb:blueprint-14' }])
 })
 
 it('列表里写明是第几章蓝图的新角色，计入待处理数', () => {
