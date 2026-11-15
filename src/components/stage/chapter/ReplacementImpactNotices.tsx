@@ -2,6 +2,7 @@ import type { ReplacementImpact } from '../../../shared/chapter-reopen'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { useWorkflowStore, workflowResourceKey } from '../../../stores/workflow-store'
 import { sameProjectPathKey } from '../../../shared/project-session-context'
+import { FINALIZATION_SHARED_WRITE_RESOURCE_KINDS } from '../../../shared/workflow-resource-claims'
 import { navigate } from '../../../stores/navigation/navigation-intents'
 import { Button } from '../../ui/Button'
 import { Notice } from '../../ui/Notice'
@@ -79,12 +80,12 @@ export function ReplacementImpactPreview({ impact }: { impact: ReplacementImpact
 function OwnImpactNotice({ impact, projectKey, acknowledged, onAcknowledge }: { impact: ReplacementImpact; projectKey: string; acknowledged: boolean; onAcknowledge: () => void }) {
   const text = useLocaleStore(s => s.text)
   const check = useLaterBlueprintCheck(projectKey, impact.finalizationId!)
-  const chapterKey = workflowResourceKey('chapter', impact.chapterNumber)
-  const chapterBusy = useWorkflowStore(s => s.activeRuns.some(run => sameProjectPathKey(run.projectPath, projectKey) && run.resourceKeys?.includes(chapterKey)))
-  const { status, loading: firstLoad, refreshing, steps } = usePostProcessStatus(getChapterFinalizeScope(impact.chapterNumber), chapterBusy)
+  const finalizeKeys = [workflowResourceKey('chapter', impact.chapterNumber), ...FINALIZATION_SHARED_WRITE_RESOURCE_KINDS.map(kind => workflowResourceKey(kind))]
+  const finalizing = useWorkflowStore(s => s.activeRuns.some(run => sameProjectPathKey(run.projectPath, projectKey) && finalizeKeys.every(key => run.resourceKeys?.includes(key))))
+  const { status, loading: firstLoad, refreshing, steps } = usePostProcessStatus(getChapterFinalizeScope(impact.chapterNumber), finalizing)
   const loading = firstLoad || refreshing
   const { retired } = planFinalizationRetry(status?.steps ?? {})
-  const postProcessing = chapterBusy || steps.some(({ key, presentation }) => presentation === 'pending' && !retired.has(key))
+  const postProcessing = finalizing || steps.some(({ key, presentation }) => presentation === 'pending' && !retired.has(key))
   const complete = status?.steps.chapter_notes?.ok === true && status.steps.character_cards?.ok === true
   const checkable = impact.laterChapters.length + impact.blueprintOnlyChapters.length > 0
   const firstLater = impact.laterChapters[0]

@@ -17,6 +17,7 @@ import { useProjectStore } from '../../../../stores/project-store'
 import { useWorkflowStore, workflowResourceKey } from '../../../../stores/workflow-store'
 import { POST_PROCESS_INTERRUPTED } from '../../../../shared/finalization-step-error'
 import { openDraftTab } from '../../../../stores/open-draft-tab'
+import { draftAIResourceClaims, finalizeResourceClaims } from '../../../../services/workflows/chapter-workflow'
 import StageWorkspace from '../../StageWorkspace'
 import { BLUEPRINT, SESSION, chapterProject, createChapterBackend, generationModel } from './chapter-fixture'
 
@@ -173,7 +174,7 @@ describe('替换定稿后检查后续蓝图', () => {
   it('定稿工作流还占着这一章（后处理跑批还没建好）时按钮不可点并说明原因；工作流结束后可点', async () => {
     backend.state.postProcess = null
     useWorkflowStore.setState({ activeRuns: [{ id: 'finalize-run', projectPath: SESSION.projectPath.toUpperCase().replaceAll('\\', '/'), status: 'running',
-      resourceKeys: [workflowResourceKey('chapter', IMPACT.chapterNumber)] } as never] })
+      ...finalizeResourceClaims(IMPACT.chapterNumber) } as never] })
     await openReplaced()
     await expect.element(button('检查后续蓝图')).toBeDisabled()
     await expect.element(page.getByText('定稿后处理做完后才能检查后续蓝图：新章的人物状态要先记进时间线。')).toBeVisible()
@@ -189,6 +190,16 @@ describe('替换定稿后检查后续蓝图', () => {
     await act(async () => useWorkflowStore.setState({ activeRuns: [] }))
     await expect.element(button('检查后续蓝图')).toBeDisabled()
     await act(async () => release())
+    await expect.element(button('检查后续蓝图')).toBeEnabled()
+    expect(document.body.textContent).not.toContain('定稿后处理做完后才能检查后续蓝图')
+  })
+
+  it('审稿或草稿恢复占着这一章时不算定稿后处理：按钮可点，不说要等后处理', async () => {
+    useWorkflowStore.setState({ activeRuns: [
+      { id: 'review-run', projectPath: SESSION.projectPath, status: 'running', ...draftAIResourceClaims(IMPACT.chapterNumber) },
+      { id: 'recovery-run', projectPath: SESSION.projectPath, status: 'running', resourceKeys: [workflowResourceKey('chapter', IMPACT.chapterNumber)] },
+    ] as never })
+    await openReplaced()
     await expect.element(button('检查后续蓝图')).toBeEnabled()
     expect(document.body.textContent).not.toContain('定稿后处理做完后才能检查后续蓝图')
   })
