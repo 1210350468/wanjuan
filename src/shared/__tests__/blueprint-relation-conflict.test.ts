@@ -88,6 +88,16 @@ describe('蓝图关系与时间线相反', () => {
     expect(check(plan, [relation('仇敌', 8)])).toHaveLength(1)
   })
 
+  it('一个方向写「和解谈判破裂，双方仍是仇敌」：谈判破裂否定了和解，另一个方向的「朋友」照常提示', () => {
+    const plan = blueprint(12, '朋友', { relationshipHints: [{ from: '林晚', to: '沈舟', relation: '和解谈判破裂，双方仍是仇敌' }, { from: '沈舟', to: '林晚', relation: '朋友' }] })
+    expect(check(plan, [relation('仇敌', 8)])).toHaveLength(1)
+  })
+
+  it('一个方向写「同盟破裂，成为仇敌」：破裂的是关系本身，算转折，另一个方向的「仇敌」不报', () => {
+    const plan = blueprint(12, '仇敌', { relationshipHints: [{ from: '林晚', to: '沈舟', relation: '同盟破裂，成为仇敌' }, { from: '沈舟', to: '林晚', relation: '仇敌' }] })
+    expect(check(plan, [relation('盟友', 8)])).toEqual([])
+  })
+
   const english = (text: string) => blueprint(12, text, { characters: ['Alice', 'Bob'], relationshipHints: [{ from: 'Alice', to: 'Bob', relation: text }] })
   const englishNode = (value: string) => relation(value, 8, { subjectName: 'Alice', targetName: 'Bob' })
 
