@@ -1,9 +1,10 @@
 import type Database from 'better-sqlite3'
-import { continuityCheckChapter, type ContinuityCheckChapter } from '../../src/shared/blueprint-continuity-check'
+import { continuityCheckChapter, selectContinuityCheckScope, type ContinuityCheckChapter } from '../../src/shared/blueprint-continuity-check'
 import {
   BLUEPRINT_PATCH_FIELDS, type BlueprintPatch, type ContinuitySuggestResult, type SuggestionDecision, type SuggestionStatus,
 } from '../../src/shared/blueprint-continuity-suggest'
 import { BlueprintRepository } from './blueprint-repository'
+import { SummaryRepository } from './summary-repository'
 import { textHash } from './generation-run-repository'
 
 const chapterHash = (chapter: ContinuityCheckChapter) => textHash(JSON.stringify(chapter))
@@ -11,6 +12,11 @@ const runPrefix = (runId: string) => `${runId}:`
 
 export function patchedFields(chapter: ContinuityCheckChapter, patch: BlueprintPatch): BlueprintPatch {
   return Object.fromEntries(BLUEPRINT_PATCH_FIELDS.filter(field => patch[field] !== undefined).map(field => [field, chapter[field]]))
+}
+
+function evidenceInForce(db: Database.Database, blueprint: Parameters<typeof continuityCheckChapter>[0], eventIds: readonly string[]): boolean {
+  const inForce = new Set(selectContinuityCheckScope([blueprint], SummaryRepository.readContinuityNodesForPreflight(db), Infinity).nodes.map(node => node.eventId))
+  return eventIds.every(id => inForce.has(id))
 }
 
 /** 建议表没有运行号列：suggestion_id 取「运行号:章号」，同一次检查重放时只补缺的行，作者处理过的行不会被改回。 */
@@ -38,9 +44,9 @@ export class BlueprintSuggestionRepository {
 
   static decide(db: Database.Database, suggestionId: string, decision: SuggestionDecision): { status: SuggestionStatus } {
     return db.transaction(() => {
-      const row = db.prepare(`SELECT s.chapter_number AS chapterNumber,s.base_blueprint_hash AS baseHash,s.patch_json AS patch,s.status,
+      const row = db.prepare(`SELECT s.chapter_number AS chapterNumber,s.base_blueprint_hash AS baseHash,s.patch_json AS patch,s.evidence_event_ids AS evidence,s.status,
         EXISTS(SELECT 1 FROM finalization_outbox o JOIN drafts d ON d.id=o.draft_id WHERE o.finalization_id=s.finalization_id AND d.status='finalized') AS live FROM blueprint_continuity_suggestions s WHERE s.suggestion_id=?`)
-        .get(suggestionId) as { chapterNumber: number; baseHash: string; patch: string; status: SuggestionStatus; live: 0 | 1 } | undefined
+        .get(suggestionId) as { chapterNumber: number; baseHash: string; patch: string; evidence: string; status: SuggestionStatus; live: 0 | 1 } | undefined
       if (!row) throw new Error('GENERATION_GRAPH_SELECTION_INVALID')
       if (row.status !== 'pending') return { status: row.status }
       const close = (status: SuggestionStatus, receipt: object) => {
@@ -51,7 +57,8 @@ export class BlueprintSuggestionRepository {
       if (decision === 'reject') return close('rejected', {})
       const current = BlueprintRepository.getAll(db).find(blueprint => blueprint.chapterNumber === row.chapterNumber)
       const finalized = db.prepare("SELECT 1 FROM drafts WHERE chapter_number=? AND status='finalized'").get(row.chapterNumber)
-      if (!row.live || !current || finalized || chapterHash(continuityCheckChapter(current)) !== row.baseHash) return close('stale', {})
+      if (!row.live || !current || finalized || chapterHash(continuityCheckChapter(current)) !== row.baseHash
+        || !evidenceInForce(db, current, JSON.parse(row.evidence) as string[])) return close('stale', {})
       const patch = JSON.parse(row.patch) as BlueprintPatch
       BlueprintRepository.upsert({ ...current, ...patch }, db)
       return close('accepted', { before: patchedFields(continuityCheckChapter(current), patch), after: patch })

@@ -8,6 +8,9 @@ type StepRetry = 'prompt' | 'described' | 'never' | { after: string; rerunIfSucc
 /** 从回收站恢复的章：知识库文档在删除时已清掉，kb_import 记这个码等重导（ADR-0025）。 */
 export const CHAPTER_RESTORED_REPROJECTION_PENDING = 'CHAPTER_RESTORED_REPROJECTION_PENDING'
 
+/** 后处理在这一步做完之前就停了（取消、前面的步骤失败或应用退出）。 */
+export const POST_PROCESS_INTERRUPTED = 'POST_PROCESS_INTERRUPTED'
+
 /** 定稿后处理步骤的错误码。步骤记录里存错误码本身，界面展示时再按当前界面语言换成作者可读说明。 */
 /** enMany：{names} 有多个文件时的英文。 */
 const FINALIZATION_STEP_ERRORS: { code: RegExp; zh: string; en: string; enMany?: string; retry: StepRetry }[] = [
@@ -93,6 +96,8 @@ const FINALIZATION_STEP_ERRORS: { code: RegExp; zh: string; en: string; enMany?:
   { code: /^FINALIZATION_REPLACED_CLEANUP_PENDING$/, retry: 'described',
     zh: '被替换的旧定稿留下的内容还没清理。点「重试」清理；和旧定稿对不上（可能改过）的会留着。',
     en: 'Content left by a replaced final version has not been cleaned up yet. Select Retry to clean it up; anything that differs from that version (it may have been edited) is kept.' },
+  { code: /^POST_PROCESS_INTERRUPTED$/, retry: 'described',
+    zh: '后处理中途停了，这一步没做完。点「重试」接着做。', en: 'Post-processing stopped before this step finished. Select Retry to run it.' },
   { code: /^CHAPTER_RESTORED_REPROJECTION_PENDING$/, retry: 'described',
     zh: '这一章从回收站恢复了，还没重新收进知识库。点「重试」收进去。',
     en: 'This chapter was restored from the trash and is not in the knowledge base yet. Select Retry to add it.' },

@@ -113,6 +113,8 @@ const COVERED_PREFIXES = [
   'LEGACY_IMPORT_',
 ] as const
 const UNREGISTERED: Record<string, readonly string[]> = {
+  // 只写进后处理步骤记录，不作为错误抛出；步骤面板按 finalization-step-error.ts 的说明显示。
+  postProcessStepRecord: ['POST_PROCESS_INTERRUPTED'],
   // 副本已建好，只是最近项目写失败：主进程放在 warning 字段，界面不显示。
   legacyImportWarning: ['LEGACY_IMPORT_RECENT_LIST_FAILED'],
   // 请求形状、句柄、事务、收据、哈希与谱系的完整性校验：只有我们自己的代码缺陷、被篡改的 IPC

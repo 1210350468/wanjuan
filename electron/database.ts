@@ -13,6 +13,7 @@ import { migrateSchema } from './migrations/runner'
 import { SqliteSchemaAdapter } from './migrations/sqlite-schema-adapter'
 import { openCanonicalProjectData, deactivateProjectData, getNewProjectDatabasePath, getProjectDatabasePath } from './services/project-data-locator'
 import { readSqliteContentIdentity } from './services/sqlite-project-migration'
+import { POST_PROCESS_INTERRUPTED } from '../src/shared/finalization-step-error'
 
 const require = createRequire(import.meta.url)
 const Database = require('better-sqlite3') as typeof import('better-sqlite3')
@@ -111,5 +112,9 @@ export function fenceProjectSession(db: BetterSqlite3.Database): void {
         updated_at = datetime('now')
     WHERE status = 'running' AND (execution_owner <> '' OR lease_expires_at <> 0)
   `)
+  // 后处理在渲染端跑，打开项目时不会有还在跑的跑批。
+  db.prepare(`UPDATE post_process_steps SET error_msg = ?
+    WHERE ok = 0 AND COALESCE(attempt_count, 0) = 0 AND COALESCE(error_msg, '') = ''
+      AND COALESCE(last_attempt_at, '') = '' AND COALESCE(completed_at, '') = ''`).run(POST_PROCESS_INTERRUPTED)
 
 }

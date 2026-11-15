@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { WorkflowContext } from '../../../stores/workflow-store'
 import { runPostProcessPipeline } from '../workflow-utils'
+import { POST_PROCESS_INTERRUPTED } from '../../../shared/finalization-step-error'
 
 const projectSession = {
   projectId: 'project-1',
@@ -86,6 +87,26 @@ describe('runPostProcessPipeline stopOnFailure', () => {
       projectSession,
     )
     expect(secondStep).not.toHaveBeenCalled()
+  })
+
+  it('records the steps it never reached as interrupted, so they do not look like they are still running', async () => {
+    const invoke = stubIpcInvoke()
+    const pending = (stepKey: string) => ({ id: 1, runId: 'run-1', stepKey, label: stepKey, critical: false, ok: false, errorMsg: '', attemptCount: 0, completedAt: '', lastAttemptAt: '' })
+    invoke.mockImplementation(async (channel: string) => {
+      if (channel === 'db:post-process-get-latest-run') return null
+      if (channel === 'db:post-process-create-run') return { success: true, id: 'run-1' }
+      if (channel === 'db:post-process-get-steps') return [pending('second')] as never
+      if (channel === 'db:post-process-mark-step-failed') return { success: true }
+      throw new Error(`Unexpected IPC channel: ${channel}`)
+    })
+
+    await expect(runPostProcessPipeline('C:/novel', 'chapter_2_finalize', 'Chapter 2 finalization', [
+      { key: 'first', label: 'First step', critical: true, executor: async () => { throw new Error('provider timeout') } },
+      { key: 'second', label: 'Second step', critical: false, executor: vi.fn(async () => undefined) },
+    ], { log: vi.fn(), setProgress: vi.fn(), appendText: vi.fn() },
+    { retryCount: 1, stopOnFailure: true, cancellation: englishContext(), projectSession })).rejects.toThrow('Post-processing step failed')
+
+    expect(invoke).toHaveBeenCalledWith('db:post-process-mark-step-failed', 'run-1', 'second', POST_PROCESS_INTERRUPTED, 'C:/novel', projectSession)
   })
 
   it('keeps every step and the final summary bound to the id returned by create-run', async () => {

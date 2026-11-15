@@ -8,8 +8,10 @@ import { ModelExecutionLeaseRegistry } from '../model-execution-lease'
 import { readMainGenerationPolicy } from '../main-generation-plan'
 import { buildGenerationSourceBinding, rebuildGenerationSourceBinding } from '../generation-source-binding'
 import { generationOutputContract } from '../../../src/shared/generation-owner-contract'
-import { getProjectDb } from '../../database'
+import { fenceProjectSession, getProjectDb } from '../../database'
+import { POST_PROCESS_INTERRUPTED } from '../../../src/shared/finalization-step-error'
 import { FinalizationRepository } from '../../repositories/finalization-repository'
+import { deleteCharacterRelationship } from '../../repositories/character-continuity-repository'
 import { textHash } from '../../repositories/generation-run-repository'
 import type { ModelProfile } from '../../../src/shared/ipc-channels'
 import type { GenerationRunServiceDependencies } from '../generation-run-service'
@@ -93,6 +95,15 @@ it('后处理还在跑：不建运行、不发请求', () => {
   expect(f.spy).not.toHaveBeenCalled()
 })
 
+it('后处理没跑完应用就退出：重开项目后这一步记为中断，照样能检查', async () => {
+  const f = fixture({ postprocess: 'running' })
+  f.reopen()
+  fenceProjectSession(f.db)
+  expect(f.db.prepare("SELECT error_msg FROM post_process_steps WHERE step_key='character_cards'").pluck().get()).toBe(POST_PROCESS_INTERRUPTED)
+  await f.check()
+  expect(f.list()!.suggestions.map(item => item.chapterNumber)).toEqual([2])
+})
+
 it.each([['角色状态那步失败', 'failed'], ['没有后处理记录', 'none']] as const)('%s：照样能检查，出建议', async (_, postprocess) => {
   const f = fixture({ postprocess })
   await f.check()
@@ -153,6 +164,24 @@ it('建议生成后作者改过这章蓝图：不写入，这条作废', async (
   expect(f.decide(card!.suggestionId, 'accept')).toEqual({ status: 'stale' })
   expect(f.keyEvents()).toBe('作者自己改的')
   expect(f.list()!.suggestions[0]!.status).toBe('stale')
+})
+
+it('建议生成后作者从这章起删了依据的关系：不写入，这条作废', async () => {
+  const f = fixture()
+  await f.check()
+  const [card] = f.list()!.suggestions
+  f.db.transaction(() => deleteCharacterRelationship(f.db, { relationshipId: '关系1', sourceId: '甲', sourceName: '林岚', targetId: '乙', targetName: '沈舟' }, '操作2', 2))()
+  expect(f.decide(card!.suggestionId, 'accept')).toEqual({ status: 'stale' })
+  expect(f.keyEvents()).toBe(ORIGINAL)
+})
+
+it('作者在依据生效之后的章才改关系：依据在这章仍生效，照常接受', async () => {
+  const f = fixture()
+  await f.check()
+  const [card] = f.list()!.suggestions
+  f.db.transaction(() => deleteCharacterRelationship(f.db, { relationshipId: '关系1', sourceId: '甲', sourceName: '林岚', targetId: '乙', targetName: '沈舟' }, '操作2', 3))()
+  expect(f.decide(card!.suggestionId, 'accept')).toEqual({ status: 'accepted' })
+  expect(f.keyEvents()).toBe(FIXED)
 })
 
 it('不用：蓝图不变；再检查一次是新的一条，不把不用的那条改回待处理', async () => {

@@ -25,7 +25,7 @@ export function getStepPresentation(step: PostProcessStatus['steps'][string]): S
 
 /**
  * 读一个后处理 scope 的最新一次运行，定稿完成或任一工作流结束时重读。
- * 定稿视图的后处理步骤用它。busy 由忙转闲时也重读：失败的修复不发 WORKFLOW_COMPLETE，否则失败说明会停在上一次。
+ * 定稿视图的后处理步骤用它。busy 由忙转闲时也重读：失败的修复不发 WORKFLOW_COMPLETE，否则失败说明会停在上一次。重读期间 refreshing 为真。
  */
 export function usePostProcessStatus(scope: string, busy = false) {
   const [status, setStatus] = useState<PostProcessStatus | null>(null)
@@ -72,13 +72,17 @@ export function usePostProcessStatus(scope: string, busy = false) {
   }, [loadStatus, project])
 
   const wasBusy = useRef(busy)
+  const [refreshing, setRefreshing] = useState(false)
   useEffect(() => {
-    if (wasBusy.current && !busy) void loadStatus()
+    if (wasBusy.current && !busy) {
+      setRefreshing(true)
+      void loadStatus().finally(() => setRefreshing(false))
+    }
     wasBusy.current = busy
   }, [busy, loadStatus])
 
   const steps = status
     ? Object.entries(status.steps).map(([key, step]) => ({ key, step, presentation: getStepPresentation(step) }))
     : []
-  return { status, loading, steps }
+  return { status, loading, refreshing, steps }
 }

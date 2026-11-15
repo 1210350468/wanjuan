@@ -14,8 +14,10 @@ import { useLLMStore } from '../../../../stores/llm-store'
 import { useLocaleStore } from '../../../../stores/locale-store'
 import { useStageStore } from '../../../../stores/navigation/stage-store'
 import { useProjectStore } from '../../../../stores/project-store'
-import { useWorkflowStore } from '../../../../stores/workflow-store'
+import { useWorkflowStore, workflowResourceKey } from '../../../../stores/workflow-store'
+import { POST_PROCESS_INTERRUPTED } from '../../../../shared/finalization-step-error'
 import { openDraftTab } from '../../../../stores/open-draft-tab'
+import { draftAIResourceClaims, finalizeResourceClaims } from '../../../../services/workflows/chapter-workflow'
 import StageWorkspace from '../../StageWorkspace'
 import { BLUEPRINT, SESSION, chapterProject, createChapterBackend, generationModel } from './chapter-fixture'
 
@@ -152,6 +154,64 @@ describe('替换定稿后检查后续蓝图', () => {
     expect(document.body.textContent).not.toContain('定稿后处理做完后才能检查后续蓝图')
     expect(document.body.textContent).not.toContain('角色状态没更新完')
     expect(graph.opened).toEqual([])
+  })
+
+  it('后处理状态还没读到时按钮不可点，也不说角色状态没更新完', async () => {
+    const respond = backend.invoke.getMockImplementation()!
+    let release!: () => void
+    const held = new Promise<void>(resolve => { release = resolve })
+    backend.invoke.mockImplementation(async (channel, ...args) => {
+      if (channel === 'db:post-process-get-latest-run') await held
+      return respond(channel, ...args)
+    })
+    await openReplaced()
+    await expect.element(button('检查后续蓝图')).toBeDisabled()
+    expect(document.body.textContent).not.toContain('角色状态没更新完')
+    await act(async () => release())
+    await expect.element(button('检查后续蓝图')).toBeEnabled()
+  })
+
+  it('定稿工作流还占着这一章（后处理跑批还没建好）时按钮不可点并说明原因；工作流结束后可点', async () => {
+    backend.state.postProcess = null
+    useWorkflowStore.setState({ activeRuns: [{ id: 'finalize-run', projectPath: SESSION.projectPath.toUpperCase().replaceAll('\\', '/'), status: 'running',
+      ...finalizeResourceClaims(IMPACT.chapterNumber) } as never] })
+    await openReplaced()
+    await expect.element(button('检查后续蓝图')).toBeDisabled()
+    await expect.element(page.getByText('定稿后处理做完后才能检查后续蓝图：新章的人物状态要先记进时间线。')).toBeVisible()
+
+    postProcessDone(true)
+    const respond = backend.invoke.getMockImplementation()!
+    let release!: () => void
+    const held = new Promise<void>(resolve => { release = resolve })
+    backend.invoke.mockImplementation(async (channel, ...args) => {
+      if (channel === 'db:post-process-get-latest-run') await held
+      return respond(channel, ...args)
+    })
+    await act(async () => useWorkflowStore.setState({ activeRuns: [] }))
+    await expect.element(button('检查后续蓝图')).toBeDisabled()
+    await act(async () => release())
+    await expect.element(button('检查后续蓝图')).toBeEnabled()
+    expect(document.body.textContent).not.toContain('定稿后处理做完后才能检查后续蓝图')
+  })
+
+  it('审稿或草稿恢复占着这一章时不算定稿后处理：按钮可点，不说要等后处理', async () => {
+    useWorkflowStore.setState({ activeRuns: [
+      { id: 'review-run', projectPath: SESSION.projectPath, status: 'running', ...draftAIResourceClaims(IMPACT.chapterNumber) },
+      { id: 'recovery-run', projectPath: SESSION.projectPath, status: 'running', resourceKeys: [workflowResourceKey('chapter', IMPACT.chapterNumber)] },
+    ] as never })
+    await openReplaced()
+    await expect.element(button('检查后续蓝图')).toBeEnabled()
+    expect(document.body.textContent).not.toContain('定稿后处理做完后才能检查后续蓝图')
+  })
+
+  it('后处理中途停了：按钮可点，说明建议可能不全', async () => {
+    backend.state.postProcess = { steps: [
+      { stepKey: 'chapter_notes', label: '章节要点', ok: true },
+      { stepKey: 'character_cards', label: '角色状态', ok: false, errorMsg: POST_PROCESS_INTERRUPTED },
+    ] }
+    await openReplaced()
+    await expect.element(button('检查后续蓝图')).toBeEnabled()
+    await expect.element(page.getByText('角色状态没更新完，建议可能不全。')).toBeVisible()
   })
 
   it('后处理失败或这次替换没有后处理记录时仍可检查，并说明建议可能不全', async () => {
