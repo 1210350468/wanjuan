@@ -1468,7 +1468,7 @@ describe('后续章重述同样的关系，之后再定稿更早的章', () => {
   it.each([
     ['同向重述', LIN, SHEN, [7, 5, 3]],
     ['反向重述', SHEN, LIN, [5, 3]],
-  ])('第 3 章盟友、第 7 章%s盟友，之后定稿第 5 章仇敌：第 8 章仍是盟友，林岚的时间线记下第 7 章变回盟友', (_label, source, target, linChapters) => {
+  ])('第 3 章盟友、第 7 章%s盟友，之后定稿第 5 章仇敌：第 8 章仍是盟友；同向重述时林岚的时间线记下第 7 章变回盟友，反向重述记在沈砚那边', (_label, source, target, linChapters) => {
     openProject()
     commitModelOutput(finalizeNew(3, '第三章：林岚与沈砚结为盟友。'), { updates: [], relations: [relationChange('盟友', '结为盟友')] })
     commitModelOutput(finalizeNew(7, '第七章：两人仍是盟友。'), { updates: [], relations: [relationChange('盟友', '仍是盟友', source, target)] })
