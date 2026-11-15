@@ -391,7 +391,7 @@ export const REAL_SCENARIOS = {
     await shoot('real-gap-ch2-rewritten')
     measured.chapter2Finalize = await finalizeAndPostProcess(page, 2)
     await blueprint.open(page)
-    measured.gapNoticeAfterFinalize = await page.locator('.pi-notice').filter({ hasText: '第 2 章已删除' }).count()
+    measured.gapNoticeAfterFinalize = await page.locator('.pi-notice').filter({ hasText: /第 2 章(的正文)?已删除/u }).count()
     assert.equal(measured.gapNoticeAfterFinalize, 0, '第 2 章重写定稿后缺口提示消失')
     await openChapter(page, 2)
     await chapterView.postProcess(page).waitFor({ state: 'visible' })
