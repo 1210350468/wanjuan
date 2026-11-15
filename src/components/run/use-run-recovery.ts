@@ -323,7 +323,13 @@ The generation records are kept.`)
       onDismiss: () => { if (undo === shown) undo = undefined },
       actions: [{ label: text('撤销', 'Undo'), onClick: async () => {
         if (!sameProjectSessionContext(session, currentSession())) return
-        await Promise.all(handles.map(item => setRecoveryAbandoned(session, item, false)))
+        const results = await Promise.allSettled(handles.map(item => setRecoveryAbandoned(session, item, false)))
+        const failed = results.flatMap((result, index) => result.status === 'rejected' ? [{ reason: result.reason as unknown, handle: handles[index]!, title: titles[index]! }] : [])
+        if (!failed.length) return
+        // 没放回的留在一条新提示里，还能再点撤销
+        undo = undefined
+        for (const item of failed) showUndo(session, item.handle, item.title)
+        throw failed[0]!.reason
       } }],
     }),
   }
