@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { diff_match_patch, DIFF_DELETE, DIFF_INSERT } from 'diff-match-patch'
 import { Check } from 'lucide-react'
-import { errorCodeOf } from '../../i18n/app-errors'
+import { errorCodeOf, knownAppErrorMessage } from '../../i18n/app-errors'
 import { createEditorInlineGeneration } from '../../services/editor-inline-generation'
 import { routeModelId } from '../../services/model-routing'
 import { getActiveProjectSessionContext } from '../../shared/project-session-context'
 import { EDITOR_INLINE_INSTRUCTION_MAX_LENGTH, type EditorInlineAnnotation } from '../../shared/editor-inline-generation'
 import { useLocaleStore } from '../../stores/locale-store'
+import { useLayoutStore } from '../../stores/layout-store'
 import { Button } from '../ui/Button'
 
 type Piece = { kind: 'same'; text: string } | { kind: 'change'; index: number; from: number; to: number; before: string; after: string }
@@ -55,6 +56,8 @@ export default function InlineAnnotationReview({ before, after, annotations, onC
   onCommit: (result: string) => Promise<void>; onCancel: () => void
 }) {
   const text = useLocaleStore(s => s.text)
+  const locale = useLocaleStore(s => s.locale)
+  const settingsOpen = useLayoutStore(s => s.settingsOpen)
   const pieces = useMemo(() => splitChanges(before, after), [before, after])
   const [changes, setChanges] = useState<Change[]>(() => pieces.flatMap(piece => piece.kind === 'change'
     ? [{ value: piece.after, accepted: false, editing: false, busy: false, error: '' }] : []))
@@ -67,6 +70,12 @@ export default function InlineAnnotationReview({ before, after, annotations, onC
     const clients = rerollClients.current
     return () => { for (const client of clients) void client.cancel().catch(() => {}) }
   }, [])
+  const shownRerolls = useRef(new Set<ReturnType<typeof createEditorInlineGeneration>>())
+  useEffect(() => {
+    if (settingsOpen) return
+    for (const client of shownRerolls.current) client.delivered()
+    shownRerolls.current.clear()
+  }, [settingsOpen, changes])
   const update = (index: number, patch: Partial<Change>) => setChanges(current => current.map((item, i) => i === index ? { ...item, ...patch } : item))
   const commit = async (next: Change[]) => {
     if (commitGuard.current || next.some(item => !item.accepted || item.busy)) return
@@ -117,15 +126,18 @@ export default function InlineAnnotationReview({ before, after, annotations, onC
     try {
       await client.open({ input: { action: 'instruct', instruction, documentText: selected, selectedText: selected, from: 0, to: selected.length }, modelId: routeModelId('editor-inline') ?? '', uiActionNonce: crypto.randomUUID() })
       const receipt = await client.execute()
-      if (receipt.outcome.status !== 'completed' || receipt.outcome.finishReason !== 'stop' || receipt.sourceStatus !== 'current' || !(receipt.run.candidates ?? receipt.run.artifacts).some(candidate => candidate.text === receipt.outcome.content && candidate.status === 'completed' && candidate.compositionEligible)) throw new Error('REROLL_INCOMPLETE')
+      if (receipt.outcome.status !== 'completed' || receipt.outcome.finishReason !== 'stop' || receipt.sourceStatus !== 'current' || !(receipt.run.candidates ?? receipt.run.artifacts).some(candidate => candidate.text === receipt.outcome.content && candidate.status === 'completed' && candidate.compositionEligible)) throw new Error(receipt.outcome.receipt.failureCode ?? 'REROLL_INCOMPLETE')
       const candidate = receipt.outcome.content
       const position = pieces.indexOf(piece)
       const preceding = pieces[position - 1], following = pieces[position + 1]
       const overlap = candidate.length > 1 && ((following?.kind === 'same' && following.text.length > 0 && candidate.endsWith(following.text[0]!))
         || (preceding?.kind === 'same' && preceding.text.length > 0 && candidate.startsWith(preceding.text.at(-1)!)))
+      shownRerolls.current.add(client)
       update(piece.index, { value: candidate, busy: false, editing: false,
         error: overlap ? text('结果可能与相邻正文重复，请检查或编辑。', 'The result may repeat adjacent text; inspect or edit it.') : '' })
-    } catch { update(piece.index, { busy: false, error: text('重新生成失败，请重试', 'Regeneration failed; try again') }) }
+    } catch (cause) {
+      update(piece.index, { busy: false, error: knownAppErrorMessage(locale, cause) ?? text('重新生成失败，请重试', 'Regeneration failed; try again') })
+    }
     finally { rerollClients.current.delete(client) }
   }
   return <section className="inline-annotation-review" aria-label={text('批注修改对比', 'Annotation revision comparison')}>
