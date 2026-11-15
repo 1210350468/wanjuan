@@ -8,7 +8,8 @@ import { ModelExecutionLeaseRegistry } from '../model-execution-lease'
 import { readMainGenerationPolicy } from '../main-generation-plan'
 import { buildGenerationSourceBinding, rebuildGenerationSourceBinding } from '../generation-source-binding'
 import { generationOutputContract } from '../../../src/shared/generation-owner-contract'
-import { getProjectDb } from '../../database'
+import { fenceProjectSession, getProjectDb } from '../../database'
+import { POST_PROCESS_INTERRUPTED } from '../../../src/shared/finalization-step-error'
 import { FinalizationRepository } from '../../repositories/finalization-repository'
 import { deleteCharacterRelationship } from '../../repositories/character-continuity-repository'
 import { textHash } from '../../repositories/generation-run-repository'
@@ -92,6 +93,14 @@ it('后处理还在跑：不建运行、不发请求', () => {
     .toThrow('GENERATION_GRAPH_POSTPROCESS_PENDING')
   expect(f.db.prepare('SELECT COUNT(*) FROM generation_runs').pluck().get()).toBe(0)
   expect(f.spy).not.toHaveBeenCalled()
+})
+
+it('后处理没跑完应用就退出：重开项目后这一步记为中断，照样能检查', async () => {
+  const f = fixture({ postprocess: 'running' })
+  fenceProjectSession(f.db)
+  expect(f.db.prepare("SELECT error_msg FROM post_process_steps WHERE step_key='character_cards'").pluck().get()).toBe(POST_PROCESS_INTERRUPTED)
+  await f.check()
+  expect(f.list()!.suggestions.map(item => item.chapterNumber)).toEqual([2])
 })
 
 it.each([['角色状态那步失败', 'failed'], ['没有后处理记录', 'none']] as const)('%s：照样能检查，出建议', async (_, postprocess) => {

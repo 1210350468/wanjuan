@@ -17,6 +17,7 @@ import { CharacterRepository } from '../../../../../electron/repositories/charac
 import { CharacterRosterRepository, commitCharacterIdentities, refreshCharacterIdentityProjection } from '../../../../../electron/repositories/character-roster-repository'
 import { DraftRepository } from '../../../../../electron/repositories/draft-repository'
 import { PostProcessRepository } from '../../../../../electron/repositories/post-process-repository'
+import { POST_PROCESS_INTERRUPTED } from '../../../../shared/finalization-step-error'
 import { ProjectCoreRepository } from '../../../../../electron/repositories/project-core-repository'
 import {
   invalidateContinuityProjectionFrom,
@@ -886,7 +887,7 @@ describe('RunFinalizePostProcessCommand character-state persistence', () => {
     const interruptedRun = PostProcessRepository.getLatestRun('chapter_finalize', '2')
     expect(interruptedRun).not.toBeNull()
     expect(PostProcessRepository.getSteps(interruptedRun!.id)
-      .find(step => step.stepKey === 'character_cards')).toMatchObject({ ok: false, attemptCount: 0 })
+      .find(step => step.stepKey === 'character_cards')).toMatchObject({ ok: false, errorMsg: POST_PROCESS_INTERRUPTED })
 
     const finalizationRunCount = () => getProjectDb()!.prepare("SELECT COUNT(*) FROM generation_runs WHERE json_extract(binding_json,'$.sourceManifest.finalizationGenerationSlotKey') IS NOT NULL").pluck().get() as number
     const runsBeforeRetry = finalizationRunCount()

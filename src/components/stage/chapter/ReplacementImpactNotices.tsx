@@ -1,5 +1,6 @@
 import type { ReplacementImpact } from '../../../shared/chapter-reopen'
 import { useLocaleStore } from '../../../stores/locale-store'
+import { useWorkflowStore, workflowResourceKey } from '../../../stores/workflow-store'
 import { navigate } from '../../../stores/navigation/navigation-intents'
 import { Button } from '../../ui/Button'
 import { Notice } from '../../ui/Notice'
@@ -71,25 +72,27 @@ export function ReplacementImpactPreview({ impact }: { impact: ReplacementImpact
 }
 
 /**
- * 检查后续蓝图要等后处理把新章的人物状态记进时间线；后处理失败或没有记录时也能查，只是依据可能不全。
+ * 检查后续蓝图要等后处理把新章的人物状态记进时间线：定稿工作流还占着这一章、或步骤还没跑到时不能查；失败、中断或没有记录时也能查，只是依据可能不全。
  * 「知道了」只收起替换提示，按钮和没处理的建议卡留着。
  */
 function OwnImpactNotice({ impact, projectKey, acknowledged, onAcknowledge }: { impact: ReplacementImpact; projectKey: string; acknowledged: boolean; onAcknowledge: () => void }) {
   const text = useLocaleStore(s => s.text)
   const check = useLaterBlueprintCheck(projectKey, impact.finalizationId!)
-  const { status, steps } = usePostProcessStatus(getChapterFinalizeScope(impact.chapterNumber))
+  const chapterKey = workflowResourceKey('chapter', impact.chapterNumber)
+  const chapterBusy = useWorkflowStore(s => s.activeRuns.some(run => run.projectPath === projectKey && run.resourceKeys?.includes(chapterKey)))
+  const { status, loading, steps } = usePostProcessStatus(getChapterFinalizeScope(impact.chapterNumber), chapterBusy)
   const { retired } = planFinalizationRetry(status?.steps ?? {})
-  const postProcessing = steps.some(({ key, presentation }) => presentation === 'pending' && !retired.has(key))
+  const postProcessing = chapterBusy || steps.some(({ key, presentation }) => presentation === 'pending' && !retired.has(key))
   const complete = status?.steps.chapter_notes?.ok === true && status.steps.character_cards?.ok === true
   const checkable = impact.laterChapters.length + impact.blueprintOnlyChapters.length > 0
   const firstLater = impact.laterChapters[0]
   const running = check.status.kind === 'running'
   const checkButton = checkable && (
-    <Button variant="secondary" size="sm" disabled={postProcessing || running} onClick={() => void check.run()}>
+    <Button variant="secondary" size="sm" disabled={loading || postProcessing || running} onClick={() => void check.run()}>
       {running ? text('正在检查…', 'Checking…') : text('检查后续蓝图', 'Check later blueprints')}
     </Button>
   )
-  const checkHint = !checkable ? null : postProcessing
+  const checkHint = !checkable || loading ? null : postProcessing
     ? <p>{text('定稿后处理做完后才能检查后续蓝图：新章的人物状态要先记进时间线。', 'You can check later blueprints once post-finalization steps finish, so the new chapter’s character states are in the timeline.')}</p>
     : !complete && <p>{text('角色状态没更新完，建议可能不全。', 'Character states were not fully updated, so suggestions may be incomplete.')}</p>
   return (

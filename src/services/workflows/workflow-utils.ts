@@ -15,6 +15,7 @@ import { localize } from '../../i18n/core'
 import { displayedErrorMessage } from '../../i18n/app-errors'
 import type { Locale } from '../../i18n/types'
 import { isWorkflowCancellation, WorkflowCancelledError } from './workflow-cancellation'
+import { POST_PROCESS_INTERRUPTED } from '../../shared/finalization-step-error'
 
 /**
  * Project-level post-processing is fail-closed: never borrow the active lease.
@@ -197,6 +198,19 @@ export function getChapterFinalizeScope(chapterNumber: number): string {
   return `chapter_${chapterNumber}_finalize`
 }
 
+/** 取消后没跑到的步骤记为中断，界面和「检查后续蓝图」才不会一直等它。项目已关时写不进去，下次打开项目时补记。 */
+async function markUnstartedStepsInterrupted(projectSession: ProjectSessionContext, runId: string, projectPath: string): Promise<void> {
+  try {
+    const steps = await invokeForProjectSession(projectSession, 'db:post-process-get-steps', runId, projectPath)
+    for (const step of steps) {
+      if (step.ok || step.attemptCount > 0 || step.errorMsg) continue
+      await invokeForProjectSession(projectSession, 'db:post-process-mark-step-failed', runId, step.stepKey, POST_PROCESS_INTERRUPTED, projectPath)
+    }
+  } catch {
+    return
+  }
+}
+
 // ===== 流水线执行器 =====
 
 export interface PipelineOptions {
@@ -295,72 +309,77 @@ export async function runPostProcessPipeline(
   }
 
   const runId = run.id
-  const runSteps = await invokeForProjectSession(projectSession, 'db:post-process-get-steps', runId, projectPath)
-  assertNotCancelled()
-  const stepMap = new Map((runSteps as unknown as Array<Record<string, unknown>>).map((s) => [s.stepKey, s]))
-
-  for (const step of steps) {
+  try {
+    const runSteps = await invokeForProjectSession(projectSession, 'db:post-process-get-steps', runId, projectPath)
     assertNotCancelled()
-    const existingStep = stepMap.get(step.key)
+    const stepMap = new Map((runSteps as unknown as Array<Record<string, unknown>>).map((s) => [s.stepKey, s]))
 
-    // 修复模式：跳过已成功的步骤
-    if (onlyFailed && existingStep?.ok && !options?.rerun?.includes(step.key)) {
-      callbacks.log(text(
-        `  ${step.label} — 已成功，跳过`,
-        `  ${step.label} already succeeded; skipping`,
-      ))
-      continue
-    }
-
-    const result = await withRetry(
-      () => step.executor(callbacks, cancellation),
-      retryCount,
-      step.label,
-      callbacks,
-      () => cancellation?.cancelled === true,
-      uiLocale,
-    )
-
-    if (result.ok) {
+    for (const step of steps) {
       assertNotCancelled()
-      const markResult = await invokeForProjectSession(projectSession, 'db:post-process-mark-step-ok', runId, step.key, projectPath)
-      if (!markResult.success) {
-        const reason = displayedErrorMessage(uiLocale, markResult.error)
-        throw new Error(text(
-          `记录后处理成功状态失败: ${reason}`,
-          `Failed to record the successful post-processing state: ${reason}`,
+      const existingStep = stepMap.get(step.key)
+
+      // 修复模式：跳过已成功的步骤
+      if (onlyFailed && existingStep?.ok && !options?.rerun?.includes(step.key)) {
+        callbacks.log(text(
+          `  ${step.label} — 已成功，跳过`,
+          `  ${step.label} already succeeded; skipping`,
         ))
+        continue
       }
-    } else {
-      // 真实失败先记进后处理状态，再看取消：取消只决定后面不再跑，不能盖掉已经发生的失败。
-      const stepError = result.error || text('未知错误', 'Unknown error')
-      const markResult = await invokeForProjectSession(
-        projectSession,
-        'db:post-process-mark-step-failed',
-        runId,
-        step.key,
-        stepError,
-        projectPath,
+
+      const result = await withRetry(
+        () => step.executor(callbacks, cancellation),
+        retryCount,
+        step.label,
+        callbacks,
+        () => cancellation?.cancelled === true,
+        uiLocale,
       )
-      if (!markResult.success) {
-        const reason = displayedErrorMessage(uiLocale, markResult.error)
-        throw new Error(text(
-          `记录后处理失败状态失败: ${reason}`,
-          `Failed to record the failed post-processing state: ${reason}`,
-        ))
-      }
-      if (stopOnFailure) {
-        const reason = displayedErrorMessage(uiLocale, stepError)
-        throw new Error(text(
-          `后处理步骤失败：${step.label} — ${reason}`,
-          `Post-processing step failed: ${step.label} — ${reason}`,
-        ))
+
+      if (result.ok) {
+        assertNotCancelled()
+        const markResult = await invokeForProjectSession(projectSession, 'db:post-process-mark-step-ok', runId, step.key, projectPath)
+        if (!markResult.success) {
+          const reason = displayedErrorMessage(uiLocale, markResult.error)
+          throw new Error(text(
+            `记录后处理成功状态失败: ${reason}`,
+            `Failed to record the successful post-processing state: ${reason}`,
+          ))
+        }
+      } else {
+        // 真实失败先记进后处理状态，再看取消：取消只决定后面不再跑，不能盖掉已经发生的失败。
+        const stepError = result.error || text('未知错误', 'Unknown error')
+        const markResult = await invokeForProjectSession(
+          projectSession,
+          'db:post-process-mark-step-failed',
+          runId,
+          step.key,
+          stepError,
+          projectPath,
+        )
+        if (!markResult.success) {
+          const reason = displayedErrorMessage(uiLocale, markResult.error)
+          throw new Error(text(
+            `记录后处理失败状态失败: ${reason}`,
+            `Failed to record the failed post-processing state: ${reason}`,
+          ))
+        }
+        if (stopOnFailure) {
+          const reason = displayedErrorMessage(uiLocale, stepError)
+          throw new Error(text(
+            `后处理步骤失败：${step.label} — ${reason}`,
+            `Post-processing step failed: ${step.label} — ${reason}`,
+          ))
+        }
       }
     }
-  }
 
-  // 最终汇总也必须按本次 runId 读取，避免并发跑批互相串台。
-  assertNotCancelled()
+    // 最终汇总也必须按本次 runId 读取，避免并发跑批互相串台。
+    assertNotCancelled()
+  } catch (error) {
+    if (isWorkflowCancellation(error)) await markUnstartedStepsInterrupted(projectSession, runId, projectPath)
+    throw error
+  }
   const finalSteps = await invokeForProjectSession(projectSession, 'db:post-process-get-steps', runId, projectPath)
   const status: PostProcessStatus = {
     scope,
