@@ -119,4 +119,13 @@ describe('批注修改提交', () => {
     const { getProjectDb } = await import('../../database')
     expect(getProjectDb()!.prepare('SELECT count(*) FROM annotation_history WHERE draft_id=?').pluck().get(id)).toBe(0)
   })
+  it('批注历史按章列出各版本的记录，每条带所属草稿版本', async () => {
+    const first = DraftRepository.create({ chapterNumber: 4, source: 'write', content: '春雨落下', wordCount: 4 })
+    const second = DraftRepository.create({ chapterNumber: 4, source: 'rewrite', content: '夜雨落下', wordCount: 4 })
+    const annotations = (selectedText: string) => [{ id: 'one', from: 0, to: 2, selectedText, instruction: '换个说法' }]
+    await handlers.get('db:annotation-commit')!({}, { draftId: first, expectedSaved: '春雨落下', before: '春雨落下', after: '秋雨落下', annotations: annotations('春雨') }, session.projectPath, session)
+    await handlers.get('db:annotation-commit')!({}, { draftId: second, expectedSaved: '夜雨落下', before: '夜雨落下', after: '夜风吹过', annotations: annotations('夜雨') }, session.projectPath, session)
+    const rows = await handlers.get('db:annotation-history-list')!({}, second, session.projectPath, session) as Array<{ version: number; after: string }>
+    expect(rows.map(({ version, after }) => ({ version, after }))).toEqual([{ version: 2, after: '夜风吹过' }, { version: 1, after: '秋雨落下' }])
+  })
 })

@@ -957,8 +957,9 @@ export function registerDatabaseController() {
     assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
     const db = getProjectDb()
     if (!db || !DraftRepository.getMeta(draftId)) throw new Error('DRAFT_NOT_FOUND')
-    const rows = db.prepare(`SELECT id, before_text AS before, after_text AS after, annotations_json AS annotationsJson, created_at AS createdAt FROM annotation_history
-      WHERE draft_id IN (SELECT id FROM drafts WHERE chapter_number = (SELECT chapter_number FROM drafts WHERE id = ?)) ORDER BY id DESC`).all(draftId) as Array<{ id: number; before: string; after: string; annotationsJson: string; createdAt: string }>
+    const rows = db.prepare(`SELECT h.id, d.version, h.before_text AS before, h.after_text AS after, h.annotations_json AS annotationsJson, h.created_at AS createdAt
+      FROM annotation_history h JOIN drafts d ON d.id = h.draft_id
+      WHERE d.chapter_number = (SELECT chapter_number FROM drafts WHERE id = ?) ORDER BY h.id DESC`).all(draftId) as Array<{ id: number; version: number; before: string; after: string; annotationsJson: string; createdAt: string }>
     return rows.map(({ annotationsJson, ...row }) => ({ ...row, annotations: JSON.parse(annotationsJson) }))
   })
 
