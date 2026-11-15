@@ -52,11 +52,17 @@ export type CodeMirrorEditorProps = {
   paragraphIndent?: boolean
   /** 批注面板的停靠位置；不给时停在编辑器右侧，给 null 时不显示。 */
   annotationSlot?: HTMLElement | null
-  onAnnotationAdded?: () => void
-  /** 批注修改审阅摆出或收起，摆着时盖住正文。 */
-  onReviewChange?: (open: boolean) => void
+  /** first：这是第一条，批注面板刚出现。 */
+  onAnnotationAdded?: (first: boolean) => void
+  /** 批注从有到无。卸载不算。 */
+  onAnnotationsCleared?: () => void
+  /** preview：生成中或停在预览；review：审阅盖住正文；null：没在进行。预览气泡看不见时才有 reveal，调用后滚回原处。 */
+  onAnnotationRevisionChange?: (revision: AnnotationRevision | null) => void
   chapterAnnotations?: boolean
 }
+
+export type AnnotationRevisionPhase = 'preview' | 'review'
+export type AnnotationRevision = { phase: AnnotationRevisionPhase; reveal?: () => void }
 
 type Label = readonly [string, string]
 
@@ -118,7 +124,8 @@ export default function CodeMirrorEditor({
   paragraphIndent: indentParagraphs = false,
   annotationSlot,
   onAnnotationAdded,
-  onReviewChange,
+  onAnnotationsCleared,
+  onAnnotationRevisionChange,
   chapterAnnotations = false,
 }: CodeMirrorEditorProps) {
   const inkThemeName = useThemeStore(s => s.resolvedTheme)
@@ -191,7 +198,7 @@ export default function CodeMirrorEditor({
   const [aiResult, setAiResult] = useState<string | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
   const [copyFailedFor, setCopyFailedFor] = useState<string | null>(null)
-  const [activeAIAction, setActiveAIAction] = useState<string | null>(null)
+  const [activeAIAction, setActiveAIAction] = useState<EditorInlineRequest['action'] | null>(null)
   const [activeNote, setActiveNote] = useState<string | null>(null)
   const [bubbleSize, setBubbleSize] = useState({ width: 0, height: 0 })
   const bubbleRef = useCallback((node: HTMLDivElement | null) => {
@@ -261,7 +268,7 @@ export default function CodeMirrorEditor({
       const applicable = latest?.status === 'completed' && latest.compositionEligible === true && recovery.view.status !== 'cancelled' && recovery.sourceStatus === 'current'
       const resumable = editorCanContinue(recovery)
       setAiError(applicable || resumable ? null : uiText('恢复的候选不可应用，只能复制', 'The recovered candidate cannot be applied; it can only be copied.'))
-      setActiveAIAction(uiText(...actionLabel(target.action)))
+      setActiveAIAction(target.action)
       setActiveNote(target.action === 'instruct' ? target.instruction : target.action === 'batch-instruct' ? uiText(`共 ${target.annotations.length} 条批注`, `${target.annotations.length} annotations`) : null)
       const view = editorRef.current?.view
       const from = Math.min(target.from, view?.state.doc.length ?? 0)
@@ -279,7 +286,7 @@ export default function CodeMirrorEditor({
       const view = editorRef.current?.view
       const coords = view?.coordsAtPos(view.state.selection.main.from)
       setBubblePos({ top: coords?.top ?? 150, left: coords?.left ?? 200, inView: true })
-      setAiResult(''); setAiError(uiText('无法恢复原运行', 'The original run could not be restored.')); setBubbleOpen(true)
+      setActiveAIAction(null); setAiResult(''); setAiError(uiText('无法恢复原运行', 'The original run could not be restored.')); setBubbleOpen(true)
     })
     // 句柄被取走（key 变空）时不作废进行中的恢复；换下一次交接或卸载才作废。
     // Navigation is explicit; later document changes are checked at acceptance.
@@ -291,12 +298,31 @@ export default function CodeMirrorEditor({
   const previewShown = bubbleOpen && bubblePos.inView && !!aiResult && !settingsOpen
   useEffect(() => { if (previewShown) inlineRef.current?.delivered() }, [previewShown, aiResult])
   useEffect(() => { if (!settingsOpen) inlineReview?.client.delivered() }, [settingsOpen, inlineReview])
-  const reviewing = inlineReview !== null
+  const bubbleInSight = bubbleOpen && bubblePos.inView
+  // 空串加报错是生成失败、没有可处理的结果，不再算进行中。
+  const batchPending = activeAIAction === 'batch-instruct' && aiResult !== null && !(aiResult === '' && aiError !== null)
+  const annotationRevision: AnnotationRevisionPhase | null = inlineReview ? 'review' : batchPending ? 'preview' : null
+  const revealPreview = useCallback(() => {
+    const view = editorRef.current?.view
+    const target = aiTargetRef.current
+    if (!view || !target) return
+    const range = { from: Math.min(target.from, view.state.doc.length), to: Math.min(target.to, view.state.doc.length) }
+    setSelectionRange(range)
+    view.dispatch({ selection: { anchor: range.from }, effects: EditorView.scrollIntoView(range.from, { y: 'start' }) })
+    setBubbleOpen(true)
+  }, [])
+  const previewHidden = annotationRevision === 'preview' && !bubbleInSight
   useEffect(() => {
-    if (!reviewing) return
-    onReviewChange?.(true)
-    return () => onReviewChange?.(false)
-  }, [onReviewChange, reviewing])
+    if (!annotationRevision) return
+    onAnnotationRevisionChange?.({ phase: annotationRevision, ...(previewHidden ? { reveal: revealPreview } : {}) })
+    return () => onAnnotationRevisionChange?.(null)
+  }, [onAnnotationRevisionChange, annotationRevision, previewHidden, revealPreview])
+  const annotated = annotations.length > 0
+  const wasAnnotated = useRef(false)
+  useEffect(() => {
+    if (wasAnnotated.current && !annotated) onAnnotationsCleared?.()
+    wasAnnotated.current = annotated
+  }, [annotated, onAnnotationsCleared])
 
   useEffect(() => () => {
     inlineRef.current?.detach()
@@ -536,7 +562,7 @@ export default function CodeMirrorEditor({
       const client = createEditorInlineGeneration(session)
       inlineRef.current = client
       aiCandidateRef.current = null
-      setActiveAIAction(uiText(...actionLabel(request.action)))
+      setActiveAIAction(request.action)
       setActiveNote(request.action === 'instruct' ? request.instruction : request.action === 'batch-instruct' ? uiText(`共 ${request.annotations.length} 条批注`, `${request.annotations.length} annotations`) : null)
       setNoteDraft(null); setAiResult(''); setAiError(null)
       const recovery = await client.open({ input, modelId: routeModelId('editor-inline') ?? '', uiActionNonce: crypto.randomUUID() })
@@ -646,7 +672,7 @@ export default function CodeMirrorEditor({
     setNoteDraft(null)
     setNoteError(null)
     setBubbleOpen(false)
-    onAnnotationAdded?.()
+    onAnnotationAdded?.(annotations.length === 0)
     view.contentDOM.focus({ preventScroll: true })
   }
 
@@ -707,7 +733,7 @@ export default function CodeMirrorEditor({
   }), [mode])
 
   const panelTitle = chapterAnnotations ? uiText('本章批注', 'Chapter annotations') : uiText('批注', 'Annotations')
-  const annotationPanel = editable && !inlineReview && aiResult === null && annotations.length > 0 ? (
+  const annotationPanel = editable && !annotationRevision && !(aiResult !== null && bubbleInSight) && annotations.length > 0 ? (
     <aside role="region" className="paper-ink cm-annotations" data-theme={inkThemeName} aria-label={panelTitle}>
       <div className="cm-annotations-head">
         <div className="cm-selbar-title">
@@ -809,7 +835,7 @@ export default function CodeMirrorEditor({
               <div className="cm-selbar-title">
                 <Sparkles size={13} aria-hidden="true" />
                 {activeAIAction
-                  ? uiText(`${activeAIAction}预览`, `${activeAIAction} preview`)
+                  ? uiText(`${actionLabel(activeAIAction)[0]}预览`, `${actionLabel(activeAIAction)[1]} preview`)
                   : uiText('AI 预览', 'AI preview')}
               </div>
               {activeNote && <p className="cm-selbar-note-quote">{activeNote}</p>}
