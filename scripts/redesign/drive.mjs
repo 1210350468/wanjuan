@@ -560,6 +560,7 @@ async function runSession(sessionName, names, options, realKey = null, roots = c
             const result = await invoke(context.page, channel, value)
             assert.equal(result?.success, true, `${channel} 失败：${result?.error ?? ''}`)
           }
+          shared.realModels = { generation: generation.modelName, embedding: embedding.modelName }
         },
       }
       current = 0
