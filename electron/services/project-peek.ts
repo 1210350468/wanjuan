@@ -25,7 +25,7 @@ const require = createRequire(import.meta.url)
 const Database = require('better-sqlite3') as typeof import('better-sqlite3')
 const UNAVAILABLE: ProjectOverview = Object.freeze({ state: 'unavailable' })
 const SQLITE_SUFFIXES = ['', '-wal', '-shm'] as const
-/** v1.2.0-Preview 写出的 7 是最早能在私有快照上迁移的版本，之后到当前之前的每一版都能升级。 */
+/** v1.2.0-Preview 写出的 7 是最早能在私有快照上迁移的版本。 */
 const OLDEST_SNAPSHOT_UPGRADABLE_SCHEMA_VERSION = 7
 
 interface ManifestState {
