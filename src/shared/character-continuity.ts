@@ -32,10 +32,8 @@ export interface CharacterRelationNode extends ContinuityNodeBase {
 }
 export type ContinuityNode = CharacterStateNode | CharacterRelationNode
 
-/** 同一对角色在某一章仍然有效的全部关系。多于一条时 conflict 为真，交给读者判断，不替作者选。 */
+/** 同一对角色（不分方向）在某一章仍然有效的全部关系，每行带自己的方向。说法互相冲突时 conflict 为真，交给读者判断，不替作者选。 */
 export interface CharacterRelationPair {
-  subjectId: string
-  targetId: string
   lines: CharacterRelationNode[]
   conflict: boolean
 }
@@ -62,31 +60,36 @@ function newer(candidate: ContinuityNode, current: ContinuityNode): boolean {
 const seriesKey = (node: ContinuityNode) =>
   node.aspect === 'relation' ? `relation:${node.relationshipId}` : `state:${JSON.stringify([node.subjectId, node.aspect])}`
 
+/** 作者两个方向各写一行是两条设定，不算冲突；同方向说法不同、或定稿记录和别的行说法不同才算。 */
+const hasConflict = (lines: readonly CharacterRelationNode[]) => lines.some((left, index) => lines.slice(index + 1).some(right => left.value !== right.value
+  && (left.subjectId === right.subjectId || left.provenance.kind === 'derived' || right.provenance.kind === 'derived')))
+
 /**
- * 写第 chapter 章时已经生效的最新节点。传 Infinity 得到当前值。
+ * 写第 chapter 章时已经生效的最新节点。传 Infinity 得到当前值。ids 只筛结果里的主语，取最新值时两个方向的节点都算。
  * nodes 应来自只含有效节点的读取（派生节点的稿仍是定稿，见 ADR-0024、ADR-0025）。
  */
 export function latestNodesBefore(nodes: readonly ContinuityNode[], chapter: number, ids?: readonly string[]): LatestContinuityNodes {
   const wanted = ids && new Set(ids)
   const latest = new Map<string, ContinuityNode>()
   for (const node of nodes) {
-    if (wanted && !wanted.has(node.subjectId) || firstVisibleChapter(node) > chapter) continue
+    if (firstVisibleChapter(node) > chapter) continue
     const key = seriesKey(node), current = latest.get(key)
     if (!current || newer(node, current)) latest.set(key, node)
   }
   const states: CharacterStateNode[] = []
-  const pairs = new Map<string, CharacterRelationPair>()
+  const pairs = new Map<string, CharacterRelationNode[]>()
   for (const node of latest.values()) {
     if (node.value === '') continue
-    if (node.aspect !== 'relation') { states.push(node); continue }
+    if (node.aspect !== 'relation') { if (!wanted || wanted.has(node.subjectId)) states.push(node); continue }
     if (node.authorDeclined) continue
-    const key = JSON.stringify([node.subjectId, node.targetId])
-    const pair = pairs.get(key) ?? { subjectId: node.subjectId, targetId: node.targetId, lines: [], conflict: false }
-    pair.lines.push(node)
-    pair.conflict = new Set(pair.lines.map(line => line.value)).size > 1
-    pairs.set(key, pair)
+    const key = JSON.stringify([node.subjectId, node.targetId].sort())
+    pairs.set(key, [...pairs.get(key) ?? [], node])
   }
-  return { states, relations: [...pairs.values()] }
+  const relations = [...pairs.values()].flatMap(lines => {
+    const shown = wanted ? lines.filter(line => wanted.has(line.subjectId)) : lines
+    return shown.length ? [{ lines: shown, conflict: hasConflict(lines) }] : []
+  })
+  return { states, relations }
 }
 
 /** last 是下一章和蓝图最后一章里较大的那个。 */

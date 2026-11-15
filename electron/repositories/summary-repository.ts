@@ -410,30 +410,22 @@ function pendingCharacterStateCandidate(db: BetterSqlite3.Database, row: Charact
     expectedFieldValueHash: current.valueHash } as PendingFinalizedCharacterStateCandidate
 }
 
-interface AuthorRelationRow { relationshipId: string; relation: string; sourceName: string; targetName: string }
+interface AuthorRelationRow { relationshipId: string; relation: string; sourceId: string; sourceName: string; targetId: string; targetName: string }
 
 function authorRelationRows(db: BetterSqlite3.Database, sourceId: string, targetId: string): AuthorRelationRow[] {
-  return db.prepare(`SELECT r.relationship_id AS relationshipId,r.relation,a.name AS sourceName,b.name AS targetName FROM character_relationships r
+  return db.prepare(`SELECT r.relationship_id AS relationshipId,r.relation,r.source_character_id AS sourceId,a.name AS sourceName,r.target_character_id AS targetId,b.name AS targetName FROM character_relationships r
     JOIN characters a ON a.character_id=r.source_character_id JOIN characters b ON b.character_id=r.target_character_id
     WHERE r.source_character_id=? AND r.target_character_id=? AND a.retired=0 AND b.retired=0 ORDER BY r.relationship_id`).all(sourceId, targetId) as AuthorRelationRow[]
 }
 
-/** 比对不分方向。作者只写了反向时以作者写的方向为准，节点、待确认项和采用都落在那一边，时间线才能合成一行。 */
+/** 比对不分方向。rows 是建议要换掉的作者行：同方向有就是同方向的，否则是反向的。 */
 function authorRelationsOfPair(db: BetterSqlite3.Database, sourceId: string, targetId: string) {
   const forward = authorRelationRows(db, sourceId, targetId), backward = authorRelationRows(db, targetId, sourceId)
-  const flipped = !forward.length && backward.length > 0
-  const lines = [...forward.map(row => JSON.stringify([sourceId, targetId, row.relation])), ...backward.map(row => JSON.stringify([targetId, sourceId, row.relation]))].sort()
-  return { sourceId: flipped ? targetId : sourceId, targetId: flipped ? sourceId : targetId, rows: flipped ? backward : forward,
-    all: [...forward, ...backward].map(row => row.relation), lines }
+  const lines = [...forward, ...backward].map(row => JSON.stringify([row.sourceId, row.targetId, row.relation])).sort()
+  return { rows: forward.length ? forward : backward, all: [...forward, ...backward].map(row => row.relation), lines }
 }
 
 const unorderedPairKey = (left: string, right: string) => JSON.stringify([left, right].sort())
-
-function orientByRecordedDerivedSeries(db: BetterSqlite3.Database, sourceId: string, targetId: string) {
-  const hasDerivedSeries = (subject: string, target: string) => readCharacterContinuityNodes(db, subject)
-    .some(node => node.aspect === 'relation' && node.relationshipId === derivedRelationSeries(subject, target))
-  return !hasDerivedSeries(sourceId, targetId) && hasDerivedSeries(targetId, sourceId) ? { sourceId: targetId, targetId: sourceId } : { sourceId, targetId }
-}
 
 function relationCandidateKey(source: FinalizedSourceIdentity, change: Pick<FinalizedRelationChange, 'sourceId' | 'targetId' | 'relation'>): string {
   return `fcs-relation:${sha256(JSON.stringify([source.draftId, source.finalizationId, source.contentHash, unorderedPairKey(change.sourceId, change.targetId), sha256(change.relation)]))}`
@@ -443,12 +435,10 @@ function commitDerivedRelations(db: BetterSqlite3.Database, context: FinalizedCh
   const { source } = context
   const name = (id: string) => context.characters.find(character => character.characterId === id)!.displayNameSnapshot
   const candidates: FinalizedRelationCandidate[] = []
-  for (const reported of changes) {
-    const pair = authorRelationsOfPair(db, reported.sourceId, reported.targetId)
-    const { sourceId, targetId } = pair.rows.length ? pair : orientByRecordedDerivedSeries(db, reported.sourceId, reported.targetId)
-    const change = { ...reported, sourceId, targetId }
+  for (const change of changes) {
     const series = derivedRelationSeries(change.sourceId, change.targetId)
-    const previous = latestNodesBefore(readCharacterContinuityNodes(db, change.sourceId), source.chapterNumber + 1).relations
+    const pairNodes = [...readCharacterContinuityNodes(db, change.sourceId), ...readCharacterContinuityNodes(db, change.targetId)]
+    const previous = latestNodesBefore(pairNodes, source.chapterNumber + 1).relations
       .flatMap(pair => pair.lines).find(line => line.relationshipId === series)
     const unchanged = previous?.value === change.relation
     const authorAtExtraction = context.authorRelations?.filter(line => unorderedPairKey(line.sourceId, line.targetId) === unorderedPairKey(change.sourceId, change.targetId))
@@ -500,8 +490,8 @@ function pendingRelationCandidate(db: BetterSqlite3.Database, candidate: Finaliz
   const pair = authorRelationsOfPair(db, candidate.sourceId, candidate.targetId)
   if (!pair.rows.length || pair.all.includes(candidate.value)) return null
   if (candidate.authorLinesAtCreation && !onlyEarlierAdoptionsWroteSinceSnapshot(db, candidate, pair.lines)) return null
-  const [{ sourceName, targetName }] = pair.rows
-  const currentNames = pair.sourceId === candidate.sourceId ? { sourceName, targetName } : { sourceName: targetName, targetName: sourceName }
+  const [row] = pair.rows
+  const currentNames = row.sourceId === candidate.sourceId ? { sourceName: row.sourceName, targetName: row.targetName } : { sourceName: row.targetName, targetName: row.sourceName }
   return { ...structuredClone(candidate), ...currentNames, authorRelations: pair.rows.map(row => row.relation) }
 }
 
@@ -526,8 +516,9 @@ function onlyEarlierAdoptionsWroteSinceSnapshot(db: BetterSqlite3.Database, cand
 
 function adoptRelationCandidate(db: BetterSqlite3.Database, candidate: FinalizedRelationCandidate, operationId: string, scope: ProjectEpoch): Pick<StoredCharacterStateDecision, 'authorLinesBefore' | 'authorLinesAfter'> {
   const chapter = candidate.source.chapterNumber
-  const { sourceId, targetId, rows, lines: before } = authorRelationsOfPair(db, candidate.sourceId, candidate.targetId)
-  for (const row of rows) deleteCharacterRelationship(db, { relationshipId: row.relationshipId, sourceId, sourceName: row.sourceName, targetId, targetName: row.targetName }, operationId, chapter)
+  const { sourceId, targetId } = candidate
+  const { rows, lines: before } = authorRelationsOfPair(db, sourceId, targetId)
+  for (const row of rows) deleteCharacterRelationship(db, row, operationId, chapter)
   const revision = db.prepare("SELECT revision FROM character_identity_meta WHERE id='main'").pluck().get() as number
   commitCharacterIdentities(db, { approval: { operationId, expectedRevision: revision, action: 'author-edit',
     source: { kind: 'author', source: { projectId: scope.projectId, epoch: scope.epoch, sourceId: candidate.candidateKey, revision, contentHash: candidate.source.contentHash } } },
@@ -682,7 +673,8 @@ export class SummaryRepository {
   }
 
   static readContinuityNodesForWriting(characterIds: readonly string[], db: BetterSqlite3.Database): ContinuityNode[] {
-    return markDeclinedRelations(db, characterIds.flatMap(characterId => readCharacterContinuityNodes(db, characterId)))
+    const wanted = new Set(characterIds)
+    return markDeclinedRelations(db, readCharacterContinuityNodes(db).filter(node => wanted.has(node.subjectId) || node.aspect === 'relation' && wanted.has(node.targetId)))
   }
 
   static readContinuityNodesForPreflight(db: BetterSqlite3.Database): ContinuityNode[] {

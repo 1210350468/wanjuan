@@ -92,7 +92,7 @@ function fixture() {
     const currentRelations = (db.prepare(`SELECT r.source_character_id AS a,r.target_character_id AS b,r.relation AS c FROM character_relationships r
       JOIN characters x ON x.character_id=r.source_character_id JOIN characters y ON y.character_id=r.target_character_id WHERE x.retired=0 AND y.retired=0`).all() as { a: string; b: string; c: string }[])
       .map(row => JSON.stringify([row.a, row.b, row.c])).sort()
-    expect(folded.relations.flatMap(pair => pair.lines.map(line => JSON.stringify([pair.subjectId, pair.targetId, line.value]))).sort()).toEqual(currentRelations)
+    expect(folded.relations.flatMap(pair => pair.lines.map(line => JSON.stringify([line.subjectId, line.targetId, line.value]))).sort()).toEqual(currentRelations)
   }
   return { db, lin, zhou, finalize, context, derive, saveNotes, accept, save, setState, setRelations, events, now, column, assertFoldMatchesCurrent }
 }

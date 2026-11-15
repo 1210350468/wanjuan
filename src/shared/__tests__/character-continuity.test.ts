@@ -108,7 +108,7 @@ describe('latestNodesBefore', () => {
   it('同一对角色的两条基线关系都保留并标冲突', () => {
     const result = latestNodesBefore([relation('一', '结盟', 3, legacy, 0), relation('二', '死敌', 3, legacy, 0)], 4)
     expect(result.relations).toHaveLength(1)
-    expect(result.relations[0]).toMatchObject({ subjectId: '甲', targetId: '乙', conflict: true })
+    expect(result.relations[0]).toMatchObject({ conflict: true, lines: [{ subjectId: '甲', targetId: '乙' }, { subjectId: '甲', targetId: '乙' }] })
     expect(result.relations[0].lines.map(line => line.value).sort()).toEqual(['死敌', '结盟'].sort())
   })
 

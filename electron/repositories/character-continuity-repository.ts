@@ -66,8 +66,9 @@ function appendNode(db: BetterSqlite3.Database, node: NodeWrite): void {
       MAX(CASE WHEN e.draft_id IS NULL OR d.status='finalized' THEN e.effective_chapter END) AS chapter,
       COALESCE(MAX(json_extract(e.evidence_json,'$.seq')),0) AS seq
     FROM character_continuity_events e LEFT JOIN drafts d ON d.id=e.draft_id
-    WHERE e.subject_id=? AND e.aspect=? AND e.target_id IS ? AND json_extract(e.evidence_json,'$.relationshipId') IS ?`)
-    .get(node.subjectId, node.aspect, node.target?.id ?? null, node.evidence.relationshipId ?? null) as { chapter: number | null; seq: number }
+    WHERE e.aspect=@aspect AND (CASE WHEN @series IS NULL THEN e.subject_id=@subjectId AND e.target_id IS NULL
+      ELSE json_extract(e.evidence_json,'$.relationshipId')=@series END)`)
+    .get({ subjectId: node.subjectId, aspect: node.aspect, series: node.evidence.relationshipId ?? null }) as { chapter: number | null; seq: number }
   // 不早于同系列已有节点：否则按章折叠会读到更早写入的值，与当前列分叉。派生关系没有当前列，按章记。
   const effectiveChapter = node.provenance.kind === 'derived' && node.target ? node.effectiveChapter : Math.max(node.effectiveChapter, series.chapter ?? 0)
   db.prepare(`INSERT INTO character_continuity_events(event_id,subject_id,subject_name,target_id,target_name,aspect,value,effective_chapter,provenance_json,draft_id,evidence_json)
@@ -121,8 +122,8 @@ export function deleteCharacterRelationship(db: BetterSqlite3.Database, line: Ch
     aspect: 'relation', value: '', effectiveChapter, provenance: { kind: 'author', operationId }, draftId: null, evidence: { relationshipId: line.relationshipId } })
 }
 
-/** 同一对角色的派生关系是一个系列，和作者关系行分开，派生值不会盖掉作者设定。 */
-export const derivedRelationSeries = (sourceId: string, targetId: string) => `derived:${JSON.stringify([sourceId, targetId])}`
+/** 同一对角色的派生关系是一个系列，不分方向；每个节点照定稿记下自己的方向和说法。和作者关系行分开，派生值不会盖掉作者设定。 */
+export const derivedRelationSeries = (sourceId: string, targetId: string) => `derived:${JSON.stringify([sourceId, targetId].sort())}`
 
 export interface DerivedRelationWrite {
   sourceId: string

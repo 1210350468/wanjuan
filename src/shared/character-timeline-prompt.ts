@@ -67,7 +67,7 @@ export function characterTimelinePromptLines(input: {
   }
   for (const node of states) add(node, '', false)
   for (const pair of relations) for (const line of pair.lines)
-    add(line, input.currentNames.get(pair.targetId) ?? line.targetName, pair.conflict)
+    add(line, input.currentNames.get(line.targetId) ?? line.targetName, pair.conflict)
   return Object.fromEntries([...entries].map(([id, list]) => [id, list
     .sort((left, right) => Number(right.authored) - Number(left.authored) || right.chapter - left.chapter || (left.text < right.text ? -1 : 1))
     .slice(0, MAX_ENTRIES_PER_CHARACTER).map(entry => entry.text)]))
