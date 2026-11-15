@@ -184,6 +184,7 @@ function foldAdoptedRelations(changes: readonly CharacterTimelineChange[]): Char
 /**
  * 时间线只列变化：一段定稿关系只留段首。第一段的值和这一章之前就生效的设定相同时是重述，也不留。
  * 同章作者的决定（比如采用）发生在这条定稿记录之后，不算它之前的状态。
+ * nodes 要带上这对人物两个方向的节点，只有一边时会把隔着对方说法的两段并成一段。
  */
 export function withoutRelationRestatements(nodes: readonly ContinuityNode[]): ContinuityNode[] {
   const settings = nodes.filter(node => !isDerivedRelation(node))
@@ -199,7 +200,7 @@ export function withoutRelationRestatements(nodes: readonly ContinuityNode[]): C
 /** 同章同字段的取舍规则与 latestNodesBefore 相同。 */
 export function characterTimeline(nodes: readonly ContinuityNode[]): CharacterTimelineChapter[] {
   const series = new Map<string, ContinuityNode[]>()
-  for (const node of withoutRelationRestatements(nodes)) {
+  for (const node of nodes) {
     const key = seriesKey(node), line = series.get(key)
     if (line) line.push(node)
     else series.set(key, [node])

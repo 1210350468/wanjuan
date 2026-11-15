@@ -436,8 +436,7 @@ function commitDerivedRelations(db: BetterSqlite3.Database, context: FinalizedCh
   const candidates: FinalizedRelationCandidate[] = []
   for (const change of changes) {
     const series = derivedRelationSeries(change.sourceId, change.targetId)
-    const seriesNodes = [...readCharacterContinuityNodes(db, change.sourceId), ...readCharacterContinuityNodes(db, change.targetId)]
-      .filter(node => node.aspect === 'relation' && node.relationshipId === series)
+    const seriesNodes = readCharacterContinuityNodes(db, [change.sourceId, change.targetId]).filter(node => node.aspect === 'relation' && node.relationshipId === series)
     const [previous] = latestNodesBefore(seriesNodes, source.chapterNumber + 1).relations.flatMap(pair => pair.lines)
     const unchanged = previous?.value === change.relation
     const ownLatest = seriesNodes.filter(node => node.provenance.kind === 'derived' && node.provenance.source.finalizationId === source.finalizationId)
@@ -683,8 +682,7 @@ export class SummaryRepository {
   }
 
   static readContinuityNodesForWriting(characterIds: readonly string[], db: BetterSqlite3.Database): ContinuityNode[] {
-    const wanted = new Set(characterIds)
-    return markDeclinedRelations(db, readCharacterContinuityNodes(db).filter(node => wanted.has(node.subjectId) || node.aspect === 'relation' && wanted.has(node.targetId)))
+    return markDeclinedRelations(db, readCharacterContinuityNodes(db, characterIds))
   }
 
   static readContinuityNodesForPreflight(db: BetterSqlite3.Database): ContinuityNode[] {

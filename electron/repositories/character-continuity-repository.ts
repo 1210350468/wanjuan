@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type BetterSqlite3 from 'better-sqlite3'
 import type { CharacterApproval } from '../../src/shared/character-identity'
-import type { CharacterContinuityTimeline, ContinuityNode, ContinuityProvenance, StateChapterRange } from '../../src/shared/character-continuity'
+import { withoutRelationRestatements, type CharacterContinuityTimeline, type ContinuityNode, type ContinuityProvenance, type StateChapterRange } from '../../src/shared/character-continuity'
 import type { CharacterStateTextField } from '../../src/shared/character-roster'
 import type { FinalizedCharacterEvidence, FinalizedSourceIdentity } from '../../src/shared/finalized-continuity'
 
@@ -164,12 +164,14 @@ function parseNode(row: NodeRow): ContinuityNode {
 /**
  * 读有效节点，喂给 latestNodesBefore。挂稿的节点要求稿仍是定稿，被替换和进回收站的稿不再算数。
  * 退休角色不产生删除节点，这里统一排除，迁移基线里早已退休的角色也一并覆盖。
+ * characterIds 取这些角色做主语或做关系对象的节点：一对人物的关系要两个方向都在才判断得了。
  */
-export function readCharacterContinuityNodes(db: BetterSqlite3.Database, subjectId: string | null = null): ContinuityNode[] {
+export function readCharacterContinuityNodes(db: BetterSqlite3.Database, characterIds: readonly string[] | null = null): ContinuityNode[] {
   return (db.prepare(`SELECT e.* FROM character_continuity_events e LEFT JOIN drafts d ON d.id=e.draft_id
-    WHERE (e.draft_id IS NULL OR d.status='finalized') AND (@subjectId IS NULL OR e.subject_id=@subjectId)
+    WHERE (e.draft_id IS NULL OR d.status='finalized')
+      AND (@ids IS NULL OR e.subject_id IN (SELECT value FROM json_each(@ids)) OR e.target_id IN (SELECT value FROM json_each(@ids)))
       AND NOT EXISTS (SELECT 1 FROM characters c WHERE c.retired=1 AND c.character_id IN (e.subject_id,e.target_id))
-    ORDER BY e.subject_id,e.aspect,e.effective_chapter,e.event_id`).all({ subjectId }) as NodeRow[]).map(parseNode)
+    ORDER BY e.subject_id,e.aspect,e.effective_chapter,e.event_id`).all({ ids: characterIds && JSON.stringify(characterIds) }) as NodeRow[]).map(parseNode)
 }
 
 /** 节点里的名字是写入时的快照，改名后对不上蓝图。给预检用的读取换成角色现在的名字。 */
@@ -184,5 +186,6 @@ export function readContinuityNodesWithCurrentNames(db: BetterSqlite3.Database):
 }
 
 export function readCharacterContinuityTimeline(db: BetterSqlite3.Database, characterId: string): CharacterContinuityTimeline {
-  return { nodes: readCharacterContinuityNodes(db, characterId), chapterRange: readStateChapterRange(db) }
+  const nodes = withoutRelationRestatements(readCharacterContinuityNodes(db, [characterId])).filter(node => node.subjectId === characterId)
+  return { nodes, chapterRange: readStateChapterRange(db) }
 }
