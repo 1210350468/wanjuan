@@ -14,10 +14,10 @@ function rerankUrl(baseUrl: string): string {
   return base.endsWith('/rerank') ? base : `${base}/rerank`
 }
 
-/** Jina/Cohere 兼容的 results[].{index, relevance_score}，按分数从高到低返回候选下标。 */
+/** Jina/Cohere 兼容的 results[].{index, relevance_score}，按分数从高到低返回前 topN 个候选下标；不理 top_n、全部打分的服务也算成功。 */
 function parseOrder(body: unknown, documentCount: number, topN: number): number[] {
   const results = (body as { results?: unknown } | null)?.results
-  if (!Array.isArray(results) || results.length !== topN) throw new RerankError('invalid-response')
+  if (!Array.isArray(results) || results.length < topN) throw new RerankError('invalid-response')
   const seen = new Set<number>()
   const scored = results.map((result: { index?: unknown; relevance_score?: unknown } | null) => {
     const index = result?.index, score = result?.relevance_score
@@ -26,7 +26,7 @@ function parseOrder(body: unknown, documentCount: number, topN: number): number[
     seen.add(index)
     return { index, score }
   })
-  return scored.sort((a, b) => b.score - a.score || a.index - b.index).map(item => item.index)
+  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, topN).map(item => item.index)
 }
 
 const isTimeout = (error: unknown) => error instanceof DOMException && error.name === 'TimeoutError'
