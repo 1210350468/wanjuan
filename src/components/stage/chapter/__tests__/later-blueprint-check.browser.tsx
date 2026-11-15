@@ -360,6 +360,11 @@ describe('替换定稿后检查后续蓝图', () => {
     backend.state.suggestions = list([card(5)])
     await finish()
     expect(document.body.textContent).not.toContain('后续蓝图的修改建议')
+
+    const third = useEditorStore.getState().tabs.find(tab => tab.chapterNumber === 3)!
+    await act(async () => useEditorStore.getState().setActiveTab(third.id))
+    await expect.element(page.getByText('第 5 章写林舟和老周并肩，新稿里两人已成死敌。')).toBeVisible()
+    await expect.element(button('检查后续蓝图')).toBeEnabled()
   })
 
   it('英文界面：按钮、卡片与提示都是英文', async () => {
