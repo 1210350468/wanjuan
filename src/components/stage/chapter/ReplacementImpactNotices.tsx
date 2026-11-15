@@ -1,6 +1,7 @@
 import type { ReplacementImpact } from '../../../shared/chapter-reopen'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { useWorkflowStore, workflowResourceKey } from '../../../stores/workflow-store'
+import { sameProjectPathKey } from '../../../shared/project-session-context'
 import { navigate } from '../../../stores/navigation/navigation-intents'
 import { Button } from '../../ui/Button'
 import { Notice } from '../../ui/Notice'
@@ -79,8 +80,9 @@ function OwnImpactNotice({ impact, projectKey, acknowledged, onAcknowledge }: { 
   const text = useLocaleStore(s => s.text)
   const check = useLaterBlueprintCheck(projectKey, impact.finalizationId!)
   const chapterKey = workflowResourceKey('chapter', impact.chapterNumber)
-  const chapterBusy = useWorkflowStore(s => s.activeRuns.some(run => run.projectPath === projectKey && run.resourceKeys?.includes(chapterKey)))
-  const { status, loading, steps } = usePostProcessStatus(getChapterFinalizeScope(impact.chapterNumber), chapterBusy)
+  const chapterBusy = useWorkflowStore(s => s.activeRuns.some(run => sameProjectPathKey(run.projectPath, projectKey) && run.resourceKeys?.includes(chapterKey)))
+  const { status, loading: firstLoad, refreshing, steps } = usePostProcessStatus(getChapterFinalizeScope(impact.chapterNumber), chapterBusy)
+  const loading = firstLoad || refreshing
   const { retired } = planFinalizationRetry(status?.steps ?? {})
   const postProcessing = chapterBusy || steps.some(({ key, presentation }) => presentation === 'pending' && !retired.has(key))
   const complete = status?.steps.chapter_notes?.ok === true && status.steps.character_cards?.ok === true

@@ -172,14 +172,23 @@ describe('替换定稿后检查后续蓝图', () => {
 
   it('定稿工作流还占着这一章（后处理跑批还没建好）时按钮不可点并说明原因；工作流结束后可点', async () => {
     backend.state.postProcess = null
-    useWorkflowStore.setState({ activeRuns: [{ id: 'finalize-run', projectPath: SESSION.projectPath, status: 'running',
+    useWorkflowStore.setState({ activeRuns: [{ id: 'finalize-run', projectPath: SESSION.projectPath.toUpperCase().replaceAll('\\', '/'), status: 'running',
       resourceKeys: [workflowResourceKey('chapter', IMPACT.chapterNumber)] } as never] })
     await openReplaced()
     await expect.element(button('检查后续蓝图')).toBeDisabled()
     await expect.element(page.getByText('定稿后处理做完后才能检查后续蓝图：新章的人物状态要先记进时间线。')).toBeVisible()
 
     postProcessDone(true)
+    const respond = backend.invoke.getMockImplementation()!
+    let release!: () => void
+    const held = new Promise<void>(resolve => { release = resolve })
+    backend.invoke.mockImplementation(async (channel, ...args) => {
+      if (channel === 'db:post-process-get-latest-run') await held
+      return respond(channel, ...args)
+    })
     await act(async () => useWorkflowStore.setState({ activeRuns: [] }))
+    await expect.element(button('检查后续蓝图')).toBeDisabled()
+    await act(async () => release())
     await expect.element(button('检查后续蓝图')).toBeEnabled()
     expect(document.body.textContent).not.toContain('定稿后处理做完后才能检查后续蓝图')
   })

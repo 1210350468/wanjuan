@@ -377,7 +377,7 @@ export async function runPostProcessPipeline(
     // 最终汇总也必须按本次 runId 读取，避免并发跑批互相串台。
     assertNotCancelled()
   } catch (error) {
-    if (isWorkflowCancellation(error)) await markUnstartedStepsInterrupted(projectSession, runId, projectPath)
+    await markUnstartedStepsInterrupted(projectSession, runId, projectPath)
     throw error
   }
   const finalSteps = await invokeForProjectSession(projectSession, 'db:post-process-get-steps', runId, projectPath)

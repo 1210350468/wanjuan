@@ -97,6 +97,7 @@ it('后处理还在跑：不建运行、不发请求', () => {
 
 it('后处理没跑完应用就退出：重开项目后这一步记为中断，照样能检查', async () => {
   const f = fixture({ postprocess: 'running' })
+  f.reopen()
   fenceProjectSession(f.db)
   expect(f.db.prepare("SELECT error_msg FROM post_process_steps WHERE step_key='character_cards'").pluck().get()).toBe(POST_PROCESS_INTERRUPTED)
   await f.check()
