@@ -41,8 +41,8 @@ const FINALIZATION_STEP_ERRORS: { code: RegExp; zh: string; en: string; enMany?:
     zh: '这一步的生成记录不完整或已失效，不能沿用。请重新定稿本章后再处理。', en: "This step's generation record is incomplete or no longer valid, so it cannot be reused. Finalize this chapter again, then retry." },
   // 角色状态字段已由更晚章节写过或来源对不上（#491），提交拒写；正文定稿不受影响。
   { code: /^FINALIZED_CHARACTER_SOURCE_CONFLICT$/, retry: 'described',
-    zh: '正文定稿已保存，但角色卡没有自动更新：有字段已被后面章节的定稿改过，或来源对不上。项目从备份恢复过的，可以点「重试」；重试仍失败，到角色页「当前状态」手动改。',
-    en: "The finalized chapter text is saved, but the character card was not updated: a later finalized chapter already changed some fields, or their source does not match. If the project was restored from a backup, you can retry. If Retry still fails, edit them in the character's Current state view." },
+    zh: '正文定稿已保存，但角色卡没有自动更新：有字段已被后面章节的定稿改过，或来源对不上。项目从备份恢复、且失败发生在升级前的，可以点「重试」；重试仍失败或不属于这种情况，到角色页「当前状态」手动改。',
+    en: "The finalized chapter text is saved, but the character card was not updated: a later finalized chapter already changed some fields, or their source does not match. If the project was restored from a backup and this failed before you updated the app, you can retry. If Retry still fails, or this is not your case, edit them in the character's Current state view." },
   // 模型连续几次的回答都不合角色状态的格式要求（#552）。重试另开一次运行，按现在「定稿后处理」的分工模型重新生成。
   // 章节要点与角色状态提交都会抛这个码，说明不能只讲角色卡。
   { code: /^FINALIZED_CHARACTER_IDENTITY_REQUIRED$/, retry: 'described',
@@ -69,8 +69,8 @@ const FINALIZATION_STEP_ERRORS: { code: RegExp; zh: string; en: string; enMany?:
     en: "Chapter notes changed while this step was running. The change is kept. Select Retry failed steps to generate the notes again and update the character state. Your edited notes may be replaced by the new ones, so copy them first to keep them." },
   // 作品放在不支持硬链接的磁盘上，知识库每次提交都失败（#571）；搬到支持的磁盘后重试才有用。
   { code: /^KNOWLEDGE_BASE_VOLUME_UNSUPPORTED$/, retry: 'described',
-    zh: '正文定稿已保存，但没能收进知识库：作品所在磁盘的格式不支持（常见于 exFAT、FAT32）。请退出书童，把作品文件夹移到 NTFS 磁盘（Mac 用 APFS），从新位置打开后再点「重试」。',
-    en: "The finalized chapter text is saved, but it could not be added to the knowledge base: this drive's format is not supported (common with exFAT and FAT32). Quit Pagekin, move the book folder to an NTFS drive (APFS on a Mac), open it from there, then select Retry." },
+    zh: '正文定稿已保存，但没能收进知识库：作品所在位置不支持知识库要用的硬链接（常见于 exFAT、FAT32 磁盘）。请退出书童，把作品文件夹移到本地 NTFS 磁盘（Mac 用 APFS），从新位置打开后再点「重试」。',
+    en: "The finalized chapter text is saved, but it could not be added to the knowledge base: this location does not support the hard links the knowledge base needs (common on exFAT and FAT32 drives). Quit Pagekin, move the book folder to a local NTFS drive (APFS on a Mac), open it from there, then select Retry." },
   { code: /^GENERATION_FINALIZATION_PREDECESSOR_REQUIRED$/, retry: { after: 'chapter_notes', rerunIfSucceeded: true },
     zh: '需要先完成「章节剧情要点」。', en: 'Chapter plot notes must finish first.' },
   { code: /^FINALIZATION_REPLACED_KNOWLEDGE_IMPORT_REQUIRED$/, retry: { after: 'kb_import' },

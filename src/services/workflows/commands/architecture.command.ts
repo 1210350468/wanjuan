@@ -1750,8 +1750,8 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
       )
       if (checkpointFingerprint !== expectedCheckpointFingerprint) {
         throw new Error(text(
-          '故事前提、角色或世界观等在中断后变了，不能接着生成。请从「AI 生成故事架构」重新生成情节大纲。',
-          'The premise, characters, worldbuilding, or similar inputs changed after the interruption, so it cannot be continued. Regenerate the plot outline from “Generate story architecture”.',
+          '故事前提、角色、世界观或总章数等在中断后变了，不能接着生成。请从「AI 生成故事架构」重新生成情节大纲。',
+          'The premise, characters, worldbuilding, chapter count, or similar inputs changed after the interruption, so it cannot be continued. Regenerate the plot outline from “Generate story architecture”.',
         ))
       }
       if (this.requireGenerationExecution().mainOwned) {
@@ -1849,8 +1849,8 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
         )
         if (checkpointFingerprint !== expectedCheckpointFingerprint) {
           throw new Error(text(
-            '故事前提、角色或世界观等在上次生成后变了，已有大纲接不上。请在「AI 生成故事架构」里从第 1 章重新生成。',
-            'The premise, characters, worldbuilding, or similar inputs changed since the last generation, so the existing outline cannot be extended. Regenerate from chapter 1 in “Generate story architecture”.',
+            '故事前提、角色、世界观或总章数等在上次生成后变了，已有大纲接不上。请在「AI 生成故事架构」里从第 1 章重新生成。',
+            'The premise, characters, worldbuilding, chapter count, or similar inputs changed since the last generation, so the existing outline cannot be extended. Regenerate from chapter 1 in “Generate story architecture”.',
           ))
         }
         seedText = assertCheckpointDbMirrorCurrent(
@@ -2248,8 +2248,8 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
       const { from, to } = outline.range
       const chapters = from === to ? text(`第 ${from} 章`, `chapter ${from}`) : text(`第 ${from}–${to} 章`, `chapters ${from}–${to}`)
       throw new PlotOutlineSourceChangedError(text(
-        `本批${chapters}大纲已生成完，但保存前模型设置、作品设定、模板或写作 Skill 改过，正式保存被拒绝。`,
-        `The outline for ${chapters} finished, but the model settings, book settings, a template, or a writing skill changed before saving, so saving was refused. `)
+        `本批${chapters}大纲已生成完，但保存前模型设置、作品设定、提示词模板或写作 Skill 改过，正式保存被拒绝。`,
+        `The outline for ${chapters} finished, but the model settings, book settings, a prompt template, or a writing skill changed before saving, so saving was refused. `)
         + keptInRecoveryDraft('这批大纲', 'The batch is') + restartFrom(from), { cause: error })
     }
     await saveNavigation(outline, true)

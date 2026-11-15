@@ -114,8 +114,8 @@ export default function MergeView({ data, versionLabel, recheck, onComplete, onL
       </div>
       {recheck && <p className="stage-ch-merge-note">
         {text(
-          '合并后会自动复验这些意见，结果写回审稿报告；没复验完时，报告里会出现「重试合并后复验」。',
-          'After the merge, a recheck verifies these notes and writes the result to the review report. If it does not finish, the report offers “Retry post-merge recheck”.',
+          '合并后会自动复验这些意见是否已解决，结果写回审稿报告；没复验完时，报告里会出现「重试合并后复验」。',
+          'After the merge, a recheck checks whether these notes were resolved and writes the result to the review report. If it does not finish, the report offers “Retry post-merge recheck”.',
         )}
       </p>}
     </section>

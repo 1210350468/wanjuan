@@ -334,7 +334,7 @@ export default function SkillSettings() {
           <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
             {text(
               '支持单个 SKILL.md，或根目录含 SKILL.md 的文件夹。只并入它和它引用的文本，脚本、hook、子代理和工具调用不会安装。',
-              'A single SKILL.md, or a folder with SKILL.md at its root. Only it and the text it references are used; scripts, hooks, subagents, and tool calls are not installed.',
+              'A single SKILL.md, or a folder with SKILL.md at its root. Only it and the text it references are merged into the prompt; scripts, hooks, subagents, and tool calls are not installed.',
             )}
           </p>
         </div>

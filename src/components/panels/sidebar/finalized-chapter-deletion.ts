@@ -65,7 +65,7 @@ function deletionSurfaceConfig(
   )
   const partialFailure = (error: string) => text(
     `这一章已移到回收站，但正文文件或知识库还没清理完：${error}。请${retryWhere}点「重试清理」。`,
-    `The chapter moved to the trash, but its manuscript file or knowledge base entry is not cleaned up: ${error}. Choose “Retry cleanup” ${retryWhereEn}.`,
+    `The chapter moved to the trash, but its manuscript file or knowledge base entry is not fully cleaned up: ${error}. Choose “Retry cleanup” ${retryWhereEn}.`,
   )
   const configs: Record<DeletionSurface, DeletionSurfaceConfig> = {
     draft: {

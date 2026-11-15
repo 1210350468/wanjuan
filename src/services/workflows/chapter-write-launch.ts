@@ -193,8 +193,8 @@ export async function launchChapterWrite({
   if (!isProjectSessionCurrent(session)) return { kind: 'stale' }
   if (!chapters.writable.includes(targetChapter)) {
     return { kind: 'blocked', message: text(
-      `第 ${targetChapter} 章现在还不能写：要先定稿前一章。现在可以写第 ${chapters.writable.join('、')} 章，从蓝图进入。`,
-      `Chapter ${targetChapter} cannot be written yet: finalize the previous chapter first. You can write ${chapters.writable.length === 1 ? 'Chapter' : 'Chapters'} ${chapters.writable.join(', ')} now; open one from the blueprint.`,
+      `第 ${targetChapter} 章现在还不能写。现在可以写第 ${chapters.writable.join('、')} 章，从蓝图进入。`,
+      `Chapter ${targetChapter} cannot be written yet. You can write ${chapters.writable.length === 1 ? 'Chapter' : 'Chapters'} ${chapters.writable.join(', ')} now; ${chapters.writable.length === 1 ? 'open its blueprint' : 'open a blueprint for one of them'}.`,
     ) }
   }
 

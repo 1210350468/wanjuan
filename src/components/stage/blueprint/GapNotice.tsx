@@ -96,8 +96,8 @@ export default function GapNotice({ gap, blueprint, unsaved, trashed, onWrite, o
   }
   return (
     <Notice tone="warn" title={text(`${zhRange}还没写，后面却已有正文`, `${enRange} ${many ? 'are' : 'is'} unwritten, but later chapters have text`)} actions={actions}>
-      {text(`后面的正文都还在，照常可写。没有删除记录，可能是旧版「小说拆解与仿写」误导入的原文。只是缺${many ? '这几章' : '这一章'}时，${nextStep}确认是误导入时才用「清除误导入正文…」，它会清掉全书所有草稿和定稿。`,
-        `Later text is untouched and stays writable. With no deletion record, this may be text the old “Novel breakdown & imitation” imported by mistake. If only ${many ? 'these chapters are' : 'this chapter is'} missing: ${nextStep} Use “Clear imported text…” only if it was imported by mistake; it clears every draft and finalized chapter in the book.`)}
+      {text(`后面的正文都还在，照常可写。没有删除记录，可能是旧版「小说拆解与仿写」误导入的原文。只是缺${many ? '这几章' : '这一章'}时，${nextStep}确认后面的正文是误导入时才用「清除误导入正文…」，它会清掉全书所有草稿和定稿。`,
+        `Later text is untouched and stays writable. With no deletion record, this may be text the old “Novel breakdown & imitation” imported by mistake. If only ${many ? 'these chapters are' : 'this chapter is'} missing: ${nextStep} Use “Clear imported text…” only if the later text was imported by mistake; it clears every draft and finalized chapter in the book.`)}
     </Notice>
   )
 }
