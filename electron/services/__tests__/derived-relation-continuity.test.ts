@@ -497,6 +497,17 @@ describe('定稿后自动记录人物关系变化', () => {
     expect(pending()).toEqual([])
   })
 
+  it('作者设定从第 8 章起生效，第 8 章定稿重述它：时间线这一章只有作者设定一行', () => {
+    openProject()
+    finalizeNew(7, '第七章：林岚独自下山。')
+    db().prepare("INSERT OR IGNORE INTO character_identity_approvals VALUES('seed-approval','hash','{}')").run()
+    reviseAuthorRelation('师徒')
+    commitModelOutput(finalizeNew(8, CHAPTER_EIGHT), { updates: [], relations: [relationChange('师徒', BREAK_UP)] })
+
+    expect(characterTimeline(readCharacterContinuityTimeline(db(), LIN).nodes).flatMap(group => group.changes.map(change => [group.chapter, change.source, change.value])))
+      .toEqual([[8, 'author', '师徒']])
+  })
+
   it('定稿改变关系后下一章又回到作者设定：记下恢复，不再和旧的派生值打架，也不提示', () => {
     openProject()
     authorRelation('师徒')
@@ -975,7 +986,7 @@ describe('待确认项和写稿提示跟着作者的决定走', () => {
     expect(laterChapterFirst).toEqual(await outcome(5))
   })
 
-  it('定稿重述作者设定之后作者手改了设定，下一章定稿仍写旧关系：写第 9 章只有新设定，写第 10 章两条并存待作者裁定，有第 9 章的建议', async () => {
+  it('定稿重述作者设定之后作者手改了设定，下一章定稿仍写旧关系：写第 9 章只有新设定，写第 10 章两条并存待作者裁定，有第 9 章的建议，时间线记下第 9 章', async () => {
     openProject()
     authorRelation('师徒')
     commitModelOutput(finalizeNew(8, CHAPTER_EIGHT), output(relationChange('师徒', BREAK_UP)))
@@ -988,6 +999,8 @@ describe('待确认项和写稿提示跟着作者的决定走', () => {
     expect(lines.every(line => line.includes('待作者裁定'))).toBe(true)
     expect(lines[1]).toContain('定稿记录·与沈砚的关系（第9章，原文：仍把林岚当徒弟）')
     expect(pending().map(card => [card.source.chapterNumber, card.value])).toEqual([[9, '师徒']])
+    expect(characterTimeline(readCharacterContinuityTimeline(db(), LIN).nodes).flatMap(group => group.changes
+      .filter(change => change.source === 'finalized').map(change => [group.chapter, change.value]))).toEqual([[9, '师徒']])
   })
 
   it.each([

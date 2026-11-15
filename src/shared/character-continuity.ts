@@ -197,19 +197,20 @@ function foldAdoptedRelations(changes: readonly CharacterTimelineChange[]): Char
 }
 
 /**
- * 时间线只列变化：一段定稿关系只留段首。段首和这一章之前生效的说法相同时是重述，也不留。
- * 之前生效的是上一段；没有上一段、或上一段已经让位给作者后改的设定时，是作者设定。
+ * 时间线只列变化：一段定稿关系只留段首，重述的段首也不留。
+ * 和作者设定一致的段只有在上一段是定稿自己的另一种说法时才算变化（正文回到了作者设定）。
+ * 说法和上一段一样、上一段和作者一致而这一段不一致时，是作者中途改了设定，正文没跟，算变化。
  * nodes 要带上这对人物两个方向的节点，只有一边时会把隔着对方说法的两段并成一段。
  */
 export function withoutRelationRestatements(nodes: readonly ContinuityNode[]): ContinuityNode[] {
   const settings = nodes.filter(node => !isDerivedRelation(node))
   const changes = new Set<ContinuityNode>()
   for (const runs of derivedRelationRuns(nodes).values()) runs.forEach(({ head }, index) => {
-    const settingsBefore = latestNodesBefore(settings.filter(node => node.effectiveChapter < head.effectiveChapter), head.effectiveChapter).relations
-      .flatMap(pair => pair.lines)
     const previous = runs[index - 1]?.head
-    const restated = previous && !authorMovedOn(previous, settingsBefore) ? sameStatement(previous, head)
-      : settingsBefore.some(line => pairKey(line) === pairKey(head) && line.value === head.value)
+    const restated = head.matchedAuthor ? !previous || !!previous.matchedAuthor || sameStatement(previous, head)
+      : previous ? sameStatement(previous, head) && !previous.matchedAuthor
+        : latestNodesBefore(settings.filter(node => node.effectiveChapter < head.effectiveChapter), head.effectiveChapter).relations
+          .some(pair => pair.lines.some(line => pairKey(line) === pairKey(head) && line.value === head.value))
     if (!restated) changes.add(head)
   })
   return nodes.filter(node => !isDerivedRelation(node) || changes.has(node))
