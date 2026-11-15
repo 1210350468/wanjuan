@@ -55,9 +55,12 @@ async function interruptedSelectionRun(documentText: string, executed: Promise<v
   backend.invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
     switch (channel) {
       case 'generation:list-recovery': return { planning: [], editors: delivered || abandonedAt === view ? [] : [recovery()], reviews: [], drafts: [], batches: [], partial: false }
-      case 'generation:set-recovery-abandoned':
-        abandonedAt = (args[0] as { abandoned: boolean }).abandoned ? view : null
+      case 'generation:set-recovery-abandoned': {
+        const request = args[0] as { handle: { runId: string }; abandoned: boolean }
+        if (request.handle.runId !== view.handle.runId) throw new Error('GENERATION_RUN_NOT_FOUND')
+        abandonedAt = request.abandoned ? view : null
         return undefined
+      }
       case 'db:recovery-candidate-list': return []
       case 'llm:list-models': return useLLMStore.getState().models
       case 'editor-inline:read-recovery': return recovery()

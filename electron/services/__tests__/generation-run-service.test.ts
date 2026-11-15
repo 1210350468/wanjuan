@@ -295,6 +295,15 @@ it('never persists stop completion for a prefix whose terminal flush failed, inc
         const reopened=new GenerationRunRepository(()=>db),receipt=reopened.receipt(result.attempt.attemptId);expect(receipt.result?.finishReason).toBe('error');expect(receipt.budget.blockedCode).toBe('GENERATION_STORAGE_FAILED');expect(receipt.artifact?.text).toBe('');
     } finally {if(db.open)db.close();fs.rmSync(root,{recursive:true,force:true})}
 });
+it('导入的冻结历史上，「不再恢复」与撤销都不写（#686）', () => {
+    let frozen = false;
+    const f = fixture(), repository = new GenerationRunRepository(() => f.db, Date.now, () => frozen), run = repository.open(f.open);
+    repository.recordRecoveryAbandonment(run.runId, { artifact: 3 });
+    frozen = true;
+    expect(() => repository.recordRecoveryAbandonment(run.runId, { artifact: 4 })).toThrow('GENERATION_PLANNING_HISTORY_READ_ONLY');
+    expect(() => repository.clearRecoveryAbandonment(run.runId)).toThrow('GENERATION_PLANNING_HISTORY_READ_ONLY');
+    expect(repository.recoveryAbandonment(run.runId)).toEqual({ artifact: 3 });
+});
 describe('运行上的记账跟着运行走（#608）', () => {
     const marked = (manifest: Record<string, unknown> = {}) => {
         const f = fixture(), run = f.repository.open({ ...f.open, sourceManifest: { ...f.open.sourceManifest, ...manifest } });

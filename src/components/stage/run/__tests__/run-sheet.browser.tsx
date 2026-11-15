@@ -544,6 +544,23 @@ describe('运行侧页', () => {
       expect(abandonCalls()).toEqual([['7', true], ['8', true], ['7', false], ['8', false]])
     })
 
+    it('一起撤销时放回某张失败，其余几张照样放回', async () => {
+      const fallback = invoke.getMockImplementation()!
+      invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
+        const request = args.find(arg => typeof arg === 'object' && arg !== null && 'handle' in arg) as { handle: { runId: string }; abandoned: boolean } | undefined
+        if (channel === 'generation:set-recovery-abandoned' && request?.handle.runId === '7' && !request.abandoned) throw new Error('写入失败')
+        return fallback(channel, ...args)
+      })
+      await render()
+      await vi.waitFor(() => expect(titles()).toContain('第7章候选'))
+      await abandonIn('第7章候选')
+      await abandonIn('第8章候选')
+      const toast = () => [...document.querySelectorAll('.pi-toast:not([data-exiting])')].find(node => node.querySelector('.pi-toast-title')?.textContent === '已不再恢复 2 张卡片')
+      await vi.waitFor(() => expect(toast()).toBeTruthy())
+      await act(async () => [...toast()!.querySelectorAll('button')].find(item => item.textContent === '撤销')!.click())
+      await vi.waitFor(() => expect(abandonCalls()).toEqual([['7', true], ['8', true], ['7', false], ['8', false]]))
+    })
+
     it('1.4.0 在本机「不再显示」过的卡，升级后迁成「不再恢复」，迁完删掉本机记录', async () => {
       localStorage.setItem(`pagekin:run-recovery-hidden:${session.projectId}`, JSON.stringify(['7#7片:5', '8#8片:2']))
       await render()
@@ -551,6 +568,27 @@ describe('运行侧页', () => {
       await vi.waitFor(() => expect(titles()).not.toContain('第7章候选'))
       expect(titles()).toContain('第8章候选')
       expect(localStorage.getItem(`pagekin:run-recovery-hidden:${session.projectId}`)).toBeNull()
+    })
+
+    it('列表只读出一部分时先不迁，本机记录留着，读全了再迁', async () => {
+      const key = `pagekin:run-recovery-hidden:${session.projectId}`
+      localStorage.setItem(key, JSON.stringify(['7#7片:5', '8#8片:6']))
+      let partial = true
+      const fallback = invoke.getMockImplementation()!
+      invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
+        const list = await fallback(channel, ...args)
+        return channel === 'generation:list-recovery' && partial ? { ...list as object, drafts: everyKind.drafts.slice(1), partial: true } : list
+      })
+      await render()
+      await vi.waitFor(() => expect(titles()).toContain('第8章候选'))
+      await act(async () => {})
+      expect(abandonCalls()).toEqual([])
+      expect(localStorage.getItem(key)).not.toBeNull()
+
+      partial = false
+      await reopen()
+      await vi.waitFor(() => expect(abandonCalls()).toEqual([['7', true], ['8', true]]))
+      await vi.waitFor(() => expect(localStorage.getItem(key)).toBeNull())
     })
   })
 
