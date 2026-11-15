@@ -175,6 +175,13 @@ describe('chapter Markdown outline contract', () => {
   ])('rejects an extra heading or forbidden marker after a valid first heading: %s', body => {
     expect(validPlotOutlineEntry(`## 第7章：标题\n行动和结果。\n\n${body}\n后续内容。`, 7)).toBe(false)
   })
+  it.each([
+    ['第二卷：第八章：下一章', false], ['第二卷·第八章：下一章', false], ['第二卷，第八章：下一章', false], ['第2卷第8章：下一章', false],
+    ['### 第八章', false], ['- 第八章：', false], ['第八、九章：', false], ['Chapter 8:', false],
+    ['第一次读第二章，她发现了秘密。', true], ['他翻开第三章，', true], ['第三章的结尾让她落泪。', true],
+  ] as const)('a body line with a chapter title mark ending in a colon or the line starts another chapter: %s → valid %s', (line, valid) => {
+    expect(validPlotOutlineEntry(`## 第7章：标题\n行动和结果。\n${line}\n后续内容。`, 7)).toBe(valid)
+  })
   it('checks a long run of digits after 第 in linear time', () => {
     const started = performance.now()
     expect(validPlotOutlineEntry(`## 第7章：标题\n\n第${'1'.repeat(40)}次见面。`, 7)).toBe(true)
