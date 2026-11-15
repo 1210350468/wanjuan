@@ -53,7 +53,7 @@ interface NodeWrite {
   effectiveChapter: number
   provenance: ContinuityProvenance
   draftId: number | null
-  evidence: { quote?: FinalizedCharacterEvidence; relationshipId?: string }
+  evidence: { quote?: FinalizedCharacterEvidence; relationshipId?: string; matchedAuthor?: true }
 }
 
 /** 业务写入和节点要一起成败，放在写业务列之前检查。 */
@@ -134,6 +134,7 @@ export interface DerivedRelationWrite {
   relation: string
   source: FinalizedSourceIdentity
   quote: FinalizedCharacterEvidence
+  matchedAuthor: boolean
 }
 
 /** 只进事件表，不碰 character_relationships（ADR-0007）。节点绑定定稿稿，稿被替换后随之失效（ADR-0024、ADR-0025）。 */
@@ -142,7 +143,7 @@ export function appendDerivedRelationNode(db: BetterSqlite3.Database, write: Der
   appendNode(db, { eventId: `derived:${write.source.finalizationId}:relation:${randomUUID()}`, subjectId: write.sourceId, subjectName: write.sourceName,
     target: { id: write.targetId, name: write.targetName }, aspect: 'relation', value: write.relation, effectiveChapter: write.source.chapterNumber,
     provenance: { kind: 'derived', source: write.source }, draftId: write.source.draftId,
-    evidence: { quote: write.quote, relationshipId: derivedRelationSeries(write.sourceId, write.targetId) } })
+    evidence: { quote: write.quote, relationshipId: derivedRelationSeries(write.sourceId, write.targetId), ...(write.matchedAuthor && { matchedAuthor: true as const }) } })
 }
 
 interface NodeRow {
@@ -151,7 +152,8 @@ interface NodeRow {
 }
 
 function parseNode(row: NodeRow): ContinuityNode {
-  const evidence = JSON.parse(row.evidence_json) as { seq?: number; quote?: FinalizedCharacterEvidence; relationshipId?: string; fieldProvenance?: { kind?: string; chapterNumber?: number } | null }
+  const evidence = JSON.parse(row.evidence_json) as { seq?: number; quote?: FinalizedCharacterEvidence; relationshipId?: string; matchedAuthor?: boolean
+    fieldProvenance?: { kind?: string; chapterNumber?: number } | null }
   const stored = JSON.parse(row.provenance_json) as ContinuityProvenance
   const provenance: ContinuityProvenance = stored.kind === 'legacy' && evidence.fieldProvenance?.kind === 'author' && typeof evidence.fieldProvenance.chapterNumber === 'number'
     ? { kind: 'legacy', authorChapter: evidence.fieldProvenance.chapterNumber } : stored
@@ -159,7 +161,8 @@ function parseNode(row: NodeRow): ContinuityNode {
     provenance, draftId: row.draft_id, seq: evidence.seq ?? 0, quote: evidence.quote ?? null }
   return row.target_id === null
     ? { ...base, aspect: row.aspect as CharacterStateTextField }
-    : { ...base, aspect: 'relation', targetId: row.target_id, targetName: row.target_name!, relationshipId: evidence.relationshipId ?? row.event_id }
+    : { ...base, aspect: 'relation', targetId: row.target_id, targetName: row.target_name!, relationshipId: evidence.relationshipId ?? row.event_id,
+      ...(evidence.matchedAuthor === true && { matchedAuthor: true as const }) }
 }
 
 /**

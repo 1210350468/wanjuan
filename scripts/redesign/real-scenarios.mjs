@@ -11,8 +11,10 @@ import * as chapterView from './pages/chapter-view.mjs'
 import * as refs from './pages/refs.mjs'
 import * as runSheet from './pages/run-sheet.mjs'
 import * as stage from './pages/stage.mjs'
+import { seedKeeperRelation } from './c6-scenarios.mjs'
+import { openCharacterState } from './f491-scenarios.mjs'
 import { recoveryListed } from './i686-scenarios.mjs'
-import { afterIpc } from './scenarios.mjs'
+import { afterIpc, seedStageSample } from './scenarios.mjs'
 import { countUnits, STAGE_SAMPLE, stageChapterTitle } from './stage-sample.mjs'
 
 const BOOK = STAGE_SAMPLE.name
@@ -33,6 +35,11 @@ const KEY_EVENTS = [
 const FINALIZED_TEXT = { 1: STAGE_SAMPLE.finalized[1], 2: STAGE_SAMPLE.finalized[2], 3: STAGE_SAMPLE.drafts[3].text }
 const RUNNING = '.stage-capsule:not([data-tone="ok"])'
 const AUTHOR_NOTE = '潮水与灯光的细节再具体一些，加一处林岚对照地图的动作。'
+const KEEPER_RELATION = '盟友'
+const RELATION_CHAPTERS = {
+  5: '林岚把潮汐表摊在守塔人面前，指着三十年前那一格。「沉船那一夜，是你提前敲了钟。」守塔人打翻了茶杯，把她的地图扔出门外。两人就此反目，他当着港务局的人说，从今往后灯塔不许林岚再踏进一步。',
+  6: '第二盏灯的记录是守塔人自己送来的。他站在北堤上，把那本被海水泡皱的值班簿递给林岚，说当年提前敲钟，是为了让另一条船避开暗礁。林岚收下值班簿，向他道了歉。两人冰释前嫌，重新结为盟友，约好涨潮时一起守在雾钟旁。',
+}
 
 /** 记下界面打开作品拿到的会话（包一层主进程的 project:open），驱动读库时不必重开作品。重启后要重新装。 */
 async function trackOpenedSession(app) {
@@ -93,6 +100,24 @@ async function seedBook(context, { finalized = [] } = {}) {
   }
   await reload()
   await stage.openFromLibrary(page, BOOK)
+}
+
+async function seedRelationBook(context) {
+  await trackOpenedSession(context.app)
+  await seedStageSample(context, { landOnChapter3: false, beforeReload: async seed => {
+    const { page, invoke, path: projectPath, session } = seed
+    await seedKeeperRelation(seed, KEEPER_RELATION)
+    const imported = await invoke(page, 'db:draft-import-finalized-batch', { operationId: randomUUID(), chapters: [3, 4].map(number => {
+      const content = STAGE_SAMPLE.drafts[number].text
+      return { chapterNumber: number, title: stageChapterTitle(number), content, wordCount: countUnits(content) }
+    }) }, projectPath, session)
+    assert.equal(imported.success, true, imported.error)
+    for (const [number, content] of Object.entries(RELATION_CHAPTERS)) {
+      const draft = await invoke(page, 'db:draft-create', { chapterNumber: Number(number), version: 1, source: 'write', content, wordCount: countUnits(content) }, projectPath, session)
+      assert.equal(draft.success, true, draft.error)
+    }
+    await context.installRealModels()
+  } })
 }
 
 /** 页面里进行中的运行胶囊挂上来过几次；点下触发运行的按钮之前取一次，交给 untilRunEnds。 */
@@ -252,6 +277,33 @@ async function postProcessRecord(context, chapterNumber) {
   return steps.map(step => ({ key: step.stepKey, ok: Boolean(step.ok) })).sort((a, b) => a.key.localeCompare(b.key))
 }
 
+/** 真实模型报什么不评判，只核对软件按它报的记对了。 */
+async function relationFacts(context) {
+  const roster = await read(context, 'db:character-roster-read')
+  const pair = ['林岚', '守塔人'].map(name => roster.entries.find(entry => entry.name === name).characterId)
+  const isDerivedRelation = node => node.aspect === 'relation' && pair.includes(node.targetId) && node.provenance.kind === 'derived'
+  const derived = (await read(context, 'db:character-continuity-nodes', pair)).filter(isDerivedRelation)
+    .sort((left, right) => left.effectiveChapter - right.effectiveChapter || left.seq - right.seq)
+    .map(node => ({ chapter: node.effectiveChapter, from: node.subjectName, fromId: node.subjectId, value: node.value, matchedAuthor: Boolean(node.matchedAuthor), quote: node.quote?.text ?? '' }))
+  const cards = (await context.invoke(context.page, 'finalized-character:list-relation-candidates', await uiSession(context.app)))
+    .map(card => ({ chapter: card.source.chapterNumber, from: card.sourceName, value: card.value }))
+  const facts = { derived, cards, author: roster.entries.flatMap(entry => entry.relationships.map(relationship => relationship.relation)) }
+  const shown = JSON.stringify(facts)
+  assert.deepEqual(facts.author, [KEEPER_RELATION], `定稿记录不改写作者设定。${shown}`)
+  assert.deepEqual(derived.map(node => node.chapter), Object.keys(RELATION_CHAPTERS).map(Number), `正文写明了关系变化的两章各记下一条定稿关系；模型没报时重跑。${shown}`)
+  const [earlier, later] = derived
+  assert.notEqual(earlier.value, KEEPER_RELATION, `第 ${earlier.chapter} 章写的是反目，和作者设定不同。${shown}`)
+  assert.equal(later.value, KEEPER_RELATION, `第 ${later.chapter} 章回到作者设定的说法；模型换了说法时没走到这条路，重跑。${shown}`)
+  for (const node of derived) {
+    assert.equal(node.matchedAuthor, node.value === KEEPER_RELATION, `和作者设定同值的定稿关系记为一致，不同值的不记。${shown}`)
+    assert.ok(RELATION_CHAPTERS[node.chapter].includes(node.quote), `定稿关系的原文出自那一章。${shown}`)
+    const timeline = (await read(context, 'db:character-continuity-timeline', node.fromId)).nodes.filter(isDerivedRelation)
+    assert.ok(timeline.some(entry => entry.effectiveChapter === node.chapter && entry.value === node.value), `${node.from}的时间线第 ${node.chapter} 章有「${node.value}」。${JSON.stringify(timeline)}`)
+  }
+  assert.deepEqual(cards, [{ chapter: earlier.chapter, from: earlier.from, value: earlier.value }], `只有第 ${earlier.chapter} 章那条和作者设定不同的说法有建议。${shown}`)
+  return facts
+}
+
 /** 重启后重新进入作品：重新装会话记录，从书房或落点打开，等流程脊出现。 */
 async function restartAndOpen(context, { killed = false } = {}) {
   await context.restart({ killed })
@@ -398,6 +450,26 @@ export const REAL_SCENARIOS = {
     await openChapter(page, 2)
     await chapterView.postProcess(page).waitFor({ state: 'visible' })
     return { ...measured, confirmations }
+  } },
+
+  /** 定稿关系：先定稿第 6 章再定稿第 5 章，覆盖后面的章先抽取的顺序。 */
+  'real-relation': { real: true, setup: seedRelationBook, run: async context => {
+    const { page } = context
+    const measured = { finalize: {} }
+    for (const chapterNumber of [6, 5]) {
+      await openChapter(page, chapterNumber)
+      measured.finalize[chapterNumber] = await finalizeAndPostProcess(page, chapterNumber)
+    }
+    measured.relations = await relationFacts(context)
+
+    await openCharacterState(page)
+    const root = stage.root(page)
+    await root.locator('.cast-profile .cast-timeline-summary').click()
+    const cards = root.getByRole('region', { name: '待处理的角色建议' }).locator('[data-kind="relation"]')
+    await cards.first().waitFor({ state: 'visible' })
+    measured.cardsOnCastPage = await cards.count()
+    assert.equal(measured.cardsOnCastPage, measured.relations.cards.length, '角色页列出的关系建议和库里的一样多')
+    return measured
   } },
 
   /** #582：批量写第 3、4 章，第 3 章写完后暂停（暂停中点定稿立即提示还不能定稿）；这时应用被关掉，重启后批次可续；作者定稿第 3 章后这一批不再列出，第 3 章可以重新打开；再重启仍不列出。 */

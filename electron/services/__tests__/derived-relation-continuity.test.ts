@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { closeProjectDatabase, getCurrentProjectPath, getProjectDb, initProjectDatabase } from '../../database'
 import { registerDatabaseController } from '../../controllers/db-controller'
 import { BlueprintRepository } from '../../repositories/blueprint-repository'
-import { deleteCharacterRelationship, insertCharacterRelationship, readCharacterContinuityNodes, readCharacterContinuityTimeline } from '../../repositories/character-continuity-repository'
+import { appendDerivedRelationNode, deleteCharacterRelationship, insertCharacterRelationship, readCharacterContinuityNodes, readCharacterContinuityTimeline } from '../../repositories/character-continuity-repository'
 import { commitCharacterIdentities, refreshCharacterIdentityProjection } from '../../repositories/character-roster-repository'
 import { ConsistencyExemptionRepository } from '../../repositories/consistency-exemption-repository'
 import { DraftRepository } from '../../repositories/draft-repository'
@@ -385,7 +385,8 @@ describe('定稿后自动记录人物关系变化', () => {
     SummaryRepository.commitFinalizedCharacterStates(context, parseFinalizedCharacterStateResponse(JSON.stringify(
       { updates: [], relations: [relationChange('师徒', BREAK_UP)] }), context), db())
 
-    expect(derivedNodes()).toEqual([])
+    expect(latestNodesBefore(relationNodes(), 9).relations.map(pair => [pair.conflict, pair.lines.map(line => [line.value, line.provenance.kind])])).toEqual([[false, [['同门', 'author']]]])
+    expect(characterTimeline(readCharacterContinuityTimeline(db(), LIN).nodes).flatMap(group => group.changes.map(change => change.source))).not.toContain('finalized')
     expect(pending()).toEqual([])
     expect(authorRows()).toEqual(['同门'])
   })
@@ -494,6 +495,17 @@ describe('定稿后自动记录人物关系变化', () => {
     expect(characterTimeline(readCharacterContinuityTimeline(db(), LIN).nodes).map(group => group.chapter)).toEqual([1])
     expect(latestNodesBefore(relationNodes(), 9).relations.flatMap(pair => pair.lines.map(line => line.provenance.kind))).toEqual(['author'])
     expect(pending()).toEqual([])
+  })
+
+  it('作者设定从第 8 章起生效，第 8 章定稿重述它：时间线这一章只有作者设定一行', () => {
+    openProject()
+    finalizeNew(7, '第七章：林岚独自下山。')
+    db().prepare("INSERT OR IGNORE INTO character_identity_approvals VALUES('seed-approval','hash','{}')").run()
+    reviseAuthorRelation('师徒')
+    commitModelOutput(finalizeNew(8, CHAPTER_EIGHT), { updates: [], relations: [relationChange('师徒', BREAK_UP)] })
+
+    expect(characterTimeline(readCharacterContinuityTimeline(db(), LIN).nodes).flatMap(group => group.changes.map(change => [group.chapter, change.source, change.value])))
+      .toEqual([[8, 'author', '师徒']])
   })
 
   it('定稿改变关系后下一章又回到作者设定：记下恢复，不再和旧的派生值打架，也不提示', () => {
@@ -917,6 +929,147 @@ describe('待确认项和写稿提示跟着作者的决定走', () => {
 
     expect(await promptLines(9)).toEqual(['作者设定（自第9章起）与沈砚的关系：同门'])
     expect(pending()).toEqual([])
+  })
+
+  it('更早的章写过别的关系、之后定稿回到作者设定，作者再手改设定：下一章的提示同样只有新设定', async () => {
+    openProject()
+    authorRelation('师徒')
+    commitModelOutput(finalizeNew(5, '第五章：林岚视沈砚为仇敌。'), output(relationChange('仇敌', '视沈砚为仇敌')))
+    commitModelOutput(finalizeNew(8, CHAPTER_EIGHT), output(relationChange('师徒', BREAK_UP)))
+    reviseAuthorRelation('同门')
+
+    expect(await promptLines(9)).toEqual(['作者设定（自第9章起）与沈砚的关系：同门'])
+    expect(pending()).toEqual([])
+  })
+
+  it('上一个开发版存下的定稿关系没记抽取时是否和作者设定一致：读出来不报错，作者手改设定之后照旧和新设定并存待作者裁定', async () => {
+    openProject()
+    authorRelation('师徒')
+    commitModelOutput(finalizeNew(5, '第五章：林岚视沈砚为仇敌。'), output(relationChange('仇敌', '视沈砚为仇敌')))
+    const { source } = SummaryRepository.readFinalizedCharacterContext(finalizeNew(8, CHAPTER_EIGHT), scope, db())
+    db().transaction(() => appendDerivedRelationNode(db(), { sourceId: LIN, sourceName: '林岚', targetId: SHEN, targetName: '沈砚', relation: '师徒', source,
+      quote: { start: CHAPTER_EIGHT.indexOf(BREAK_UP), end: CHAPTER_EIGHT.length, text: BREAK_UP }, matchedAuthor: false }))()
+    reviseAuthorRelation('同门')
+
+    const lines = await promptLines(9)
+    expect(lines).toHaveLength(2)
+    expect(lines[1]).toContain(`定稿记录·与沈砚的关系（第8章，原文：${BREAK_UP}）`)
+    expect(lines.every(line => line.includes('待作者裁定'))).toBe(true)
+  })
+
+  it('先定稿第 7 章再定稿第 5 章，和按顺序定稿一样：写第 9 章只有作者设定，第 5 章的说法只在写第 6 章时待作者裁定', async () => {
+    const outcome = async (firstExtracted: 5 | 7) => {
+      openProject()
+      authorRelation('盟友')
+      const five = finalizeNew(5, '第五章：林岚视沈砚为仇敌。'), seven = finalizeNew(7, '第七章：两人重新结为盟友。')
+      const extract = {
+        5: () => commitModelOutput(five, output(relationChange('仇敌', '视沈砚为仇敌'))),
+        7: () => commitModelOutput(seven, output(relationChange('盟友', '重新结为盟友'))),
+      }
+      extract[firstExtracted]()
+      extract[firstExtracted === 5 ? 7 : 5]()
+      const result = {
+        six: await promptLines(6), nine: await promptLines(9),
+        cards: pending().map(card => [card.source.chapterNumber, card.value]),
+        timeline: characterTimeline(readCharacterContinuityTimeline(db(), LIN).nodes).flatMap(group => group.changes.map(change => [group.chapter, change.source, change.value])),
+      }
+      closeProjectDatabase()
+      return result
+    }
+
+    const laterChapterFirst = await outcome(7)
+    expect(laterChapterFirst.nine).toEqual(['作者设定（自第1章起）与沈砚的关系：盟友'])
+    expect(laterChapterFirst.six).toHaveLength(2)
+    expect(laterChapterFirst.six.every(line => line.includes('待作者裁定'))).toBe(true)
+    expect(laterChapterFirst.cards).toEqual([[5, '仇敌']])
+    expect(laterChapterFirst.timeline).toEqual([[7, 'finalized', '盟友'], [5, 'finalized', '仇敌'], [1, 'author', '盟友']])
+    expect(laterChapterFirst).toEqual(await outcome(5))
+  })
+
+  it('定稿重述作者设定之后作者手改了设定，下一章定稿仍写旧关系：写第 9 章只有新设定，写第 10 章两条并存待作者裁定，有第 9 章的建议，时间线记下第 9 章', async () => {
+    openProject()
+    authorRelation('师徒')
+    commitModelOutput(finalizeNew(8, CHAPTER_EIGHT), output(relationChange('师徒', BREAK_UP)))
+    reviseAuthorRelation('同门')
+    commitModelOutput(finalizeNew(9, '第九章：沈砚仍把林岚当徒弟。'), output(relationChange('师徒', '仍把林岚当徒弟')))
+
+    expect(await promptLines(9)).toEqual(['作者设定（自第9章起）与沈砚的关系：同门'])
+    const lines = await promptLines(10)
+    expect(lines).toHaveLength(2)
+    expect(lines.every(line => line.includes('待作者裁定'))).toBe(true)
+    expect(lines[1]).toContain('定稿记录·与沈砚的关系（第9章，原文：仍把林岚当徒弟）')
+    expect(pending().map(card => [card.source.chapterNumber, card.value])).toEqual([[9, '师徒']])
+    expect(characterTimeline(readCharacterContinuityTimeline(db(), LIN).nodes).flatMap(group => group.changes
+      .filter(change => change.source === 'finalized').map(change => [group.chapter, change.value]))).toEqual([[9, '师徒']])
+  })
+
+  it.each([
+    ['又写回旧关系：时间线记下这一章', '师徒', [[10, '师徒']]],
+    ['照着新设定写：时间线不记', '同门', []],
+  ])('定稿重述作者设定之后作者手改了设定，隔一章定稿%s', (_label, relation, finalizedRows) => {
+    openProject()
+    authorRelation('师徒')
+    commitModelOutput(finalizeNew(8, CHAPTER_EIGHT), output(relationChange('师徒', BREAK_UP)))
+    reviseAuthorRelation('同门')
+    commitModelOutput(finalizeNew(10, '第十章：沈砚仍把林岚当徒弟。'), output(relationChange(relation, '仍把林岚当徒弟')))
+
+    expect(characterTimeline(readCharacterContinuityTimeline(db(), LIN).nodes).flatMap(group => group.changes
+      .filter(change => change.source === 'finalized').map(change => [group.chapter, change.value]))).toEqual(finalizedRows)
+  })
+
+  it('定稿重述作者设定之后作者手改了设定，再替换这一章写成别的关系：两条并存待作者裁定，有这一章的建议', async () => {
+    openProject()
+    authorRelation('师徒')
+    commitModelOutput(finalizeNew(8, CHAPTER_EIGHT), output(relationChange('师徒', BREAK_UP)))
+    reviseAuthorRelation('同门')
+    commitModelOutput(replaceFinal(8, '第八章改：林岚视沈砚为仇敌。'), output(relationChange('仇敌', '视沈砚为仇敌')))
+
+    const lines = await promptLines(9)
+    expect(lines).toHaveLength(2)
+    expect(lines.every(line => line.includes('待作者裁定'))).toBe(true)
+    expect(lines[1]).toContain('定稿记录·与沈砚的关系（第8章，原文：视沈砚为仇敌）')
+    expect(pending().map(card => [card.source.chapterNumber, card.value])).toEqual([[8, '仇敌']])
+  })
+
+  it('定稿重述作者设定之后作者手改了设定，同一份定稿重跑仍报旧关系：两条并存待作者裁定，有这一章的建议', async () => {
+    openProject()
+    authorRelation('师徒')
+    const draftId = finalizeNew(8, CHAPTER_EIGHT)
+    commitModelOutput(draftId, output(relationChange('师徒', BREAK_UP)))
+    reviseAuthorRelation('同门')
+    commitModelOutput(draftId, output(relationChange('师徒', BREAK_UP)))
+
+    const lines = await promptLines(9)
+    expect(lines).toHaveLength(2)
+    expect(lines.every(line => line.includes('待作者裁定'))).toBe(true)
+    expect(pending().map(card => [card.source.chapterNumber, card.value])).toEqual([[8, '师徒']])
+  })
+
+  it('采用第 5 章的建议之后，第 7 章回到原设定的说法还在提示里，和采用的设定并存待作者裁定', async () => {
+    openProject()
+    authorRelation('盟友')
+    commitModelOutput(finalizeNew(5, '第五章：林岚视沈砚为仇敌。'), output(relationChange('仇敌', '视沈砚为仇敌')))
+    commitModelOutput(finalizeNew(7, '第七章：两人重新结为盟友。'), output(relationChange('盟友', '重新结为盟友')))
+    decide('accept')
+
+    const lines = await promptLines(9)
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toContain('作者设定（自第5章起）与沈砚的关系：仇敌')
+    expect(lines[1]).toContain('定稿记录·与沈砚的关系（第7章，原文：重新结为盟友）')
+    expect(lines.every(line => line.includes('待作者裁定'))).toBe(true)
+  })
+
+  it('第 5 章写成仇敌、第 7 章回到作者设定之后作者删掉了这条设定：写第 9 章用第 7 章的定稿记录', async () => {
+    openProject()
+    authorRelation('盟友')
+    commitModelOutput(finalizeNew(5, '第五章：林岚视沈砚为仇敌。'), output(relationChange('仇敌', '视沈砚为仇敌')))
+    commitModelOutput(finalizeNew(7, '第七章：两人重新结为盟友。'), output(relationChange('盟友', '重新结为盟友')))
+    db().transaction(() => {
+      deleteCharacterRelationship(db(), { relationshipId: 'author-line', sourceId: LIN, sourceName: '林岚', targetId: SHEN, targetName: '沈砚' }, 'seed-approval')
+      refreshCharacterIdentityProjection(db())
+    })()
+
+    expect(await promptLines(9)).toEqual(['定稿记录·与沈砚的关系（第7章，原文：重新结为盟友）'])
   })
 
   it('后续章重述同样的关系：提示里的章号和原文仍是关系变成这样的那一章', async () => {
@@ -1590,6 +1743,21 @@ describe('派生关系的系列是这对人物，方向和说法照定稿原样'
     expect(timelineRows(SHEN)).toEqual([[SHEN, LIN, '收徒']])
     expect(timelineRows(LIN)).toEqual([[LIN, SHEN, '拜师']])
     expect(linesInForce(8)).toEqual([[SHEN, LIN, '收徒']])
+  })
+
+  it('第 3 章林岚→沈砚「暗恋」，第 7 章沈砚→林岚「暗恋」：说法一样、方向换了也是变化，第 7 章进沈砚的时间线，写第 8 章用新方向', async () => {
+    openProject()
+    commitModelOutput(finalizeNew(3, '第三章：林岚暗恋沈砚。'), { updates: [], relations: [relationChange('暗恋', '林岚暗恋沈砚')] })
+    commitModelOutput(finalizeNew(7, '第七章：沈砚暗恋林岚。'), { updates: [], relations: [relationChange('暗恋', '沈砚暗恋林岚', SHEN, LIN)] })
+
+    const chapters = (characterId: string) => characterTimeline(readCharacterContinuityTimeline(db(), characterId).nodes).map(group => group.chapter)
+    expect(chapters(SHEN)).toEqual([7])
+    expect(chapters(LIN)).toEqual([3])
+    expect(linesInForce(4)).toEqual([[LIN, SHEN, '暗恋']])
+    expect(linesInForce(8)).toEqual([[SHEN, LIN, '暗恋']])
+    const nodes = await continuityNodesHandler()({}, [SHEN], getCurrentProjectPath()) as ContinuityNode[]
+    expect(characterTimelinePromptLines({ nodes, chapter: 8, characterIds: [SHEN], currentNames: new Map(Object.entries(NAMES)), language: 'zh-CN' }))
+      .toEqual({ [SHEN]: ['定稿记录·与林岚的关系（第7章，原文：沈砚暗恋林岚）'] })
   })
 
   it('作者写了林岚→沈砚「拜师」，定稿报沈砚→林岚「收徒」：建议和采用都是沈砚对林岚「收徒」', () => {

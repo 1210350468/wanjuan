@@ -32,7 +32,7 @@ import {
   type CharacterStateFieldProvenance,
 } from '../../src/shared/character-roster'
 import { decideDerivedPatch, type CharacterFieldSnapshot, type DerivedSourceOrder } from '../../src/shared/character-identity'
-import { derivedRelationRuns, type ContinuityNode, type DerivedRelationRun } from '../../src/shared/character-continuity'
+import { derivedRelationRuns, type CharacterRelationNode, type ContinuityNode, type DerivedRelationRun } from '../../src/shared/character-continuity'
 import { parseFinalizedCharacterStateResponse } from '../../src/shared/finalized-continuity'
 import { hasCharacterIdentitySchema } from './character-repository'
 import { commitCharacterIdentities, refreshCharacterIdentityProjection, refreshCharacterStateProjection } from './character-roster-repository'
@@ -456,13 +456,13 @@ function commitDerivedRelations(db: BetterSqlite3.Database, context: FinalizedCh
   const candidates: FinalizedRelationCandidate[] = []
   for (const { change, matchesAuthor, authorLinesAtExtraction } of oneStatementPerPair(changes, context.authorRelations)) {
     const series = derivedRelationSeries(change.sourceId, change.targetId)
-    const seriesNodes = readCharacterContinuityNodes(db, [change.sourceId, change.targetId]).filter(node => node.aspect === 'relation' && node.relationshipId === series)
-    const ownLatest = seriesNodes.filter(node => node.provenance.kind === 'derived' && node.provenance.source.finalizationId === source.finalizationId)
+    const ownLatest = readCharacterContinuityNodes(db, [change.sourceId, change.targetId])
+      .filter((node): node is CharacterRelationNode => node.aspect === 'relation' && node.relationshipId === series
+        && node.provenance.kind === 'derived' && node.provenance.source.finalizationId === source.finalizationId)
       .sort((left, right) => left.seq - right.seq).at(-1)
     const names = { sourceName: name(change.sourceId), targetName: name(change.targetId) }
-    const firstRecordRestatesAuthor = matchesAuthor && !seriesNodes.some(node => node.effectiveChapter <= source.chapterNumber)
-    if (firstRecordRestatesAuthor) continue
-    if (ownLatest?.value !== change.relation || ownLatest.subjectId !== change.sourceId) appendDerivedRelationNode(db, { ...change, ...names, source, quote: change.evidence })
+    if (ownLatest?.value !== change.relation || ownLatest.subjectId !== change.sourceId || !!ownLatest.matchedAuthor !== matchesAuthor)
+      appendDerivedRelationNode(db, { ...change, ...names, source, quote: change.evidence, matchedAuthor: matchesAuthor })
     if (authorLinesAtExtraction?.length && !matchesAuthor) candidates.push({ candidateKey: relationCandidateKey(source, change), source: structuredClone(source), sourceId: change.sourceId, targetId: change.targetId,
       ...names, value: change.relation, evidence: change.evidence, authorLinesAtCreation: authorLinesAtExtraction })
   }
