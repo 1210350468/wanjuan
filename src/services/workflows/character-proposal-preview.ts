@@ -13,10 +13,11 @@ export function defaultCharacterProposalSelections(batch: CharacterProposalBatch
 type Identity = { characterId: string; name: string; role?: string }
 type Relationship = NonNullable<ApproveCharacterProposalRequest['relationships']>[number]
 function relationTarget(batch: CharacterProposalBatch, relation: CharacterProposalBatch['items'][number]['relationships'][number],
-  identities: readonly Identity[]): { targetSelectionKey: string } | { targetCharacterId: string } | undefined {
+  identities: readonly Identity[], selections: ApproveCharacterProposalRequest['selections']): { targetSelectionKey: string } | { targetCharacterId: string } | undefined {
   if (relation.targetSelectionKey) return { targetSelectionKey: relation.targetSelectionKey }
   const candidates = batch.items.filter(candidate => candidate.fields.name === relation.targetName)
-  const matches = identities.filter(identity => identity.name === relation.targetName)
+  const mapped = new Set(selections.flatMap(selection => selection.action === 'map' && candidates.some(candidate => candidate.selectionKey === selection.selectionKey) ? [selection.characterId] : []))
+  const matches = identities.filter(identity => identity.name === relation.targetName && !mapped.has(identity.characterId))
   if (candidates.length + matches.length !== 1) return undefined
   return candidates.length ? { targetSelectionKey: candidates[0].selectionKey } : { targetCharacterId: matches[0].characterId }
 }
@@ -37,7 +38,7 @@ export const sameRelationship = (a: Relationship, b: Relationship) => a.sourceSe
 export function proposalRelations(batch: CharacterProposalBatch, identities: readonly Identity[], selections: ApproveCharacterProposalRequest['selections']) {
   const active = new Set(selections.filter(item => item.action !== 'keep-unresolved').map(item => item.selectionKey))
   return batch.items.flatMap(item => item.relationships.map(relation => {
-    const target = relationTarget(batch, relation, identities)
+    const target = relationTarget(batch, relation, identities, selections)
     const edge: Relationship | undefined = target && { sourceSelectionKey: item.selectionKey, ...target, relation: relation.relation }
     const adoptable = !!edge && active.has(item.selectionKey) && (!edge.targetSelectionKey || active.has(edge.targetSelectionKey))
       && adoptableRelationships(selections, [edge]).length > 0
