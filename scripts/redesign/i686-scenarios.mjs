@@ -39,6 +39,7 @@ export async function recoveryListed(app, page) {
     ipcMain._invokeHandlers.set('generation:list-recovery', async (...args) => {
       const result = await original(...args)
       globalThis.__i686Reads += 1
+      globalThis.__i686Partial = result?.partial === true
       return result
     })
   })
@@ -47,6 +48,7 @@ export async function recoveryListed(app, page) {
     if (await app.evaluate(() => globalThis.__i686Reads) > 0) break
     assert.ok(Date.now() < deadline, '10 秒内运行侧页没有读可恢复列表')
   }
+  assert.equal(await app.evaluate(() => globalThis.__i686Partial), false, '可恢复列表读全了：读不全时少列的卡片不能当作「不再列出」')
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
 }
 
@@ -132,8 +134,7 @@ export const I686_SCENARIOS = {
     await chapterView.prose(context.page).getByText('你父亲也问过钟的事').first().click()
     await context.page.keyboard.press('End')
     await context.page.keyboard.type('钟声停了。')
-    await context.page.keyboard.press('ControlOrMeta+S')
-    await context.page.getByText('已保存', { exact: true }).first().waitFor({ state: 'visible', timeout: 10_000 })
+    await stage.saveWithCtrlS(context.page)
 
     context.fake.failProse()
     await chapterView.prose(context.page).getByText('你父亲也问过钟的事').first().click({ clickCount: 3 })
@@ -150,6 +151,9 @@ export const I686_SCENARIOS = {
     await context.shoot('i686-tail-copy-only-run-sheet')
     assert.deepEqual(listed.map(card => card.title), ['编辑器选区建议', '第4章审稿候选'], '中途被拦下的选区建议和来源已变的审稿仍列出')
     assert.ok(listed.every(card => card.buttons.includes('不再恢复')), '两张卡都有「不再恢复」')
+    const resumable = await runSheet.sheet(context.page).locator('.run-recovery > .run-card').evaluateAll(cards => cards.map(card =>
+      [...card.querySelectorAll('.run-card-buttons .pi-btn--secondary')].map(button => ({ label: button.textContent, disabled: button.disabled }))))
+    assert.ok(resumable.every(buttons => buttons.length > 0 && buttons.every(button => button.disabled)), `两张卡的继续类按钮都不可点：${JSON.stringify(resumable)}`)
     await runSheet.sheet(context.page).locator('.run-recovery > .run-card').last().locator('.run-card-buttons').scrollIntoViewIfNeeded()
     await context.shoot('i686-tail-copy-only-review')
 
@@ -160,7 +164,7 @@ export const I686_SCENARIOS = {
     await runSheet.sheet(context.page).locator('.run-recovery').waitFor({ state: 'detached' })
     const hidden = await allCards(context.page)
     assert.deepEqual(hidden, [], '两张卡点「不再恢复」后都不再列出')
-    return { listed, hidden }
+    return { listed, resumable, hidden }
   } },
   /** 选区润色建好运行、请求还没发出去应用就关了；重启后在「进行中」点「继续原选区任务」，回到第 4 章原选区，气泡里出建议，替换后卡片不再列出。 */
   'i686-continue-selection': { model: true, shell: 'stage', setup: context => seedStageSample(context), run: async context => {

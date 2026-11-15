@@ -4,7 +4,7 @@ import * as blueprint from './pages/blueprint.mjs'
 import * as chapterView from './pages/chapter-view.mjs'
 import * as runSheet from './pages/run-sheet.mjs'
 import * as stage from './pages/stage.mjs'
-import { seedStageSample } from './scenarios.mjs'
+import { afterIpc, seedStageSample } from './scenarios.mjs'
 import { finalizeChapter, openChapter } from './f491-scenarios.mjs'
 
 /** 替身：只记录 Notification.show 的标题与正文，不真的弹出。 */
@@ -61,13 +61,11 @@ export const F685_SCENARIOS = {
     const before = await windowState(app)
     const switchedOff = await setNotify(page, false)
     await openChapter(page, 4)
-    await chapterView.review(page)
-    await page.waitForTimeout(2_000)
+    await afterIpc(app, page, 'window:notify-stage', () => chapterView.review(page))
     const afterReview = await recorded(app)
 
     const switchedOn = await setNotify(page, true)
-    await finalizeChapter(page, 4)
-    for (const deadline = Date.now() + 10_000; (await recorded(app)).length === 0 && Date.now() < deadline;) await page.waitForTimeout(100)
+    await afterIpc(app, page, 'window:notify-stage', () => finalizeChapter(page, 4))
     const afterFinalize = await recorded(app)
     await shoot('f685-background-notice')
 

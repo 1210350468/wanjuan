@@ -315,6 +315,31 @@ export async function untilGateHolds(gate, timeoutMs = 15_000) {
 }
 
 /**
+ * 跑 action，等主进程里 channel 至少有一次调用在 action 开始后返回，界面也已按返回值渲染完。
+ * 用于「没有 X」「只有一条 X」这类断言：等产出 X 的那次读取结束，不用固定等待。
+ * 同一窗口的 IPC 按序送达：之后再发一次 IPC，它的回复到了，channel 的回复也已交给界面，再等两帧让 React 提交。
+ */
+export async function afterIpc(app, page, channel, action) {
+  await app.evaluate(({ ipcMain }, channel) => {
+    const done = globalThis.__driveIpcDone ??= {}
+    const wrapped = channel in done
+    done[channel] = 0
+    if (wrapped) return
+    const original = ipcMain._invokeHandlers.get(channel)
+    ipcMain._invokeHandlers.set(channel, async (...args) => {
+      try { return await original(...args) } finally { done[channel] += 1 }
+    })
+  }, channel)
+  await action()
+  for (const deadline = Date.now() + 10_000; await app.evaluate((_, channel) => globalThis.__driveIpcDone[channel], channel) === 0;) {
+    assert.ok(Date.now() < deadline, `10 秒内 ${channel} 没有返回`)
+    await page.waitForTimeout(50)
+  }
+  await page.evaluate(() => window.aiNovelAPI.invoke('startup:get-state'))
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+}
+
+/**
  * 用公开 IPC 预置新外壳示例作品：12 章蓝图，1、2 章定稿，3 章已审稿，4 章草稿；架构四节齐全。
  * totalChapters 改规划总章数；beforeReload 在重载前再写入数据；landOnChapter3 为 false 时只等流程脊，落点由场景自己断言。
  * beforeReload 另写了蓝图时用 blueprintCount 告诉旧外壳要等项目树显示几章。

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import * as stage from './pages/stage.mjs'
 import { FAKE_MODEL } from './fake-model.mjs'
-import { seedStageSample } from './scenarios.mjs'
+import { afterIpc, seedStageSample } from './scenarios.mjs'
 
 const EXTRA = Object.freeze({ ...FAKE_MODEL, id: 'setdel-extra', name: '待删备用模型', modelName: 'gpt-4.1-mini' })
 
@@ -13,10 +13,11 @@ async function holdDeletes(app) {
     globalThis.__setdelGate = new Promise(resolve => { release = resolve })
     globalThis.__setdelRelease = release
     globalThis.__setdelCalls = 0
+    globalThis.__setdelDone = 0
     ipcMain._invokeHandlers.set('llm:delete-model', async (event, ...args) => {
       globalThis.__setdelCalls += 1
       await globalThis.__setdelGate
-      return original(event, ...args)
+      try { return await original(event, ...args) } finally { globalThis.__setdelDone += 1 }
     })
   })
 }
@@ -43,13 +44,12 @@ export const SETDEL_SCENARIOS = {
     await save.waitFor({ state: 'visible' })
     await shoot('setdel-form-while-deleting')
 
-    await app.evaluate(() => globalThis.__setdelRelease())
-    const deadline = Date.now() + 10_000
-    while ((await modelIds(context)).includes(EXTRA.id)) {
-      assert.ok(Date.now() < deadline, '10 秒内主进程没有删掉模型')
-      await page.waitForTimeout(100)
-    }
-    await root.getByRole('button', { name: `编辑「${FAKE_MODEL.name}」` }).waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined)
+    // 表单要等删除成功后的模型列表重读结束才关。
+    await afterIpc(app, page, 'llm:list-models', async () => {
+      await app.evaluate(() => globalThis.__setdelRelease())
+      for (const deadline = Date.now() + 10_000; await app.evaluate(() => globalThis.__setdelDone) < 2; await page.waitForTimeout(50))
+        assert.ok(Date.now() < deadline, '10 秒内主进程没有处理完两次删除')
+    })
     const formAfterDelete = await save.isVisible()
     await shoot('setdel-after-delete')
     if (formAfterDelete) {
@@ -60,7 +60,7 @@ export const SETDEL_SCENARIOS = {
     const listed = await root.getByRole('button', { name: `编辑「${EXTRA.name}」` }).count()
     await shoot('setdel-final')
     const deleteCalls = await app.evaluate(() => globalThis.__setdelCalls)
-    const dialogs = await page.getByRole('dialog').count()
+    const dialogs = await page.getByRole('dialog').or(page.getByRole('alertdialog')).count()
     const measured = { formAfterDelete, storedAfterSave, listed, deleteCalls, dialogs }
     assert.deepEqual(measured, { formAfterDelete: false, storedAfterSave: false, listed: 0, deleteCalls: 2, dialogs: 0 }, JSON.stringify(measured))
     return measured

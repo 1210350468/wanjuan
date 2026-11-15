@@ -11,7 +11,7 @@ import { _electron as electron } from 'playwright'
 
 import { chooseProjectDirectoryGrant } from '../project-directory-grant.mjs'
 import { startFakeModel } from './fake-model.mjs'
-import { changedFiles, fetchRoute, filesContaining, fileStamps, guardFetch, REAL_KEY_ENV, REAL_ORIGIN, realModelProfiles, redactSecret, removeModelConfigs, removePath,
+import { changedFiles, fetchRoute, filesContaining, fileStamps, guardFetch, REAL_GENERATION_MODEL, REAL_KEY_ENV, REAL_MODEL_ENV, REAL_ORIGIN, realModelProfiles, redactSecret, removeModelConfigs, removePath,
   summarizeModelRequests } from './real-model.mjs'
 import { assertNodeRunsTypeScript } from './node-version.mjs'
 import { dismissCompletionToasts, dismissStartupNotice, firstInteractiveControl, waitForShell } from './pages/shell.mjs'
@@ -53,7 +53,7 @@ const IDLE_SAMPLE_INTERVAL_MS = 1_000
 export const SHELF_BOOKS = 20
 const ALL_SCENARIOS = [...Object.keys(SCENARIOS), 'baseline-all', ...PREPARED_SESSIONS]
 const USAGE = `用法: node scripts/redesign/drive.mjs --scenario <名称> [--theme light|dark] [--shell writer|stage] [--out <目录>] [--dump-dom] [--console] [--video] [--app-root <目录>] [--real-model]
---real-model 只用于 real-* 场景，密钥从环境变量 ${REAL_KEY_ENV} 读
+--real-model 只用于 real-* 场景，密钥从环境变量 ${REAL_KEY_ENV} 读；生成模型默认 ${REAL_GENERATION_MODEL}，可用环境变量 ${REAL_MODEL_ENV} 换
 场景: ${ALL_SCENARIOS.join(', ')}`
 
 export function parseArgs(argv) {
@@ -560,6 +560,7 @@ async function runSession(sessionName, names, options, realKey = null, roots = c
             const result = await invoke(context.page, channel, value)
             assert.equal(result?.success, true, `${channel} 失败：${result?.error ?? ''}`)
           }
+          shared.realModels = { generation: generation.modelName, embedding: embedding.modelName }
         },
       }
       current = 0
