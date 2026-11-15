@@ -163,7 +163,7 @@ export function validPlotOutlineEntry(text: string, chapter: number): boolean {
   if (entries.length !== 1 || !heading || heading.grouped || heading.from !== chapter || heading.to !== chapter
     || text.slice(0, heading.index).trim() || !text.slice(heading.end).trim()) return false
   const body = text.slice(heading.end)
-  return !/^[\t ]*(?:#{1,6}[\t ]+|(?:[-*+][\t ]+)?(?:第[^\r\n]*章|Chapters?\b))/imu.test(body)
+  return !/^[\t ]*(?:#{1,6}[\t ]+|(?:[-*+][\t ]+)?(?:第(?![0-9０-９零〇一二两三四五六七八九十百千]+次)[^\r\n]*章|Chapters?\b))/imu.test(body)
 }
 
 export function derivePlotOutlineCursor(range: PlotOutlineRange, acceptedCount: number, attempts: readonly PlotOutlineAttempt[]): PlotOutlineCursor {

@@ -153,6 +153,52 @@ describe('chapter Markdown outline contract', () => {
     expect(synopsisForDraftChapter(synopsis, 1)).toBe(synopsis)
     expect([first, second].every((entry, index) => validPlotOutlineEntry(entry, index + 1))).toBe(false)
   })
+  const MASTER_EXTRA_CHAPTER_LINE = /^[\t ]*(?:#{1,6}[\t ]+|(?:[-*+][\t ]+)?(?:第[^\r\n]*章|Chapters?\b))/imu
+  const ORDINAL_TIMES_PROSE = ['第一次见面时，她正在修改一篇文章。', '- 第一次见面时，她正在修改一篇文章。', '第一次读完这篇文章。', '第一次读第二章，她发现了秘密。', '第一次读完那篇文章，她哭了。']
+  const MASTER_ACCEPTED_PROSE = ['她第一次读第八和第九章。', '他翻开第三章，', 'She reread chapter three, then slept.', 'In chapter 3, she wept.']
+  const MASTER_REJECTED_LINES = [
+    '第7章：重复章', '## 第8章：下一章', '- 第8章：下一章', '第8章：下一章', '第8章 追逐',
+    '第8至9章：合并章', '第八、九章：合并章', '第8/9章：合并章', '第八／九章：合并章', '第八和第九章：追逐与逃亡', '第八与第九章：追逐与逃亡', '第8到9章：追逐与逃亡', '第8~9章：追逐与逃亡', '第8，9章：合并章', '第8及9章：追逐与逃亡', '第8以及9章：合并章',
+    '第8至第9章：后续分章', '第８章：下一章', '第八～第九章：合并章', '第廿八章：下一章', '第壹章：另一章',
+    '第貳章：追逐', '第參章：逃亡', '第陸章：真相', '第兩章：合併', '第壹萬章：終章', '第一万章：终章', '第8.5章：下一章', '第8&9章：合并章', '第8/9章：', '第八、九章：', '第8和第9两个章节：合并章',
+    '第2卷第8章：下一章', '- 第二部 第八章：下一章', '第三集第9章：下一章', '第壹篇第八至九章：合并章', '第二册第八章：下一章', '第一幕第八章：',
+    '第二卷：第八章：下一章', '第二卷·第八章：下一章', '第二卷，第八章：下一章', '### 第八章', '- 第八章：',
+    '第 八 章：下一章', '第 8–9 章：章组', '第八-九章：章组', '第8 — 9章：章组',
+    '## 第二章：下一章', '第2章', '第8-9章：合并章', '第8　章：下一章',
+    '## 章外概览', 'Chapter 8: Next', 'Chapter 8:', '- Chapters 8-9: Group', 'Chapters 8 and 9: The escape', 'Chapter VIII: The escape', 'Chapter Eight: The escape',
+    '第三章的结尾让她落泪。', '第一，她不信任他；第二，她要读完第三章。', '第一部小说的第二章，她读完了。', '第三天，他重读了第二章的笔记。', '第一天读第二章，她发现了秘密。',
+  ]
+  const entryWithBodyLine = (line: string) => `## 第7章：标题\n行动和结果。\n\n${line}\n后续内容。`
+  it.each([...ORDINAL_TIMES_PROSE, ...MASTER_ACCEPTED_PROSE])('accepts ordinary prose without requesting a compact retry: %s', prose => {
+    const text = `## 第7章：标题\n\n${prose}`
+    expect(validPlotOutlineEntry(text, 7)).toBe(true)
+    expect(derivePlotOutlineCursor({ from: 1, to: 8 }, 6, [{
+      purpose: 'plot-outline:chapter:7:normal', status: 'settled', finishReason: 'stop',
+      artifact: { artifactId: 'normal-7', text, revision: 1, textHash: 'a'.repeat(64) },
+    }])).toEqual({ kind: 'accept', chapterNumber: 7, artifactIds: ['normal-7'], text })
+  })
+  it.each(ORDINAL_TIMES_PROSE)('#613: a 第N次 prose line that master took for another chapter is accepted: %s', line => {
+    const text = entryWithBodyLine(line)
+    expect(MASTER_EXTRA_CHAPTER_LINE.test(text.slice(text.indexOf('\n')))).toBe(true)
+    expect(validPlotOutlineEntry(text, 7)).toBe(true)
+  })
+  it.each([...MASTER_REJECTED_LINES, ...MASTER_ACCEPTED_PROSE, ...ORDINAL_TIMES_PROSE])('accepts a body line only where master accepts it or it is listed 第N次 prose: %s', line => {
+    const text = entryWithBodyLine(line)
+    if (validPlotOutlineEntry(text, 7)) expect(!MASTER_EXTRA_CHAPTER_LINE.test(text.slice(text.indexOf('\n'))) || ORDINAL_TIMES_PROSE.includes(line)).toBe(true)
+  })
+  it.each([...MASTER_REJECTED_LINES, '> 后续概览：下一章', '```\n围栏内容\n```'])('rejects an extra heading or forbidden marker after a valid first heading: %s', line => {
+    expect(validPlotOutlineEntry(entryWithBodyLine(line), 7)).toBe(false)
+  })
+  it('still rejects a later chapter line after an accepted 第N次 prose line', () => {
+    expect(validPlotOutlineEntry('## 第7章：标题\n第一次读完那篇文章。\n第8章 追逐\n后续内容。', 7)).toBe(false)
+  })
+  it('returns within 200ms for a body line of 16000 repetitions of 第八、', () => {
+    const run = '第八、'.repeat(16000)
+    const started = performance.now()
+    expect(validPlotOutlineEntry(`## 第7章：标题\n\n${run}`, 7)).toBe(true)
+    expect(validPlotOutlineEntry(`## 第7章：标题\n\n${run}章`, 7)).toBe(false)
+    expect(performance.now() - started).toBeLessThan(200)
+  })
   it('counts the full entry in Unicode code points without truncating a 1201 point entry', () => {
     const heading = '## 第1章：标题\n'
     const maximum = heading + '😀'.repeat(1200 - [...heading].length)
