@@ -429,6 +429,13 @@ function authorRelationsOfPair(db: BetterSqlite3.Database, sourceId: string, tar
 
 const unorderedPairKey = (left: string, right: string) => JSON.stringify([left, right].sort())
 
+/** 没有作者行时沿用这对人物已有定稿关系的方向，模型换个方向报告也落在同一个系列里。 */
+function derivedPairDirection(db: BetterSqlite3.Database, sourceId: string, targetId: string) {
+  const recorded = (subject: string, target: string) => !!db.prepare(`SELECT 1 FROM character_continuity_events
+    WHERE subject_id=? AND target_id=? AND aspect='relation' AND json_extract(evidence_json,'$.relationshipId')=?`).get(subject, target, derivedRelationSeries(subject, target))
+  return !recorded(sourceId, targetId) && recorded(targetId, sourceId) ? { sourceId: targetId, targetId: sourceId } : { sourceId, targetId }
+}
+
 function relationCandidateKey(source: FinalizedSourceIdentity, change: Pick<FinalizedRelationChange, 'sourceId' | 'targetId' | 'relation'>): string {
   return `fcs-relation:${sha256(JSON.stringify([source.draftId, source.finalizationId, source.contentHash, unorderedPairKey(change.sourceId, change.targetId), sha256(change.relation)]))}`
 }
@@ -439,7 +446,8 @@ function commitDerivedRelations(db: BetterSqlite3.Database, context: FinalizedCh
   const candidates: FinalizedRelationCandidate[] = []
   for (const reported of changes) {
     const pair = authorRelationsOfPair(db, reported.sourceId, reported.targetId)
-    const change = { ...reported, sourceId: pair.sourceId, targetId: pair.targetId }
+    const { sourceId, targetId } = pair.rows.length ? pair : derivedPairDirection(db, reported.sourceId, reported.targetId)
+    const change = { ...reported, sourceId, targetId }
     const series = derivedRelationSeries(change.sourceId, change.targetId)
     const previous = latestNodesBefore(readCharacterContinuityNodes(db, change.sourceId), source.chapterNumber + 1).relations
       .flatMap(pair => pair.lines).find(line => line.relationshipId === series)

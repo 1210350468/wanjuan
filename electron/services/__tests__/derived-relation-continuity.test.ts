@@ -1373,3 +1373,36 @@ describe('较早章建议被采纳后，较晚章的建议是否还有效', () =
     expect(cards()).toEqual([])
   })
 })
+
+describe('没有作者关系时，同一对角色的定稿关系不分方向', () => {
+  const ALLY = '第三章：林岚与沈砚结为盟友。', FOE = '第七章：沈砚视林岚为仇敌。'
+  const inForce = (chapter: number) => latestNodesBefore(readCharacterContinuityNodes(db()), chapter).relations.flatMap(pair => pair.lines.map(line => line.value))
+  const reversals = async (relation: string) => {
+    continuityNodesHandler()
+    const nodes = await ipcHandlers.get('db:character-continuity-preflight-nodes')!({}, getCurrentProjectPath()) as ContinuityNode[]
+    return findBlueprintContinuityRisks([], { chapterNumber: 8, title: '', role: '', purpose: '', keyEvents: '', characters: ['林岚', '沈砚'],
+      suspenseHook: '', userGuidance: '', notes: '', relationshipHints: [{ from: '林岚', to: '沈砚', relation }] }, [], nodes, pending())
+  }
+
+  it.each([
+    ['先林岚→沈砚，后反向', LIN, SHEN],
+    ['先沈砚→林岚，后反向', SHEN, LIN],
+  ])('%s：第 8 章只剩后报告的一条，蓝图写回旧关系时提示', async (_label, first, second) => {
+    openProject()
+    commitModelOutput(finalizeNew(3, ALLY), { updates: [], relations: [relationChange('盟友', '结为盟友', first, second)] })
+    commitModelOutput(finalizeNew(7, FOE), { updates: [], relations: [relationChange('仇敌', '视林岚为仇敌', second, first)] })
+
+    expect(inForce(8)).toEqual(['仇敌'])
+    expect(await reversals('盟友')).toHaveLength(1)
+  })
+
+  it('先定稿后面的章再定稿前面的章：第 8 章仍只剩第 7 章那条', () => {
+    openProject()
+    const three = finalizeNew(3, ALLY), seven = finalizeNew(7, FOE)
+    commitModelOutput(seven, { updates: [], relations: [relationChange('仇敌', '视林岚为仇敌', SHEN, LIN)] })
+    commitModelOutput(three, { updates: [], relations: [relationChange('盟友', '结为盟友', LIN, SHEN)] })
+
+    expect(inForce(4)).toEqual(['盟友'])
+    expect(inForce(8)).toEqual(['仇敌'])
+  })
+})
