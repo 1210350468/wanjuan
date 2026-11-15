@@ -25,7 +25,8 @@ const require = createRequire(import.meta.url)
 const Database = require('better-sqlite3') as typeof import('better-sqlite3')
 const UNAVAILABLE: ProjectOverview = Object.freeze({ state: 'unavailable' })
 const SQLITE_SUFFIXES = ['', '-wal', '-shm'] as const
-const SNAPSHOT_UPGRADABLE_SCHEMA_VERSIONS: readonly number[] = [7, 8]
+/** v1.2.0-Preview 写出的 7 是最早能在私有快照上迁移的版本，之后到当前之前的每一版都能升级。 */
+const OLDEST_SNAPSHOT_UPGRADABLE_SCHEMA_VERSION = 7
 
 interface ManifestState {
   rootPath: string
@@ -410,7 +411,7 @@ export class ProjectPeekService {
       }
       database = new Database(snapshotPath, { readonly: true, fileMustExist: true })
       const version = new SqliteSchemaAdapter(database).readUserVersion()
-      if (SNAPSHOT_UPGRADABLE_SCHEMA_VERSIONS.includes(version)) {
+      if (version >= OLDEST_SNAPSHOT_UPGRADABLE_SCHEMA_VERSION && version < CURRENT_DESKTOP_SCHEMA_VERSION) {
         database.close()
         upgradeSnapshot(snapshotPath, version)
         database = new Database(snapshotPath, { readonly: true, fileMustExist: true })

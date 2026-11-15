@@ -191,7 +191,7 @@ describe('ProjectPeekService source-zero-write overview', () => {
   })
 
   // 最近项目列表在正常打开升级之前就预览，旧 schema 也必须照常统计。
-  it.each([7, 8])('previews a schema-%i project by migrating only its private snapshot, leaving the source as it was', version => {
+  it.each([7, 8, 9])('previews a schema-%i project by migrating only its private snapshot, leaving the source as it was', version => {
     const f = fixture({ schemaVersion: version, journalMode: 'wal' })
     seedCore(f.database)
     addChapter(f.database, 1, { blueprint: true, draft: true, review: true, finalized: true })
