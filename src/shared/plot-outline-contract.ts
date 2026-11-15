@@ -139,7 +139,7 @@ const DIGITS: Readonly<Record<string, number>> = { 零: 0, 〇: 0, 一: 1, 二: 
 const UNITS: Readonly<Record<string, number>> = { 十: 10, 百: 100, 千: 1000 }
 const NUMBER = '[0-9零〇一二两三四五六七八九十百千]+'
 const BODY_NUMBER = '[0-9０-９零〇一二两兩三四五六七八九十百千万萬廿卅卌壹贰貳叁參肆伍陆陸柒捌玖拾佰仟]+'
-const EXTRA_CHAPTER_LINE = new RegExp(String.raw`^(?:[\t ]*#{1,6}[\t ]|[^\r\n。！？!?]*?(?:第[^\S\r\n]*${BODY_NUMBER}(?:[^\S\r\n]*(?:以及|[、，,/／和与及至到～~–—-])[^\S\r\n]*(?:第[^\S\r\n]*)?${BODY_NUMBER})*[^\S\r\n]*章|Chapters?[^\S\r\n]*${BODY_NUMBER}(?:[^\S\r\n]*[–—-][^\S\r\n]*${BODY_NUMBER})?)(?=[^\S\r\n]*(?:[:：]|\r?$)))`, 'imu')
+const EXTRA_CHAPTER_LINE = new RegExp(String.raw`^(?:[\t ]*#{1,6}[\t ]|[\t ]*(?:[-*+][\t ]+)?Chapters?\b|[^\r\n。！？!?]*?第[^\S\r\n]*${BODY_NUMBER}(?:[^\S\r\n]*(?:以及|[、，,/／和与及至到～~–—-])[^\S\r\n]*(?:第[^\S\r\n]*)?${BODY_NUMBER})*[^\S\r\n]*章(?=[^\S\r\n]*(?:[:：]|\r?$)))`, 'imu')
 function chapterNumber(token: string): number {
   if (/^\d+$/u.test(token)) return Number(token)
   let result = 0, digit = 0
