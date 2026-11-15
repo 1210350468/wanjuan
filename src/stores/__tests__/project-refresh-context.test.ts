@@ -82,18 +82,23 @@ describe('project refresh context', () => {
     async function openBWithSlowTree(before: () => void, during: () => void) {
       const originals = [useLayoutStore.getState(), useStageStore.getState()] as const
       const tree = deferred<unknown[]>()
+      const treeRequested = deferred<void>()
       useStageStore.setState({ sheet: null, focus: false })
       before()
       invoke.mockImplementation((channel: string, targetPath: string, requestToken: string) => {
         if (channel === 'project:open') return Promise.resolve({
           success: true, project: project('B'), requestToken, activeProjectPath: targetPath, databaseRestored: true, dbReady: true,
         })
-        if (channel === 'fs:list-dir') return tree.promise
+        if (channel === 'fs:list-dir') {
+          treeRequested.resolve()
+          return tree.promise
+        }
         return Promise.resolve([])
       })
       try {
         const opening = useProjectStore.getState().openProject(project('B').path)
-        await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('fs:list-dir', project('B').path, project('B').path))
+        await Promise.race([treeRequested.promise, opening])
+        expect(invoke).toHaveBeenCalledWith('fs:list-dir', project('B').path, project('B').path)
         during()
         tree.resolve([])
         await expect(opening).resolves.toBe(true)
@@ -129,11 +134,18 @@ describe('project refresh context', () => {
     const openAResult = deferred<unknown>()
     const openBResult = deferred<unknown>()
     const requestTokens = new Map<string, string>()
+    const openARequested = deferred<void>()
+    const openBRequested = deferred<void>()
     invoke.mockImplementation((channel: string, ...args: unknown[]) => {
       if (channel === 'project:open') {
         const [projectPath, requestToken] = args as [string, string]
         requestTokens.set(projectPath, requestToken)
-        return projectPath === project('A').path ? openAResult.promise : openBResult.promise
+        if (projectPath === project('A').path) {
+          openARequested.resolve()
+          return openAResult.promise
+        }
+        openBRequested.resolve()
+        return openBResult.promise
       }
       if (channel === 'project:get-runtime-context') {
         return Promise.resolve({ activeProjectPath: project('B').path, dbReady: true })
@@ -143,14 +155,12 @@ describe('project refresh context', () => {
     })
 
     const openingA = useProjectStore.getState().openProject(project('A').path)
-    await vi.waitFor(() => {
-      expect(requestTokens.get(project('A').path)).toBeTypeOf('string')
-    })
+    await Promise.race([openARequested.promise, openingA])
+    expect(requestTokens.get(project('A').path)).toBeTypeOf('string')
     const openingB = useProjectStore.getState().openProject(project('B').path)
 
-    await vi.waitFor(() => {
-      expect(requestTokens.get(project('B').path)).toBeTypeOf('string')
-    })
+    await Promise.race([openBRequested.promise, openingB])
+    expect(requestTokens.get(project('B').path)).toBeTypeOf('string')
     openBResult.resolve({
       success: true,
       project: project('B'),
@@ -276,6 +286,7 @@ describe('project refresh context', () => {
 
   it('does not let a delayed project A file-tree failure clear project B', async () => {
     const treeA = deferred<Array<{ name: string; path: string; isDir: boolean }>>()
+    const treeARequested = deferred<void>()
     const requestTokens = new Map<string, string>()
     invoke.mockImplementation((channel: string, ...args: unknown[]) => {
       if (channel === 'project:open') {
@@ -288,7 +299,10 @@ describe('project refresh context', () => {
           activeProjectPath: projectPath,
         })
       }
-      if (channel === 'fs:list-dir' && args[0] === project('A').path) return treeA.promise
+      if (channel === 'fs:list-dir' && args[0] === project('A').path) {
+        treeARequested.resolve()
+        return treeA.promise
+      }
       if (channel === 'fs:list-dir' && args[0] === project('B').path) {
         return Promise.resolve([{ name: 'B', path: 'B', isDir: true }])
       }
@@ -296,11 +310,12 @@ describe('project refresh context', () => {
     })
 
     const openingA = useProjectStore.getState().openProject(project('A').path)
-    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith(
+    await Promise.race([treeARequested.promise, openingA])
+    expect(invoke).toHaveBeenCalledWith(
       'fs:list-dir',
       project('A').path,
       project('A').path,
-    ))
+    )
     const openingB = useProjectStore.getState().openProject(project('B').path)
     await expect(openingB).resolves.toBe(true)
     treeA.reject(new Error('late A tree failure'))
