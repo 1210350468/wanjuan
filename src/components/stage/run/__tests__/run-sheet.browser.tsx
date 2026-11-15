@@ -445,102 +445,163 @@ describe('运行侧页', () => {
     expect(reads()).toHaveLength(2)
   })
 
-  it('单章候选点「不再显示」后，重开作品也不再出现；生成记录不动，其他候选照常显示', async () => {
-    const draftRun = (runId: string, text: string) => {
-      const handle = { projectId: session.projectId, epoch: '上次打开', rootActionId: `${runId}根`, runId }
-      return { view: { handle, status: 'cancelled', artifacts: [{ ...handle, artifactId: `${runId}片`, attemptId: `${runId}请求`, text, status: 'cancelled' }] },
-        recovery: { draftSave: { kind: 'absent' }, handle, operation: 'chapter-draft', chapterNumber: Number(runId), modelId: '原模型', authorInputs: [], attemptedPurposes: ['chapter-draft'] } }
+  describe('「不再恢复」（#686）', () => {
+    const run = (runId: string) => ({ projectId: session.projectId, epoch: '上次打开', rootActionId: `${runId}根`, runId })
+    const piece = (runId: string, text: string, status = 'cancelled') => ({ ...run(runId), artifactId: `${runId}片`, attemptId: `${runId}请求`, text, status })
+    const draft = (runId: string, text: string) => ({ view: { handle: run(runId), status: 'cancelled', artifacts: [piece(runId, text)] },
+      recovery: { draftSave: { kind: 'absent' }, handle: run(runId), operation: 'chapter-draft', chapterNumber: Number(runId), modelId: '原模型', authorInputs: [], attemptedPurposes: ['chapter-draft'] } })
+    const everyKind = {
+      planning: [{ handle: run('蓝图'), operation: 'chapter-blueprint-directory', blueprintRecovery: { writeState: 'ready' },
+        planningDraft: { requestedRange: { from: 3, to: 4 }, createdAtMs: new Date(2026, 10, 7, 9, 32).getTime(), standing: 'open' },
+        planningContinuation: { state: 'ready', remainingRange: { from: 4, to: 4 } } }],
+      editors: [{ view: { handle: run('选区'), status: 'paused', artifacts: [piece('选区', '钟声停在半空', 'failed')], ledger: { physicalRequests: 1 } },
+        modelId: '原模型', sourceStatus: 'current', context: { action: 'refine', selectedText: '钟声', documentText: '钟声响起' } }],
+      reviews: [{ view: { handle: run('修稿'), status: 'cancelled', artifacts: [piece('修稿', '潮水退去的修改稿')] },
+        recovery: { handle: run('修稿'), modelId: '原模型', sourceStatus: 'conflict', canResume: false, attemptedPurposes: ['refine-draft'],
+          context: { operation: 'refine-draft', source: { chapterNumber: 6 } } } }],
+      batches: [{ batchId: '批次', rootHandle: run('批次'), range: { startChapter: 3, endChapter: 5 }, completedChapters: [{ chapterNumber: 3 }], nextChapterNumber: 4, sourceCurrent: true }],
+      drafts: [draft('7', '雾里的钟声'), draft('8', '退潮后的石阶')],
     }
-    const fallback = invoke.getMockImplementation()!
-    invoke.mockImplementation(async (channel: string, ...args: unknown[]) => channel === 'generation:list-recovery'
-      ? { planning: [], editors: [], reviews: [], batches: [], partial: false, drafts: [draftRun('7', '雾里的钟声'), draftRun('8', '退潮后的石阶')] }
-      : fallback(channel, ...args))
-    const titles = () => [...host!.querySelectorAll('article h3')].map(title => title.textContent)
-    await render()
-    await vi.waitFor(() => expect(titles()).toEqual(['第7章候选', '第8章候选']))
-    const card = [...host!.querySelectorAll('article')].find(article => article.textContent?.includes('第7章候选'))!
-    await act(async () => [...card.querySelectorAll('button')].find(item => item.textContent === '不再显示')!.click())
-    expect(titles()).toEqual(['第8章候选'])
-
-    await act(async () => root!.unmount())
-    root = createRoot(host!)
-    await act(async () => useStageStore.setState({ sheet: null }))
-    await render()
-    await vi.waitFor(() => expect(invoke.mock.calls.filter(([channel]) => channel === 'generation:list-recovery')).toHaveLength(2))
-    await vi.waitFor(() => expect(titles()).toEqual(['第8章候选']))
-    expect(invoke.mock.calls.map(([channel]) => channel).filter(channel => !['generation:list-recovery', 'db:recovery-candidate-list'].includes(channel))).toEqual([])
-  })
-
-  it('只能复制的审修候选和选区建议也能点「不再显示」，重开作品后不再出现（#686）', async () => {
-    const reviewRun = { projectId: session.projectId, epoch: '上次打开', rootActionId: '修稿根', runId: '修稿' }
-    const editorRun = { projectId: session.projectId, epoch: '上次打开', rootActionId: '选区根', runId: '选区' }
-    const fallback = invoke.getMockImplementation()!
-    invoke.mockImplementation(async (channel: string, ...args: unknown[]) => channel === 'generation:list-recovery'
-      ? { planning: [], reviews: [{
-        view: { handle: reviewRun, status: 'cancelled', artifacts: [{ ...reviewRun, artifactId: '修稿片', attemptId: '修稿请求', text: '潮水退去的修改稿', status: 'cancelled' }] },
-        recovery: { handle: reviewRun, modelId: '原模型', sourceStatus: 'conflict', canResume: false, attemptedPurposes: ['refine-draft'],
-          context: { operation: 'refine-draft', source: { chapterNumber: 6 } } },
-      }], editors: [{
-        view: { handle: editorRun, status: 'paused', artifacts: [{ ...editorRun, artifactId: '选区片', attemptId: '选区请求', text: '钟声停在半空', status: 'failed' }],
-          ledger: { physicalRequests: 1 } },
-        modelId: '原模型', sourceStatus: 'current', context: { action: 'refine', selectedText: '钟声', documentText: '钟声响起' },
-      }], batches: [], drafts: [], partial: false }
-      : fallback(channel, ...args))
-    const titles = () => [...host!.querySelectorAll('article h3')].map(title => title.textContent)
-    const hide = (title: string) => act(async () => {
-      const card = [...host!.querySelectorAll('article')].find(article => article.querySelector('h3')?.textContent === title)!
-      ;[...card.querySelectorAll('button')].find(item => item.textContent === '不再显示')!.click()
+    let abandoned: Set<string>
+    const abandonCalls = () => invoke.mock.calls.filter(([channel]) => channel === 'generation:set-recovery-abandoned')
+      .map(([, ...args]) => { const request = args.find(arg => typeof arg === 'object' && arg !== null && 'handle' in arg) as { handle: { runId: string }; abandoned: boolean }; return [request.handle.runId, request.abandoned] })
+    const titles = () => [...host!.querySelectorAll('.run-recovery > article h3')].map(title => title.textContent)
+    const abandonIn = (title: string) => act(async () => {
+      const card = [...host!.querySelectorAll('.run-recovery > article')].find(article => article.querySelector('h3')?.textContent === title)!
+      card.querySelector<HTMLButtonElement>('.run-card-head button')!.click()
     })
-    await render()
-    await vi.waitFor(() => expect(titles()).toEqual(['编辑器选区建议', '第6章修稿候选']))
-    await hide('第6章修稿候选')
-    expect(titles()).toEqual(['编辑器选区建议'])
-    await hide('编辑器选区建议')
-    expect(titles()).toEqual([])
-
-    await act(async () => root!.unmount())
-    root = createRoot(host!)
-    await act(async () => useStageStore.setState({ sheet: null }))
-    await render()
-    await vi.waitFor(() => expect(invoke.mock.calls.filter(([channel]) => channel === 'generation:list-recovery')).toHaveLength(2))
-    await act(async () => {})
-    expect(titles()).toEqual([])
-  })
-
-  it('「不再显示」只隐藏当时的内容：同一运行之后又留下新候选或新尾段时重新出现', async () => {
-    const handle = { projectId: session.projectId, epoch: '上次打开', rootActionId: '续写根', runId: '续写' }
-    const piece = (attemptId: string, text: string) => ({ ...handle, artifactId: `${attemptId}片`, attemptId, text, status: 'cancelled' })
-    let view: Record<string, unknown> = { handle, status: 'cancelled', artifacts: [piece('第一次', '雾里的钟声')] }
-    const fallback = invoke.getMockImplementation()!
-    invoke.mockImplementation(async (channel: string, ...args: unknown[]) => channel === 'generation:list-recovery'
-      ? { planning: [], editors: [], reviews: [], batches: [], partial: false, drafts: [{ view: structuredClone(view),
-        recovery: { draftSave: { kind: 'absent' }, handle, operation: 'chapter-draft', chapterNumber: 5, modelId: '原模型', authorInputs: [], attemptedPurposes: ['chapter-draft'] } }] }
-      : fallback(channel, ...args))
-    const titles = () => [...host!.querySelectorAll('article h3')].map(title => title.textContent)
-    const reopen = async (expectedReads: number) => {
+    const reopen = async () => {
+      const reads = invoke.mock.calls.filter(([channel]) => channel === 'generation:list-recovery').length
       await act(async () => root!.unmount())
       root = createRoot(host!)
       await act(async () => useStageStore.setState({ sheet: null }))
       await render()
-      await vi.waitFor(() => expect(invoke.mock.calls.filter(([channel]) => channel === 'generation:list-recovery')).toHaveLength(expectedReads))
+      await vi.waitFor(() => expect(invoke.mock.calls.filter(([channel]) => channel === 'generation:list-recovery')).toHaveLength(reads + 1))
+      await act(async () => {})
     }
-    await render()
-    await vi.waitFor(() => expect(titles()).toEqual(['第5章候选']))
-    await act(async () => [...host!.querySelectorAll('button')].find(item => item.textContent === '不再显示')!.click())
-    expect(titles()).toEqual([])
+    afterEach(async () => {
+      // 撤销提示条要 8 秒才走，关掉它，下一个用例的提示条才不会并进来
+      for (const close of document.querySelectorAll<HTMLButtonElement>('.pi-toast:not([data-exiting]) button[aria-label="关闭通知"]')) await act(async () => close.click())
+    })
+    beforeEach(() => {
+      abandoned = new Set()
+      const fallback = invoke.getMockImplementation()!
+      invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
+        if (channel === 'generation:set-recovery-abandoned') {
+          const request = args.find(arg => typeof arg === 'object' && arg !== null && 'handle' in arg) as { handle: { runId: string }; abandoned: boolean }
+          if (request.abandoned) abandoned.add(request.handle.runId)
+          else abandoned.delete(request.handle.runId)
+          return undefined
+        }
+        if (channel === 'generation:list-recovery') {
+          const kept = (handle: { runId: string }) => !abandoned.has(handle.runId)
+          return { planning: everyKind.planning.filter(item => kept(item.handle)), editors: everyKind.editors.filter(item => kept(item.view.handle)),
+            reviews: everyKind.reviews.filter(item => kept(item.view.handle)), batches: everyKind.batches.filter(item => kept(item.rootHandle)),
+            drafts: everyKind.drafts.filter(item => kept(item.view.handle)), partial: false }
+        }
+        return fallback(channel, ...args)
+      })
+    })
 
-    await reopen(2)
-    await act(async () => {})
-    expect(titles()).toEqual([])
+    it('每类卡片右上角都有「不再恢复」；点了主进程记在这次运行上，卡片随重读消失，重开作品也不回来', async () => {
+      await render()
+      const all = ['蓝图恢复稿 · 第 3–4 章', '编辑器选区建议', '第6章修稿候选', '批量正文：已保存 1 章，下一章 4', '第7章候选', '第8章候选']
+      await vi.waitFor(() => expect(titles()).toEqual(all))
+      expect([...host!.querySelectorAll('.run-recovery > article')].map(card => card.querySelector('.run-card-head button')?.textContent)).toEqual(all.map(() => '不再恢复'))
 
-    view = { ...view, artifacts: [piece('第一次', '雾里的钟声'), piece('第二次', '退潮后的石阶')] }
-    await reopen(3)
-    await vi.waitFor(() => expect(titles()).toEqual(['第5章候选']))
-    await act(async () => [...host!.querySelectorAll('button')].find(item => item.textContent === '不再显示')!.click())
+      for (const title of all.slice(0, 5)) await abandonIn(title)
+      await vi.waitFor(() => expect(titles()).toEqual(['第8章候选']))
+      expect(abandonCalls()).toEqual([['蓝图', true], ['选区', true], ['修稿', true], ['批次', true], ['7', true]])
+      await vi.waitFor(() => expect([...document.querySelectorAll('.pi-toast:not([data-exiting])')].map(toast => toast.textContent).filter(line => line?.includes('已不再恢复')))
+        .toEqual([expect.stringContaining('已不再恢复 5 张卡片')]))
 
-    view = { ...view, unsavedTails: [{ attemptId: '第三次', artifactId: '第三次片', durableRevision: 0, text: '没落盘的尾段', failureCode: 'GENERATION_STORAGE_FAILED' }] }
-    await reopen(4)
-    await vi.waitFor(() => expect(titles()).toEqual(['第5章候选']))
+      await reopen()
+      expect(titles()).toEqual(['第8章候选'])
+    })
+
+    it('提示条里点「撤销」，这张卡重新列出', async () => {
+      await render()
+      await vi.waitFor(() => expect(titles()).toContain('第6章修稿候选'))
+      await abandonIn('第6章修稿候选')
+      await vi.waitFor(() => expect(titles()).not.toContain('第6章修稿候选'))
+      const toast = [...document.querySelectorAll('.pi-toast')].find(node => node.querySelector('.pi-toast-title')?.textContent === '已不再恢复「第6章修稿候选」')
+      expect(toast?.textContent).toContain('生成记录仍保留。')
+      await act(async () => [...toast!.querySelectorAll('button')].find(item => item.textContent === '撤销')!.click())
+      await vi.waitFor(() => expect(titles()).toContain('第6章修稿候选'))
+      expect(abandonCalls()).toEqual([['修稿', true], ['修稿', false]])
+    })
+
+    it('提示条还在时又关一张（比如手滑点了两下）：并成一条，「撤销」两张都放回来', async () => {
+      await render()
+      await vi.waitFor(() => expect(titles()).toContain('第7章候选'))
+      await abandonIn('第7章候选')
+      await abandonIn('第8章候选')
+      await vi.waitFor(() => expect(titles()).not.toContain('第8章候选'))
+      const toast = () => [...document.querySelectorAll('.pi-toast:not([data-exiting])')].find(node => node.querySelector('.pi-toast-title')?.textContent === '已不再恢复 2 张卡片')
+      await vi.waitFor(() => expect(toast()).toBeTruthy())
+      await act(async () => [...toast()!.querySelectorAll('button')].find(item => item.textContent === '撤销')!.click())
+      await vi.waitFor(() => expect(titles()).toEqual(expect.arrayContaining(['第7章候选', '第8章候选'])))
+      expect(abandonCalls()).toEqual([['7', true], ['8', true], ['7', false], ['8', false]])
+    })
+
+    it('一起撤销时放回某张失败，其余几张照样放回，没放回的留在提示条里可以再撤销', async () => {
+      let failing = true
+      const fallback = invoke.getMockImplementation()!
+      invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
+        const request = args.find(arg => typeof arg === 'object' && arg !== null && 'handle' in arg) as { handle: { runId: string }; abandoned: boolean } | undefined
+        if (channel === 'generation:set-recovery-abandoned' && request?.handle.runId === '7' && !request.abandoned && failing) throw new Error('写入失败')
+        return fallback(channel, ...args)
+      })
+      await render()
+      await vi.waitFor(() => expect(titles()).toContain('第7章候选'))
+      await abandonIn('第7章候选')
+      await abandonIn('第8章候选')
+      const toast = () => [...document.querySelectorAll('.pi-toast:not([data-exiting])')].find(node => node.querySelector('.pi-toast-title')?.textContent === '已不再恢复 2 张卡片')
+      await vi.waitFor(() => expect(toast()).toBeTruthy())
+      await act(async () => [...toast()!.querySelectorAll('button')].find(item => item.textContent === '撤销')!.click())
+      await vi.waitFor(() => expect(abandonCalls()).toEqual([['7', true], ['8', true], ['7', false], ['8', false]]))
+      await vi.waitFor(() => expect(titles()).toContain('第8章候选'))
+      expect(titles()).not.toContain('第7章候选')
+
+      const retry = () => [...document.querySelectorAll('.pi-toast:not([data-exiting])')].find(node => node.querySelector('.pi-toast-title')?.textContent === '已不再恢复「第7章候选」')
+      await vi.waitFor(() => expect(retry()).toBeTruthy())
+      failing = false
+      await act(async () => [...retry()!.querySelectorAll('button')].find(item => item.textContent === '撤销')!.click())
+      await vi.waitFor(() => expect(titles()).toContain('第7章候选'))
+    })
+
+    it('1.4.0 在本机「不再显示」过的卡，升级后迁成「不再恢复」，迁完删掉本机记录', async () => {
+      localStorage.setItem(`pagekin:run-recovery-hidden:${session.projectId}`, JSON.stringify(['7#7片:5', '8#8片:2']))
+      await render()
+      await vi.waitFor(() => expect(abandonCalls()).toEqual([['7', true]]))
+      await vi.waitFor(() => expect(titles()).not.toContain('第7章候选'))
+      expect(titles()).toContain('第8章候选')
+      expect(localStorage.getItem(`pagekin:run-recovery-hidden:${session.projectId}`)).toBeNull()
+    })
+
+    it('列表只读出一部分时先不迁，本机记录留着，读全了再迁', async () => {
+      const key = `pagekin:run-recovery-hidden:${session.projectId}`
+      localStorage.setItem(key, JSON.stringify(['7#7片:5', '8#8片:6']))
+      let partial = true
+      const fallback = invoke.getMockImplementation()!
+      invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
+        const list = await fallback(channel, ...args)
+        return channel === 'generation:list-recovery' && partial ? { ...list as object, drafts: everyKind.drafts.slice(1), partial: true } : list
+      })
+      await render()
+      await vi.waitFor(() => expect(titles()).toContain('第8章候选'))
+      await act(async () => {})
+      expect(abandonCalls()).toEqual([])
+      expect(localStorage.getItem(key)).not.toBeNull()
+
+      partial = false
+      await act(async () => root!.unmount())
+      root = createRoot(host!)
+      await act(async () => useStageStore.setState({ sheet: null }))
+      await render()
+      await vi.waitFor(() => expect(abandonCalls()).toEqual([['7', true], ['8', true]]))
+      await vi.waitFor(() => expect(localStorage.getItem(key)).toBeNull())
+    })
   })
 
   it('恢复候选：继续编辑或放弃的调用失败时显示错误', async () => {
@@ -1004,7 +1065,7 @@ describe('运行侧页的规划恢复稿（#608）', () => {
     blueprintRecovery: { writeState: 'ready' }, planningDraft: { requestedRange: { from, to }, createdAtMs: at(hour), standing: 'open' },
     planningContinuation: { state: 'ready', remainingRange: { from: to, to } },
   })
-  const dismissed = () => invoke.mock.calls.filter(([channel]) => channel === 'generation:dismiss-planning-recovery')
+  const dismissed = () => invoke.mock.calls.filter(([channel]) => channel === 'generation:set-recovery-abandoned')
     .map(([, ...args]) => (args.find(arg => typeof arg === 'object' && arg !== null && 'handle' in arg) as { handle: { runId: string } }).handle.runId)
   let listed: ReturnType<typeof planning>[]
   beforeEach(() => {
@@ -1012,7 +1073,7 @@ describe('运行侧页的规划恢复稿（#608）', () => {
     const fallback = invoke.getMockImplementation()!
     invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
       if (channel === 'generation:list-recovery') return { planning: listed, editors: [], reviews: [], drafts: [], batches: [], partial: false }
-      if (channel === 'generation:dismiss-planning-recovery') {
+      if (channel === 'generation:set-recovery-abandoned') {
         const runId = (args.find(arg => typeof arg === 'object' && arg !== null && 'handle' in arg) as { handle: { runId: string } }).handle.runId
         listed = listed.filter(item => item.handle.runId !== runId)
         return undefined
@@ -1035,18 +1096,10 @@ describe('运行侧页的规划恢复稿（#608）', () => {
     expect(earlier.querySelector('.run-card-meta')?.textContent).toBe('缺第 16 章 · 11月7日 09:32 生成')
   })
 
-  it('放弃要就地确认、只说正式内容不受影响；选「保留」不调用主进程，确认后这份不再列出，更早的一份顶上来', async () => {
+  it('点「不再恢复」不用确认：这份不再列出，同一范围更早的一份顶上来', async () => {
     await render()
     await vi.waitFor(() => expect(cards()).toHaveLength(2))
-    const firstCard = () => host!.querySelector('.run-recovery > .run-card')!
-    const dismiss = () => [...firstCard().querySelector('.run-card-buttons')!.querySelectorAll('button')].find(item => item.textContent === '放弃…')!
-    await act(async () => dismiss().click())
-    expect(firstCard().querySelector('[role="group"]')?.textContent).toContain('正式内容不受影响；放弃后这份恢复稿不再列出。')
-    await click('保留')
-    expect(dismissed()).toEqual([])
-
-    await act(async () => dismiss().click())
-    await click('放弃')
+    await act(async () => host!.querySelector<HTMLButtonElement>('.run-recovery > .run-card .run-card-head button')!.click())
     await vi.waitFor(() => expect(cards()).toEqual([
       ['蓝图恢复稿 · 第 15–16 章', '缺第 16 章 · 11月7日 09:32 生成'],
       ['蓝图恢复稿 · 第 13–14 章', '缺第 14 章 · 11月7日 08:32 生成'],
@@ -1060,10 +1113,10 @@ describe('运行侧页的规划恢复稿（#608）', () => {
     await render()
     await vi.waitFor(() => expect(cards()).toHaveLength(1))
     expect(button('编辑恢复稿')).toBeTruthy()
-    expect(button('放弃…')).toBeUndefined()
+    expect(button('不再恢复')).toBeUndefined()
   })
 
-  it('确认放弃时另一张卡正在打开恢复稿：确认条留着，打开结束后再点「放弃」才放弃', async () => {
+  it('另一张卡正在打开恢复稿时「不再恢复」不可点，打开结束后可以点', async () => {
     let opened: (() => void) | undefined
     const fallback = invoke.getMockImplementation()!
     invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
@@ -1076,15 +1129,12 @@ describe('运行侧页的规划恢复稿（#608）', () => {
     await render()
     await vi.waitFor(() => expect(cards()).toHaveLength(2))
     const card = (index: number) => host!.querySelectorAll('.run-recovery > .run-card')[index]!
-    const inCard = (index: number, name: string) => [...card(index).querySelectorAll<HTMLButtonElement>('.run-card-buttons button')].find(item => item.textContent === name)!
-    await act(async () => inCard(0, '放弃…').click())
-    await act(async () => inCard(1, '编辑恢复稿').click())
-    await act(async () => inCard(0, '放弃').click())
-    expect(card(0).querySelector('[role="group"]')?.textContent).toContain('正式内容不受影响；放弃后这份恢复稿不再列出。')
-    expect(dismissed()).toEqual([])
-
+    const abandon = () => card(0).querySelector<HTMLButtonElement>('.run-card-head button')!
+    await act(async () => [...card(1).querySelectorAll<HTMLButtonElement>('.run-card-buttons button')].find(item => item.textContent === '编辑恢复稿')!.click())
+    expect(abandon().disabled).toBe(true)
     await act(async () => opened!())
-    await act(async () => inCard(0, '放弃').click())
+    await vi.waitFor(() => expect(abandon().disabled).toBe(false))
+    await act(async () => abandon().click())
     await vi.waitFor(() => expect(dismissed()).toEqual(['最新']))
   })
 })

@@ -661,7 +661,7 @@ describe('explicit planning recovery with real SQLite', () => {
     const f = fixture(dispatch), run = f.owner.begin(kind === 'blueprint' ? directorySelection(f) : outlineSelection(f, 3))
     if (kind === 'blueprint') await f.owner.execute({ handle: run.handle, invocationNonce: 'failed', task: { ...task, purpose: 'chapter-blueprint-directory', output: 'structured-data' } })
     const repository = new GenerationRunRepository(() => f.db), context = f.owner.readContext(run.handle)
-    repository.recordPlanningDismissal(run.handle.runId)
+    f.owner.setRecoveryAbandoned({ handle: run.handle, abandoned: true })
     f.db.transaction(() => repository.recordPlotOutlineCommitWithinTransaction(run.handle.runId)).immediate()
     f.db.transaction(() => kind === 'blueprint'
       ? f.owner.commitBlueprintAuthorEdit({ mode: 'replace-range', operationId: 'author-blueprint', startChapter: 1, endChapter: 1,
@@ -669,7 +669,7 @@ describe('explicit planning recovery with real SQLite', () => {
         authorRecovery: { sourceHandle: run.handle, leaseEpoch: context.blueprintRecovery!.leaseEpoch } })
       : f.owner.commitPlotOutlineAuthorEdit({ synopsis: renderPlotOutlineSynopsis(outlineEntry(1), 1, context.plotOutline!.sourceExpected), expected: context.plotOutline!.sourceExpected,
         authorRecovery: { sourceHandle: run.handle, leaseEpoch: context.plotOutlineRecovery!.leaseEpoch, operationId: 'author-outline', committedRange: { from: 1, to: 1 } } })).immediate()
-    expect(repository.planningDismissed(run.handle.runId)).toBe(true)
+    expect(repository.recoveryAbandonment(run.handle.runId)).not.toBeNull()
     expect(repository.plotOutlineCommitted(run.handle.runId)).toBe(true)
   })
   it('较新的章节蓝图运行读不出时，跳过它找到较早的恢复稿（#536）', async () => {
@@ -3509,6 +3509,18 @@ describe('main draft persistence and batch lineage', () => {
       DraftRepository.delete(replacement)
       expect(runIds(f.owner.listRecovery().batches)).toEqual([batch.batchId])
     })
+    it('取消后续不上的批次不再列为可续（#686）', async () => {
+      const f = drafting()
+      f.db.exec("INSERT INTO blueprints(chapter_number,title) VALUES(2,'第二章')")
+      const batch = f.owner.beginBatch({ mode: 'draft_review', range: { startChapter: 1, endChapter: 2 }, targetUnits: 20,
+        uiActionNonce: 'batch', modelId: f.model.id, authorInputs, promptKeys: f.begin.promptKeys, skillStages: [] })
+      const child = await generate(f, { ...f.begin, authorInputs, batchId: batch.batchId, parentRootActionId: batch.rootHandle.rootActionId })
+      const saved = f.owner.commitDraft(child.request)
+      f.owner.cancel(child.run.handle)
+      await expect(generate(f, { ...f.begin, chapterNumber: 2, uiActionNonce: 'next', authorInputs, batchId: batch.batchId,
+        parentRootActionId: batch.rootHandle.rootActionId, selectedDraftIds: [saved.id] })).rejects.toThrow()
+      expect(f.reopen().listRecovery()).toMatchObject({ batches: [], partial: false })
+    })
     it('已保存的单章运行不列为可恢复，无论正文后来改没改过', async () => {
       const f = drafting()
       const current = await generate(f, { ...f.begin, uiActionNonce: 'current', authorInputs })
@@ -3520,6 +3532,86 @@ describe('main draft persistence and batch lineage', () => {
       const reopened = f.reopen()
       expect([current, changed].map(item => reopened.readContext(item.run.handle).draftSave.kind)).toEqual(['current', 'changed'])
       expect(runIds(reopened.listRecovery().drafts)).toEqual([unsaved.run.handle.runId])
+    })
+    it('「不再恢复」把单章运行和可续批次移出列表，重开项目也不回来，批次写过的章不再锁住；撤销后照常列出，生成记录不动（#686）', async () => {
+      const f = drafting()
+      f.db.exec("INSERT INTO blueprints(chapter_number,title) VALUES(2,'第二章')")
+      const unsaved = await generate(f, { ...f.begin, uiActionNonce: 'unsaved', authorInputs })
+      const batch = f.owner.beginBatch({ mode: 'draft_review', range: { startChapter: 1, endChapter: 2 }, targetUnits: 20,
+        uiActionNonce: 'batch', modelId: f.model.id, authorInputs, promptKeys: f.begin.promptKeys, skillStages: [] })
+      f.owner.commitDraft((await generate(f, { ...f.begin, uiActionNonce: 'child', authorInputs, batchId: batch.batchId, parentRootActionId: batch.rootHandle.rootActionId })).request)
+      const locked = () => new GenerationDraftEffects(f.fixture.db, new GenerationRunRepository(() => f.fixture.db)).unfinishedBatchChapters('project')
+      expect(locked()).toEqual(new Set([1]))
+      const records = () => [f.db.prepare('SELECT * FROM generation_attempts').all(), f.db.prepare('SELECT * FROM generation_artifacts').all()]
+      const before = records()
+
+      f.owner.setRecoveryAbandoned({ handle: unsaved.run.handle, abandoned: true })
+      f.owner.setRecoveryAbandoned({ handle: batch.rootHandle, abandoned: true })
+      expect(f.owner.listRecovery()).toMatchObject({ drafts: [], batches: [], partial: false })
+      expect(locked()).toEqual(new Set())
+      expect(records()).toEqual(before)
+
+      f.owner.setRecoveryAbandoned({ handle: batch.rootHandle, abandoned: false })
+      const list = f.reopen().listRecovery()
+      expect(list).toMatchObject({ drafts: [], partial: false })
+      expect(runIds(list.batches)).toEqual([batch.batchId])
+      expect(locked()).toEqual(new Set([1]))
+    })
+    it('放弃的批次接着写出下一章，重新列为可续、写过的章重新锁住（#686）', async () => {
+      const f = drafting()
+      f.db.exec("INSERT INTO blueprints(chapter_number,title) VALUES(2,'第二章'),(3,'第三章')")
+      const batch = f.owner.beginBatch({ mode: 'draft_review', range: { startChapter: 1, endChapter: 3 }, targetUnits: 20,
+        uiActionNonce: 'batch', modelId: f.model.id, authorInputs, promptKeys: f.begin.promptKeys, skillStages: [] })
+      const first = f.owner.commitDraft((await generate(f, { ...f.begin, uiActionNonce: 'child', authorInputs, batchId: batch.batchId, parentRootActionId: batch.rootHandle.rootActionId })).request)
+      f.owner.setRecoveryAbandoned({ handle: batch.rootHandle, abandoned: true })
+      expect(f.owner.listRecovery().batches).toEqual([])
+
+      f.owner.commitDraft((await generate(f, { ...f.begin, chapterNumber: 2, uiActionNonce: 'next', authorInputs, batchId: batch.batchId,
+        parentRootActionId: batch.rootHandle.rootActionId, selectedDraftIds: [first.id] })).request)
+      expect(f.reopen().listRecovery().batches.map(item => [item.batchId, item.nextChapterNumber])).toEqual([[batch.batchId, 3]])
+      expect(new GenerationDraftEffects(f.fixture.db, new GenerationRunRepository(() => f.fixture.db)).unfinishedBatchChapters('project')).toEqual(new Set([1, 2]))
+    })
+    it('放弃前已开的下一章经续跑写出文字，批次回到可续、写过的章重新锁住（#686）', async () => {
+      const f = drafting()
+      f.db.exec("INSERT INTO blueprints(chapter_number,title) VALUES(2,'第二章'),(3,'第三章')")
+      const batch = f.owner.beginBatch({ mode: 'draft_review', range: { startChapter: 1, endChapter: 3 }, targetUnits: 20,
+        uiActionNonce: 'batch', modelId: f.model.id, authorInputs, promptKeys: f.begin.promptKeys, skillStages: [] })
+      const first = f.owner.commitDraft((await generate(f, { ...f.begin, uiActionNonce: 'child', authorInputs, batchId: batch.batchId, parentRootActionId: batch.rootHandle.rootActionId })).request)
+      const next = f.owner.begin({ ...f.begin, chapterNumber: 2, uiActionNonce: 'next', authorInputs, batchId: batch.batchId,
+        parentRootActionId: batch.rootHandle.rootActionId, selectedDraftIds: [first.id] })
+      f.owner.setRecoveryAbandoned({ handle: batch.rootHandle, abandoned: true })
+      expect(f.owner.listRecovery().batches).toEqual([])
+
+      const locked = () => new GenerationDraftEffects(f.fixture.db, new GenerationRunRepository(() => f.fixture.db)).unfinishedBatchChapters('project')
+      expect(locked()).toEqual(new Set())
+
+      const owner = f.reopen(), resumed = await owner.resume(next.handle)
+      expect((await owner.execute({ handle: resumed.handle, invocationNonce: 'next', task })).run.artifacts[0]?.text).toBeTruthy()
+      expect(runIds(owner.listRecovery().batches)).toEqual([batch.batchId])
+      expect(locked()).toEqual(new Set([1]))
+    })
+    it('放弃后写出新文字才重新列出；重启后没落盘的尾段消失、内容变少不算（#686）', async () => {
+      const f = drafting()
+      const run = (await generate(f, { ...f.begin, uiActionNonce: 'run', authorInputs })).run.handle
+      f.owner.setRecoveryAbandoned({ handle: run, abandoned: true })
+      expect(f.owner.listRecovery().drafts).toEqual([])
+      await f.owner.execute({ handle: run, invocationNonce: 'more', task })
+      expect(runIds(f.owner.listRecovery().drafts)).toEqual([run.runId])
+
+      f.db.exec("CREATE TRIGGER reject_snapshot BEFORE UPDATE OF artifact_json ON generation_artifacts BEGIN SELECT RAISE(FAIL,'synthetic disk failure'); END")
+      const tail = await f.owner.execute({ handle: run, invocationNonce: 'tail', task })
+      f.db.exec('DROP TRIGGER reject_snapshot')
+      expect(tail.run.unsavedTails?.[0]?.text.trim()).toBeTruthy()
+      f.owner.setRecoveryAbandoned({ handle: run, abandoned: true })
+      expect(f.owner.listRecovery().drafts).toEqual([])
+      const close = f.owner.suspendForProjectClose
+      f.owner.suspendForProjectClose = () => {
+        try { close() } catch (error) { if (!(error instanceof Error && error.message === 'GENERATION_UNSAVED_TAIL_PRESENT')) throw error }
+      }
+      const reopened = f.reopen()
+      expect(reopened.listRecovery().drafts).toEqual([])
+      reopened.setRecoveryAbandoned({ handle: run, abandoned: false })
+      expect(reopened.listRecovery().drafts.map(item => item.view.unsavedTails ?? [])).toEqual([[]])
     })
     it('尾段对不回尝试行时跳过它，不当作哪个运行的尾段', async () => {
       const f = drafting()
@@ -4055,8 +4147,8 @@ describe('规划恢复稿是否还列为可恢复（#608）', () => {
     expect(f.owner.findBlueprintRecovery()?.handle).toEqual(newer)
     const repository = new GenerationRunRepository(() => f.db), frozen = repository.get(newer.runId)
     const attempts = f.db.prepare('SELECT * FROM generation_attempts').all(), artifacts = f.db.prepare('SELECT * FROM generation_artifacts').all()
-    f.owner.dismissPlanningRecovery(newer)
-    f.owner.dismissPlanningRecovery(newer)
+    f.owner.setRecoveryAbandoned({ handle: newer, abandoned: true })
+    f.owner.setRecoveryAbandoned({ handle: newer, abandoned: true })
     expect(f.listed()).toEqual([older.runId])
     expect(f.owner.findBlueprintRecovery()?.handle).toEqual(older)
     expect(f.owner.readContext(newer)).toMatchObject({ planningDraft: { standing: 'dismissed' }, blueprintRecovery: { draft: raw } })
@@ -4064,12 +4156,6 @@ describe('规划恢复稿是否还列为可恢复（#608）', () => {
     expect(f.db.prepare('SELECT * FROM generation_attempts').all()).toEqual(attempts)
     expect(f.db.prepare('SELECT * FROM generation_artifacts').all()).toEqual(artifacts)
     expect(f.reopen().listRecovery().planning.map(item => item.handle.runId)).toEqual([older.runId])
-  })
-
-  it('只有规划恢复稿能放弃', () => {
-    const f = directoryFixture()
-    const draft = f.owner.begin(f.begin)
-    expect(() => f.owner.dismissPlanningRecovery(draft.handle)).toThrow('GENERATION_PLANNING_RECOVERY_INVALID')
   })
 
   it('生成正在进行的那份：章节被别处补齐也不判为过时，也不能放弃', async () => {
@@ -4083,7 +4169,7 @@ describe('规划恢复稿是否还列为可恢复（#608）', () => {
     f.db.prepare('UPDATE generation_runs SET created_at_ms=created_at_ms-60000 WHERE run_id=?').run(run.handle.runId)
     BlueprintRepository.commitRange({ mode: 'replace-range', operationId: 'elsewhere', startChapter: 1, endChapter: 3, blueprints: rows(1, 3, '别处生成的蓝图') })
     expect(f.owner.readContext(run.handle).planningDraft?.standing).toBe('open')
-    expect(() => f.owner.dismissPlanningRecovery(run.handle)).toThrow('GENERATION_PLANNING_RECOVERY_IN_FLIGHT')
+    expect(() => f.owner.setRecoveryAbandoned({ handle: run.handle, abandoned: true })).toThrow('GENERATION_PLANNING_RECOVERY_IN_FLIGHT')
     release!(); await work
     expect(f.owner.readContext(run.handle).planningDraft?.standing).toBe('superseded')
   })
@@ -4099,7 +4185,6 @@ describe('规划恢复稿是否还列为可恢复（#608）', () => {
     expect(list.planning.map(item => item.handle.runId)).toEqual([open.runId])
     expect(list.partial).toBe(true)
     expect(f.owner.findBlueprintRecovery()?.handle).toEqual(open)
-    expect(() => f.owner.dismissPlanningRecovery(broken)).toThrow()
     expect(f.listed()).toEqual([open.runId])
   })
 
@@ -4188,7 +4273,7 @@ describe('规划恢复稿是否还列为可恢复（#608）', () => {
     const f = directoryFixture()
     const kept = await f.failed(1, 3, 'kept')
     const dismissed = await f.failed(1, 3, 'dismissed')
-    f.owner.dismissPlanningRecovery(dismissed)
+    f.owner.setRecoveryAbandoned({ handle: dismissed, abandoned: true })
     const owner = f.reopen()
     expect(owner.listRecovery().planning.map(item => item.handle.runId)).toEqual([kept.runId])
     await owner.resume(dismissed)

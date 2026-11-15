@@ -406,9 +406,9 @@ describe('同一范围的几份规划恢复稿（#608）', () => {
     expect(entries.map(entry => entry.title)).toEqual(['蓝图恢复稿 · 第 1–2 章', '大纲恢复稿 · 第 1–2 章'])
   })
 
-  it('有生成正在进行时不给放弃；放弃的确认只说正式内容不受影响、这份不再列出', () => {
+  it('有生成正在进行时不给放弃', () => {
     const [idle] = buildRecoveryEntries({ ...EMPTY_RECOVERY_SOURCES, planning: [blueprint('甲', 1, 2, at(7, 9))] }, 'zh-CN')
-    expect(idle).toMatchObject({ canDismiss: true, labels: { dismiss: '放弃…', dismissConfirm: '正式内容不受影响；放弃后这份恢复稿不再列出。', confirm: '放弃', keep: '保留' } })
+    expect(idle).toMatchObject({ canDismiss: true })
     const [busy] = buildRecoveryEntries({ ...EMPTY_RECOVERY_SOURCES, planning: [blueprint('甲', 1, 2, at(7, 9), { planningContinuation: { state: 'in-flight', remainingRange: { from: 2, to: 2 } } })] }, 'zh-CN')
     expect(busy).toMatchObject({ canDismiss: false })
   })

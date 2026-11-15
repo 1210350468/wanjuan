@@ -1,5 +1,5 @@
 import type { Locale } from '../../i18n/types'
-import type { MainGenerationRunView } from '../../services/generation/generation-runtime'
+import type { MainGenerationRunHandle, MainGenerationRunView } from '../../services/generation/generation-runtime'
 import type { GenerationBudgetDiagnostic } from '../../services/generation/task-budget-planner'
 import { canCommitRecoveredReview } from '../../services/workflows/commands/review-chapter.command'
 import { withoutDraftReconciliationArtifacts } from '../../shared/draft-reconciliation'
@@ -54,7 +54,7 @@ export interface PlanningEntry {
   canDismiss: boolean
   /** 同一范围更早的几份，新的在前。 */
   earlier: PlanningEntry[]
-  labels: { dismiss: string; dismissConfirm: string; confirm: string; keep: string; earlier: string }
+  labels: { earlier: string }
   recovery: GenerationRecoveryContext
 }
 
@@ -71,7 +71,7 @@ export interface EditorEntry extends Usage {
   documentText: string
   canContinue: boolean
   hideKey: string
-  labels: { copySuggestion: string; copyTail: string; copyDocument: string; continue: string; hide: string }
+  labels: { copySuggestion: string; copyTail: string; copyDocument: string; continue: string }
   recovery: EditorInlineRecovery
 }
 
@@ -94,7 +94,7 @@ export interface ReviewEntry extends Usage {
   /** 结果已经保存：卡片只留给作者打开或复制，不再算可恢复。 */
   saved: boolean
   hideKey: string
-  labels: { copy: string; copyTail: string; hide: string }
+  labels: { copy: string; copyTail: string }
   view: MainGenerationRunView
 }
 
@@ -106,6 +106,7 @@ export interface BatchEntry {
   actionLabel: string
   batchId: string
   range: { startChapter: number; endChapter: number }
+  handle: MainGenerationRunHandle
 }
 
 /** 单章写作中断、没保存：勾选保留的片段续写，或沿已存细纲继续。 */
@@ -123,7 +124,7 @@ export interface DraftEntry extends Usage {
   changed: boolean
   /** 没有已存的续写方案时，至少要勾选一段才能继续。 */
   needsPick: boolean
-  labels: { copy: string; tailLead: string; hide: string }
+  labels: { copy: string; tailLead: string }
   view: MainGenerationRunView
 }
 
@@ -149,7 +150,7 @@ function usageOf(view: Pick<MainGenerationRunView, 'budgetDiagnostics' | 'ledger
 /** 没写出任何字的片段（例如刚发出请求就取消）没有可复制、可续接的内容，不列出。 */
 export const hasText = (item: { text: string }) => item.text.trim().length > 0
 
-/** 「不再显示」记的是这一刻列出的内容：同一运行之后又留下新候选或新尾段时，标记对不上，卡片重新出现。 */
+/** 1.4.0 本机「不再显示」的标记：运行 id 加当时列出的片段与尾段。 */
 const hideKeyOf = (runId: string, items: readonly RecoveryText[]) => `${runId}#${items.map(item => `${item.id}:${item.text.length}`).join(',')}`
 
 const texts = (items: readonly { attemptId: string; text: string }[] | undefined): RecoveryText[] =>
@@ -251,10 +252,6 @@ function planningEntry(recovery: GenerationRecoveryContext, locale: Locale, earl
     canDismiss: recovery.planningContinuation?.state !== 'in-flight',
     earlier,
     labels: {
-      dismiss: t('放弃…', 'Dismiss…'),
-      dismissConfirm: t('正式内容不受影响；放弃后这份恢复稿不再列出。', 'Saved content stays as is. This recovery draft will no longer be listed.'),
-      confirm: t('放弃', 'Dismiss'),
-      keep: t('保留', 'Keep'),
       earlier: t(`更早的 ${earlier.length} 份`, `${earlier.length} earlier ${pluralEn(earlier.length, 'draft')}`),
     },
     recovery,
@@ -306,7 +303,6 @@ function editorEntry(recovery: EditorInlineRecovery, locale: Locale): EditorEntr
       copyTail: t('复制未保存文字', 'Copy unsaved text'),
       copyDocument: t('复制原文稿', 'Copy original manuscript'),
       continue: t('继续原选区任务', 'Continue original selection task'),
-      hide: t('不再显示', 'Hide'),
     },
     recovery,
   }
@@ -407,7 +403,7 @@ function reviewEntry({ view, recovery }: RecoverySources['reviews'][number], loc
     canAct: Boolean(recovery.saved) || reviewCanResume(view, recovery),
     saved: Boolean(recovery.saved),
     hideKey: hideKeyOf(view.handle.runId, [...artifacts, ...tails]),
-    labels: { copy: t('复制', 'Copy'), copyTail: t('复制未保存文字', 'Copy unsaved text'), hide: t('不再显示', 'Hide') },
+    labels: { copy: t('复制', 'Copy'), copyTail: t('复制未保存文字', 'Copy unsaved text') },
     view,
   }
 }
@@ -422,6 +418,7 @@ function batchEntry(batch: GenerationBatchHistory, locale: Locale): BatchEntry {
     actionLabel: t('继续此批次', 'Continue this batch'),
     batchId: batch.batchId,
     range: batch.range,
+    handle: batch.rootHandle,
   }
 }
 
@@ -456,7 +453,7 @@ function draftEntry({ view, recovery }: RecoverySources['drafts'][number], local
         : t('确认继续已选正文', 'Confirm selected draft continuation'),
     changed,
     needsPick: !recovery.composition && !outlineOnly,
-    labels: { copy: t('复制', 'Copy'), tailLead: t('尚未落盘的正文，可先复制保留：', 'Text not yet saved; copy it to preserve it:'), hide: t('不再显示', 'Hide') },
+    labels: { copy: t('复制', 'Copy'), tailLead: t('尚未落盘的正文，可先复制保留：', 'Text not yet saved; copy it to preserve it:') },
     view,
   }
 }
@@ -489,6 +486,17 @@ function sameChapters(keys: readonly string[] | undefined, range: BatchEntry['ra
 /** 单章候选的续写按钮是否可点：勾了片段，或有已存方案可沿用。 */
 export function canResumeDraft(entry: DraftEntry, picked: readonly string[]): boolean {
   return !entry.changed && (picked.length > 0 || !entry.needsPick)
+}
+
+/** 旧恢复候选表不是生成运行，没有可放弃的运行。 */
+export function abandonHandle(entry: RecoveryEntry): MainGenerationRunHandle | undefined {
+  switch (entry.kind) {
+    case 'planning': return entry.canDismiss ? entry.recovery.handle : undefined
+    case 'editor': return entry.recovery.view.handle
+    case 'review': case 'draft': return entry.view.handle
+    case 'batch': return entry.handle
+    case 'candidate': return undefined
+  }
 }
 
 /** 列出顺序与旧 AI 输出一致：恢复稿、选区建议、审修、批量、单章，最后是旧的恢复候选表。 */

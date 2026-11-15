@@ -360,7 +360,7 @@ export interface GenerationOwnerChannels {
   'generation:list-batches': { args: []; return: GenerationBatchHistory[] }
   'generation:list-recovery': { args: []; return: GenerationRecoveryList }
   'generation:find-blueprint-recovery': { args: []; return: GenerationRecoveryContext | null }
-  'generation:dismiss-planning-recovery': { args: [{ handle: MainGenerationRunHandle }]; return: void }
+  'generation:set-recovery-abandoned': { args: [{ handle: MainGenerationRunHandle; abandoned: boolean }]; return: void }
   'generation:confirm-batch-finalization': { args: [{ batchId: string; chapterNumber: number; finalizationId: string }]; return: GenerationBatchProgress }
   'generation:list-directory-progress': { args: []; return: DirectoryGenerationCatalog }
   'generation:compose-visible': { args: [MainGenerationRunHandle, string[], string | undefined, VisibleCompositionAlgorithm?]; return: VisibleCompositionReceipt }

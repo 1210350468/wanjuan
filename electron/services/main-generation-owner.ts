@@ -615,6 +615,9 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
     if ((!materialDecision && ['review-chapter', 'refine-draft', 'refine-from-review'].includes(materialOperation))
       || !materialDecision && materialOperation === 'chapter-draft' && run.binding.sourceManifest.preparationId)
       throw new Error('GENERATION_MATERIAL_DECISION_REQUIRED')
+    // 批次的新文字写在子运行上，根上记的字数比不出来；新开或续上的下一章开写就算不再放弃。
+    const batchId = run.binding.sourceManifest.batchId as string | undefined
+    if (batchId && repository.recoveryAbandonment(batchId)) repository.clearRecoveryAbandonment(batchId)
     let reconciliationInjected = false
     if (materialDecision) {
       const prior = runAttempts(run.runId).filter(attempt => attempt.status !== 'cancelled-before-dispatch')
@@ -871,16 +874,26 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
     if (!requestedRange) return undefined
     const base = { requestedRange, createdAtMs: repository.createdAtMs(run.runId) }
     if (planningRunInFlight(run.runId)) return { ...base, standing: 'open' }
-    if (repository.planningDismissed(run.runId)) return { ...base, standing: 'dismissed' }
+    if (recoveryAbandoned(run)) return { ...base, standing: 'dismissed' }
     if (continuation && planningSuperseded(run, outline, continuation.remainingRange)) return { ...base, standing: 'superseded' }
     return { ...base, standing: 'open' }
   }
-  /** 只记在运行上，候选原文与正式内容不动；正在生成的不能放弃。 */
-  const dismissPlanningRecovery = (handle: MainGenerationRunHandle) => {
-    const context = readContext(handle)
-    if (!context.planningDraft) throw new Error('GENERATION_PLANNING_RECOVERY_INVALID')
-    if (planningRunInFlight(handle.runId)) throw new Error('GENERATION_PLANNING_RECOVERY_IN_FLIGHT')
-    if (context.planningDraft.standing !== 'dismissed') repository.recordPlanningDismissal(handle.runId)
+  const recoveryOutputs = (run: DurableGenerationRun): Record<string, number> => {
+    const view = viewOf(run), shown: Record<string, number> = {}
+    for (const item of [...view.artifacts, ...view.candidates ?? [], ...view.unsavedTails ?? []]) shown[item.artifactId] = Math.max(shown[item.artifactId] ?? 0, item.text.length)
+    return shown
+  }
+  /** 作者点了「不再恢复」，之后也没写出新的文字（新输出或同一输出变长）。重启后未落盘尾段没了、内容变少不算。 */
+  const recoveryAbandoned = (run: DurableGenerationRun): boolean => {
+    const shown = repository.recoveryAbandonment(run.runId)
+    return shown !== null && Object.entries(recoveryOutputs(run)).every(([id, length]) => length <= (shown[id] ?? 0))
+  }
+  /** 只在运行上记一笔，不动生成记录、候选原文与正式内容。 */
+  const setRecoveryAbandoned = ({ handle, abandoned }: { handle: MainGenerationRunHandle; abandoned: boolean }) => {
+    const run = requireRun(handle)
+    if (!abandoned) return repository.clearRecoveryAbandonment(run.runId)
+    if (planningRunInFlight(run.runId) && readContext(handle).planningDraft) throw new Error('GENERATION_PLANNING_RECOVERY_IN_FLIGHT')
+    repository.recordRecoveryAbandonment(run.runId, recoveryOutputs(run))
   }
   const plotOutlineRecovery = (run: DurableGenerationRun, outline: PlotOutlineProgress): PlotOutlineRecovery => {
     const saved = repository.readPlotOutlineAuthorEdit(run.runId)
@@ -1136,17 +1149,19 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
     for (const run of runs) {
       const kind = RECOVERY_KIND.get(run.operation ?? '')
       if (!kind || (kind === 'draft' && run.batchId)) continue
-      try { collect[kind](run.handle) } catch (error) {
+      try {
+        if (!recoveryAbandoned(repository.get(run.handle.runId))) collect[kind](run.handle)
+      } catch (error) {
         if (!(error instanceof ReviewSourceDeletedError)) list.partial = true
       }
     }
-    const batchRoots = runs.filter(item => item.batchRoot)
-    if (!batchRoots.length) return list
+    const batchIds = draftEffects.resumableBatchIds(deps.projectId)
+    if (!batchIds.length) return list
     const { commits, unreadable } = draftEffects.listedBatchCommits()
     if (unreadable) list.partial = true
-    for (const run of batchRoots) {
+    for (const batchId of batchIds) {
       try {
-        const batch = draftEffects.readBatchHistory(run.handle.runId, deps.projectId, commits)
+        const batch = draftEffects.readBatchHistory(batchId, deps.projectId, commits)
         if (batch.sourceCurrent && batch.nextChapterNumber !== null) list.batches.push(batch)
       } catch { list.partial = true }
     }
@@ -1676,7 +1691,7 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
     prepareReviewRevision: (request: PrepareReviewRevisionRequest) => reviewRevisions.prepare(request),
     commitReview: (request: ReviewGenerationCommitRequest) => reviewRevisions.commitReview(request, assertSourcesCurrent),
     commitRevision: (request: RevisionGenerationCommitRequest) => reviewRevisions.commitRevision(request, assertSourcesCurrent),
-    readReviewRevisionRecovery, listRecovery, findBlueprintRecovery, dismissPlanningRecovery,
+    readReviewRevisionRecovery, listRecovery, findBlueprintRecovery, setRecoveryAbandoned,
     readContext, readBatch, prepareDraftContext, preparedKnowledge, draftPreparationBinding, retryDraftShortOutline,
     beginBatch: (request: BeginGenerationBatchRequest) => {
       assertGenerationBatchIntent(request)

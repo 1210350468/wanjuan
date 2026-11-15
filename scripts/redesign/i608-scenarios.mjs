@@ -74,10 +74,7 @@ export const I608_SCENARIOS = {
     await sheet.locator('.run-earlier-item').first().waitFor({ state: 'visible' })
     await shoot('i608-run-sheet-earlier')
 
-    await sheet.locator('.run-recovery > .run-card > .run-card-buttons').getByRole('button', { name: '放弃…' }).click()
-    await sheet.getByRole('group').getByText('正式内容不受影响；放弃后这份恢复稿不再列出。').waitFor({ state: 'visible' })
-    await shoot('i608-run-sheet-dismiss-confirm')
-    await sheet.getByRole('group').getByRole('button', { name: '放弃', exact: true }).click()
+    await sheet.locator('.run-recovery > .run-card > .run-card-head').getByRole('button', { name: '不再恢复' }).click()
     await sheet.locator('.run-earlier').waitFor({ state: 'detached' })
     const afterDismiss = await recoveryCards(page)
     await shoot('i608-run-sheet-dismissed')

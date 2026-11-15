@@ -751,7 +751,7 @@ describe('架构页开着时在运行侧页放弃大纲恢复稿（#608）', () 
     invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
       const open = (recoveryContext?.planningDraft as { standing: string } | undefined)?.standing === 'open'
       if (channel === 'generation:list-recovery') return { planning: open ? [recoveryContext] : [], editors: [], reviews: [], drafts: [], batches: [], partial: false }
-      if (channel === 'generation:dismiss-planning-recovery') {
+      if (channel === 'generation:set-recovery-abandoned') {
         // 主进程收到请求就同步记下放弃，回复晚一点才到渲染端。
         if (!dismissalFails) recoveryContext = { ...recoveryContext, planningDraft: { requestedRange: { from: 6, to: 10 }, createdAtMs: 1, standing: 'dismissed' } }
         return new Promise<void>((resolve, reject) => { reply = { resolve, reject } })
@@ -777,8 +777,7 @@ describe('架构页开着时在运行侧页放弃大纲恢复稿（#608）', () 
   const outlineEdit = () => [...outline().querySelectorAll('button')].find(item => item.textContent === '编辑恢复稿')
   const sheetButton = (name: string) => [...document.querySelector('.run-recovery > .run-card')!.querySelectorAll('button')].find(item => item.textContent === name)!
   async function dismissInRunSheet() {
-    await act(async () => sheetButton('放弃…').click())
-    await act(async () => sheetButton('放弃').click())
+    await act(async () => sheetButton('不再恢复').click())
   }
   const openedRecoveryTabs = () => useEditorStore.getState().tabs.flatMap(tab => tab.planningRecovery ? [tab.planningRecovery.handle.runId] : [])
 
@@ -798,7 +797,7 @@ describe('架构页开着时在运行侧页放弃大纲恢复稿（#608）', () 
     await dismissInRunSheet()
     await act(async () => reply!.reject(new Error('GENERATION_PLANNING_RECOVERY_IN_FLIGHT')))
     await vi.waitFor(() => expect(document.querySelector('.run-recovery [role="alert"]')?.textContent).toBeTruthy())
-    expect(sheetButton('放弃…')).toBeTruthy()
+    expect(sheetButton('不再恢复')).toBeTruthy()
     await act(async () => outlineEdit()!.click())
     await vi.waitFor(() => expect(openedRecoveryTabs()).toEqual(['第二批']))
   })

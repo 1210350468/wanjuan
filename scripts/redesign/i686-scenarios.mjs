@@ -8,7 +8,7 @@ import { FIXTURE_PROSE } from './fake-model.mjs'
 import { firstLine, seedStageSample } from './scenarios.mjs'
 import { STAGE_SAMPLE } from './stage-sample.mjs'
 
-async function runsStarted(page) {
+export async function runsStarted(page) {
   return page.evaluate(() => {
     if (!window.__i686Runs) {
       window.__i686Runs = { count: 0 }
@@ -21,12 +21,12 @@ async function runsStarted(page) {
   })
 }
 
-async function waitRunDone(page, before) {
+export async function waitRunDone(page, before) {
   await page.waitForFunction(({ before, selector }) => window.__i686Runs.count > before && !document.querySelector(selector),
     { before, selector: '.stage-capsule:not([data-tone="ok"])' }, { timeout: 90_000 })
 }
 
-async function recoveryListed(app, page) {
+export async function recoveryListed(app, page) {
   if (await runSheet.sheet(page).isVisible()) {
     await runSheet.sheet(page).getByRole('button', { name: '收起运行侧页' }).first().click()
     await runSheet.sheet(page).waitFor({ state: 'hidden' })
@@ -54,10 +54,10 @@ const reviewCards = page => runSheet.sheet(page).locator('.run-recovery > .run-c
   .map(card => ({ kicker: card.querySelector('.run-card-kicker')?.textContent ?? '', title: card.querySelector('h3')?.textContent ?? '' }))
   .filter(card => /^第\d+章(审稿|修稿)候选$/u.test(card.title)))
 
-const allCards = page => runSheet.sheet(page).locator('.run-recovery > .run-card').evaluateAll(cards => cards.map(card => ({
+export const allCards = page => runSheet.sheet(page).locator('.run-recovery > .run-card').evaluateAll(cards => cards.map(card => ({
   kicker: card.querySelector('.run-card-kicker')?.textContent ?? '',
   title: card.querySelector('h3')?.textContent ?? '',
-  buttons: [...card.querySelectorAll('.run-card-buttons button')].map(button => button.textContent),
+  buttons: [...card.querySelectorAll('.run-card-head button, .run-card-buttons button')].map(button => button.textContent),
 })))
 
 async function refineSelection(page, text, finish) {
@@ -94,7 +94,7 @@ export const I686_SCENARIOS = {
     assert.deepEqual(cards, [{ kicker: '可恢复', title: '第4章审稿候选' }], '只列没保存的那次审稿，已保存的审稿与修稿不列')
     return { cards }
   } },
-  /** 选区润色替换一次、润色后取消一次，再审稿一次没拿到报告；重启后「可恢复」只剩那张审稿卡，它和选区卡都能「不再显示」。 */
+  /** 选区润色替换一次、润色后取消一次，再审稿一次没拿到报告；重启后「可恢复」只剩那张审稿卡，它和选区卡都能「不再恢复」。 */
   'i686-tail-cards': { model: true, shell: 'stage', setup: context => seedStageSample(context), run: async context => {
     await chapterView.open(context.page, 4)
     await refineSelection(context.page, firstLine(STAGE_SAMPLE.drafts[4].text), '替换')
@@ -113,14 +113,15 @@ export const I686_SCENARIOS = {
     const listed = await allCards(context.page)
     await context.shoot('i686-tail-run-sheet')
     assert.deepEqual(listed.map(card => card.title), ['第4章审稿候选'], '送达过和拒绝过的选区建议不列，只剩没拿到报告的审稿')
-    assert.ok(listed[0].buttons.includes('不再显示'), '审稿卡有「不再显示」')
+    assert.ok(listed[0].buttons.includes('不再恢复'), '审稿卡有「不再恢复」')
 
-    await runSheet.sheet(context.page).locator('.run-recovery > .run-card').first().getByRole('button', { name: '不再显示' }).click()
+    await runSheet.sheet(context.page).locator('.run-recovery > .run-card').first().getByRole('button', { name: '不再恢复' }).click()
+    await runSheet.sheet(context.page).locator('.run-recovery').waitFor({ state: 'detached' })
     const hidden = await allCards(context.page)
-    assert.deepEqual(hidden, [], '点「不再显示」后审稿卡不再列出')
+    assert.deepEqual(hidden, [], '点「不再恢复」后审稿卡不再列出')
     return { listed, hidden }
   } },
-  /** 审稿没拿到报告后又改了正文并保存，再让一次选区润色中途被拦下；重启后两张卡都只能复制，各有「不再显示」。 */
+  /** 审稿没拿到报告后又改了正文并保存，再让一次选区润色中途被拦下；重启后两张卡都只能复制，各有「不再恢复」。 */
   'i686-tail-copy-only': { model: true, shell: 'stage', setup: context => seedStageSample(context), run: async context => {
     await chapterView.open(context.page, 4)
     context.fake.replyReview(prompt => prompt.includes('goalReviews') ? '这一次没有给出审稿报告。' : null)
@@ -148,16 +149,17 @@ export const I686_SCENARIOS = {
     const listed = await allCards(context.page)
     await context.shoot('i686-tail-copy-only-run-sheet')
     assert.deepEqual(listed.map(card => card.title), ['编辑器选区建议', '第4章审稿候选'], '中途被拦下的选区建议和来源已变的审稿仍列出')
-    assert.ok(listed.every(card => card.buttons.includes('不再显示')), '两张卡都有「不再显示」')
+    assert.ok(listed.every(card => card.buttons.includes('不再恢复')), '两张卡都有「不再恢复」')
     await runSheet.sheet(context.page).locator('.run-recovery > .run-card').last().locator('.run-card-buttons').scrollIntoViewIfNeeded()
     await context.shoot('i686-tail-copy-only-review')
 
     for (const title of ['编辑器选区建议', '第4章审稿候选']) {
       await runSheet.sheet(context.page).locator('.run-recovery > .run-card').filter({ has: context.page.getByRole('heading', { name: title }) })
-        .getByRole('button', { name: '不再显示' }).click()
+        .getByRole('button', { name: '不再恢复' }).click()
     }
+    await runSheet.sheet(context.page).locator('.run-recovery').waitFor({ state: 'detached' })
     const hidden = await allCards(context.page)
-    assert.deepEqual(hidden, [], '两张卡点「不再显示」后都不再列出')
+    assert.deepEqual(hidden, [], '两张卡点「不再恢复」后都不再列出')
     return { listed, hidden }
   } },
   /** 选区润色建好运行、请求还没发出去应用就关了；重启后在「进行中」点「继续原选区任务」，回到第 4 章原选区，气泡里出建议，替换后卡片不再列出。 */

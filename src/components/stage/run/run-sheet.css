@@ -49,6 +49,11 @@
   gap: 2px;
 }
 
+.run-card-head > .run-card-abandon {
+  flex: none;
+  margin: -4px -6px 0 0;
+}
+
 .run-card-titleline {
   display: flex;
   align-items: center;

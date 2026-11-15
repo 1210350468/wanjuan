@@ -617,13 +617,19 @@ export class GenerationRunRepository {
     createdAtMs(runId: string): number {
         return this.db().prepare('SELECT created_at_ms FROM generation_runs WHERE run_id=?').pluck().get(runId) as number;
     }
-    planningDismissed(runId: string): boolean {
-        return this.db().prepare(`SELECT json_type(binding_json,'$."$planningDismissal"') FROM generation_runs WHERE run_id=?`).pluck().get(runId) != null;
+    /** 作者点「不再恢复」时这次运行列出的输出（artifactId → 字数）；没放弃或已撤销为 null。 */
+    recoveryAbandonment(runId: string): Readonly<Record<string, number>> | null {
+        const shown = this.db().prepare(`SELECT json_extract(binding_json,'$."$recoveryAbandonment"') FROM generation_runs WHERE run_id=?`).pluck().get(runId) as string | null;
+        return shown === null ? null : JSON.parse(shown) as Record<string, number>;
     }
-    /** 作者放弃这份规划恢复稿：只在运行上记一笔，冻结的绑定、尝试、候选原文都不动；从别处导入的冻结历史不写。 */
-    recordPlanningDismissal(runId: string): void {
+    /** 只在运行上记一笔，冻结的绑定、尝试、候选原文都不动；从别处导入的冻结历史不写。 */
+    recordRecoveryAbandonment(runId: string, shown: Readonly<Record<string, number>>): void {
         if (this.portableFrozenRoot(this.get(runId).rootActionId)) fail('GENERATION_PLANNING_HISTORY_READ_ONLY');
-        this.db().prepare(`UPDATE generation_runs SET binding_json=json_set(binding_json,'$."$planningDismissal"','dismissed') WHERE run_id=?`).run(runId);
+        this.db().prepare(`UPDATE generation_runs SET binding_json=json_set(binding_json,'$."$recoveryAbandonment"',json(?)) WHERE run_id=?`).run(JSON.stringify(shown), runId);
+    }
+    clearRecoveryAbandonment(runId: string): void {
+        if (this.portableFrozenRoot(this.get(runId).rootActionId)) fail('GENERATION_PLANNING_HISTORY_READ_ONLY');
+        this.db().prepare(`UPDATE generation_runs SET binding_json=json_remove(binding_json,'$."$recoveryAbandonment"') WHERE run_id=?`).run(runId);
     }
     /** 选区建议发出了请求、气泡还没回执显示过。升级前的运行没有这一笔。 */
     editorInlineAwaitingDelivery(runId: string): boolean {

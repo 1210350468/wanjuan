@@ -12,12 +12,14 @@ import { useLocaleStore } from '../../stores/locale-store'
 import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore, type WorkflowDefinition } from '../../stores/workflow-store'
 import {
-  buildRecoveryEntries, EMPTY_RECOVERY_SOURCES, planningTitle,
+  abandonHandle, buildRecoveryEntries, EMPTY_RECOVERY_SOURCES, planningTitle,
   type BatchEntry, type CandidateEntry, type DraftEntry, type EditorEntry, type PlanningEntry, type RecoveryEntry, type RecoverySources, type ReviewEntry,
 } from './run-recovery'
 import { displayedErrorMessage } from '../../i18n/app-errors'
 import { leaveSettingsThen } from '../settings/unsaved-settings'
-import { hideRecovery, readHiddenRecovery } from './hidden-recovery'
+import { forgetHiddenRecovery, readHiddenRecovery } from './hidden-recovery'
+import { actionToast } from '../ui/ActionToast'
+import type { MainGenerationRunHandle } from '../../services/generation/generation-runtime'
 import { projectRuns } from './run-output'
 import type { GenerationRecoveryList } from '../../shared/generation-owner-contract'
 import { throwIfTerminalProviderFailure } from '../../services/generation/generation-harness'
@@ -62,14 +64,11 @@ export interface RunRecovery {
   continueCandidate: (entry: CandidateEntry) => void
   discardCandidate: (entry: CandidateEntry) => void
   openPlanning: (entry: PlanningEntry) => void
-  /** 放弃只记在运行上，不动候选原文与正式内容。 */
-  dismissPlanning: (entry: PlanningEntry) => void
   continueEditor: (entry: EditorEntry) => void
   resumeReview: (entry: ReviewEntry) => void
   resumeBatch: (entry: BatchEntry) => void
   resumeDraft: (entry: DraftEntry) => void
-  /** 只隐藏卡片，不动生成记录。 */
-  hide: (entry: DraftEntry | ReviewEntry | EditorEntry) => void
+  abandon: (entry: RecoveryEntry) => void
 }
 
 /**
@@ -93,9 +92,6 @@ export function useRunRecovery(): RunRecovery {
   const missedWhileWriting = useRef(false)
   const [selection, setSelection] = useState<Record<string, string[]>>({})
   const [busy, setBusy] = useState(false)
-  const projectId = session?.projectId
-  const hiddenEarlier = useMemo(() => projectId ? readHiddenRecovery(projectId) : new Set<string>(), [projectId])
-  const [hiddenNow, setHiddenNow] = useState<ReadonlySet<string>>(new Set())
 
   useEffect(() => {
     if (!session) {
@@ -165,8 +161,16 @@ export function useRunRecovery(): RunRecovery {
     if (!session) return []
     const ofSession = <T,>(loaded: Loaded<T>, empty: T) => sameProjectSessionContext(loaded.session, session) ? loaded.value : empty
     return buildRecoveryEntries({ ...ofSession(generationList, { ...EMPTY_RECOVERY_SOURCES, partial: false }), candidates: ofSession(candidateList, []) }, locale)
-      .filter(entry => !('hideKey' in entry) || (!hiddenEarlier.has(entry.hideKey) && !hiddenNow.has(entry.hideKey)))
-  }, [session, generationList, candidateList, locale, hiddenEarlier, hiddenNow])
+  }, [session, generationList, candidateList, locale])
+
+  /** 1.4.0 本机「不再显示」过的卡，读全列表后迁成运行上的「不再恢复」；全部迁成才删本机标记，失败下次再迁。 */
+  useEffect(() => {
+    if (!session || !sameProjectSessionContext(generationList.session, session) || generationList.value.partial) return
+    const hidden = readHiddenRecovery(session.projectId)
+    if (!hidden.size) return
+    const handles = entries.flatMap(entry => 'hideKey' in entry && hidden.has(entry.hideKey) ? [abandonHandle(entry)!] : [])
+    void Promise.all(handles.map(handle => setRecoveryAbandoned(session, handle, true))).then(() => forgetHiddenRecovery(session.projectId), () => {})
+  }, [session, generationList, entries])
 
   const stillCurrent = useCallback(() => session !== null && sameProjectSessionContext(session, currentSession()), [session])
 
@@ -257,10 +261,6 @@ export function useRunRecovery(): RunRecovery {
       if (!stillCurrent()) return
       openPlanningRecoveryDraft(fresh, current.projectPath, planningTitle(fresh, useLocaleStore.getState().locale))
     }),
-    dismissPlanning: entry => void act(async current => {
-      await ipc.invokeWithProjectSession(current, 'generation:dismiss-planning-recovery', { handle: entry.recovery.handle })
-      globalEventBus.emit('PLANNING_RECOVERY_CHANGED', { projectSession: current })
-    }),
     /** 选区是发起时正文里的偏移：原稿还开着、正文一字不差、编辑器接得住，才回到原选区气泡续跑；否则在侧页续跑。 */
     continueEditor: entry => {
       if (!session || !stillCurrent()) return
@@ -287,10 +287,56 @@ export function useRunRecovery(): RunRecovery {
       const picked = selection[entry.key] ?? []
       startRecovery(current => createDraftRecoveryWorkflow(current, entry.view.handle, picked.length ? [...picked] : undefined))
     },
-    hide: entry => {
-      if (!session || !stillCurrent()) return
-      hideRecovery(session.projectId, entry.hideKey)
-      setHiddenNow(previous => new Set(previous).add(entry.hideKey))
-    },
+    abandon: entry => void act(async current => {
+      const handle = abandonHandle(entry)
+      if (!handle) return
+      await setRecoveryAbandoned(current, handle, true)
+      showUndo(current, handle, entry.title)
+    }),
   }
+}
+
+let undo: { session: ProjectSessionContext; handles: MainGenerationRunHandle[]; titles: string[]; close: () => void } | undefined
+
+/** 提示条还在时再关的卡并进同一条，「撤销」一起放回，侧页旁不堆一摞提示。 */
+function showUndo(session: ProjectSessionContext, handle: MainGenerationRunHandle, title: string) {
+  const merged = undo && sameProjectSessionContext(undo.session, session) ? undo : undefined
+  undo = undefined
+  merged?.close()
+  const handles = [...merged?.handles ?? [], handle], titles = [...merged?.titles ?? [], title]
+  const { text } = useLocaleStore.getState()
+  const message = titles.length === 1
+    ? text(`已不再恢复「${title}」
+
+生成记录仍保留。`, `“${title}” won't be recovered
+
+The generation record is kept.`)
+    : text(`已不再恢复 ${titles.length} 张卡片
+
+生成记录仍保留。`, `${titles.length} cards won't be recovered
+
+The generation records are kept.`)
+  const shown = {
+    session, handles, titles,
+    close: actionToast.show({
+      type: 'info', message,
+      onDismiss: () => { if (undo === shown) undo = undefined },
+      actions: [{ label: text('撤销', 'Undo'), onClick: async () => {
+        if (!sameProjectSessionContext(session, currentSession())) return
+        const results = await Promise.allSettled(handles.map(item => setRecoveryAbandoned(session, item, false)))
+        const failed = results.flatMap((result, index) => result.status === 'rejected' ? [{ reason: result.reason as unknown, handle: handles[index]!, title: titles[index]! }] : [])
+        if (!failed.length) return
+        undo = undefined
+        for (const item of failed) showUndo(session, item.handle, item.title)
+        throw failed[0]!.reason
+      } }],
+    }),
+  }
+  undo = shown
+}
+
+/** 规划恢复稿还挂在蓝图页横幅和架构页提示上，三处一起重读。 */
+async function setRecoveryAbandoned(session: ProjectSessionContext, handle: MainGenerationRunHandle, abandoned: boolean): Promise<void> {
+  await ipc.invokeWithProjectSession(session, 'generation:set-recovery-abandoned', { handle, abandoned })
+  globalEventBus.emit('PLANNING_RECOVERY_CHANGED', { projectSession: session })
 }
