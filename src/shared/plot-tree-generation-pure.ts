@@ -11,7 +11,7 @@ import { writingLanguageText as promptLanguageText } from './writing-language'
 
 export const PLOT_TREE_INPUT_MAX_CHARACTERS = 220_000
 
-const PLOT_TREE_SOURCE_LIMITS = Object.freeze({
+export const PLOT_TREE_SOURCE_LIMITS = Object.freeze({
   synopsisCharacters: 6_000,
   labelCharacters: 160,
   detailCharacters: 320,

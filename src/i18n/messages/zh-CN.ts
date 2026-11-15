@@ -35,6 +35,7 @@ export const zhCN = {
   'error.legacyImportTargetTooDeep': '副本位置的路径太深，请重新点「导入旧项目副本」，选靠近磁盘根目录的位置（例如 D:\\Novels）。',
   'error.legacyImportIncompleteSource': '项目资料不完整或有无法识别的文件：请选旧项目原本的文件夹，不要手动改动里面的文件。',
   'error.legacyImportLinkedSource': '文件夹里有符号链接或硬链接，无法安全复制：请把它复制成普通文件夹，再点「导入旧项目副本」。',
+  'error.legacyImportLinkedTarget': '副本位置在链接文件夹下，无法安全写入：请重新点「导入旧项目副本」，换一个普通文件夹。',
   'error.legacyImportSourceBusy': '导入时这个项目正被别的程序占用：请关闭旧版程序和同步工具，再点「导入旧项目副本」。',
   'error.legacyImportKnowledgeOriginal': '知识库引用的原文缺失、已变化或在项目文件夹之外：请把原文放回项目文件夹，再点「导入旧项目副本」。',
   'error.legacyImportIoFailed': '读写文件时出错：请确认副本位置有足够空间和写入权限，再点「导入旧项目副本」。',

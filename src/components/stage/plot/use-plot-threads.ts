@@ -7,11 +7,7 @@ import type {
   NarrativeThreadEventCandidate,
   NarrativeThreadPlanCandidate,
 } from '../../../shared/narrative-thread-generation-pure'
-import {
-  PlotTreeInputLimitError,
-  PlotTreeSourceError,
-  PlotTreeSourceLimitError,
-} from '../../../shared/plot-tree-generation-pure'
+import { PLOT_TREE_SOURCE_LIMITS } from '../../../shared/plot-tree-generation-pure'
 import type { GraphGenerationInput, GraphGenerationRecovery } from '../../../shared/graph-generation'
 import type { DatabaseChannels } from '../../../shared/ipc-channels'
 import {
@@ -32,7 +28,7 @@ import { openChapterFile } from '../../panels/sidebar/sidebar-file-openers'
 import { captureProjectSession, isProjectSessionCurrent, isProjectSessionPath } from '../../project-session-gate'
 import { toast } from '../../ui/Toast'
 import { pluralEn } from '../../../shared/plural-en'
-import { knownAppErrorMessage } from '../../../i18n/app-errors'
+import { errorCodeOf, knownAppErrorMessage } from '../../../i18n/app-errors'
 import { providerContextFailureText } from '../../../services/generation/prompt-budget-failure'
 
 const EMPTY_PLAN: NarrativeThreadPlanInput = {
@@ -60,24 +56,26 @@ const SNAPSHOT_VALIDATION_ERROR_ENDINGS = [
   '无效', '不存在', '不匹配', '超出轨道章节范围', '重复', '不能有父轨道', '必须归属一条主线', '必须是现有主线', '缺少来源引用',
 ] as const
 
-function plotTreeErrorMessage(
+export function plotTreeErrorMessage(
   error: unknown,
   text: LocaleText,
   fallback: [zh: string, en: string],
 ): string {
-  if (error instanceof PlotTreeSourceLimitError) {
+  const code = errorCodeOf(error)
+  if (code === 'SOURCE_LIMIT_EXCEEDED') {
+    const maximum = PLOT_TREE_SOURCE_LIMITS.blueprints
     return text(
-      `剧情树完整来源上限为 ${error.maximum} 个章节；本次未调用模型，旧快照保持不变。`,
-      `The complete plot-tree source limit is ${error.maximum} ${pluralEn(error.maximum, 'chapter')}; the model was not called and the previous snapshot remains unchanged.`,
+      `旧剧情树没有改动。剧情树最多读 ${maximum} 章，这部作品的蓝图或定稿超过了。`,
+      `The previous plot tree is unchanged. A plot tree reads at most ${maximum} ${pluralEn(maximum, 'chapter')}, and this book has more blueprints or finalized chapters.`,
     )
   }
-  if (error instanceof PlotTreeInputLimitError) {
+  if (code === 'SOURCE_INPUT_TOO_LARGE') {
     return text(
-      '压缩后的剧情资料仍超过安全上下文上限；本次未调用模型，旧快照保持不变。请缩短资料后重试。',
-      'The compacted plot sources still exceed the safe context limit; the model was not called and the previous snapshot remains unchanged. Shorten the sources and try again.',
+      '旧剧情树没有改动。剧情资料压缩后仍然太长，缩短蓝图或线索后再试。',
+      'The previous plot tree is unchanged. The plot sources are still too long after compacting. Shorten the blueprints or threads and try again.',
     )
   }
-  if (error instanceof PlotTreeSourceError) {
+  if (code === 'NO_EVENT_SOURCES') {
     return text(
       '请先添加章节蓝图、定稿或叙事线索，再生成剧情树。',
       'Add a chapter blueprint, finalized chapter, or narrative thread before generating a plot tree.',

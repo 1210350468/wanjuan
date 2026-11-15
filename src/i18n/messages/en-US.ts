@@ -33,6 +33,7 @@ export const enUS = {
   'error.legacyImportTargetTooDeep': 'The copy location path is too deep. Click “Import an old project copy” and choose a location near the drive root (for example, D:\\Novels).',
   'error.legacyImportIncompleteSource': 'The project data is incomplete or has files the app does not recognize. Choose the original old project folder and do not edit the files inside it by hand.',
   'error.legacyImportLinkedSource': 'The folder has symbolic links or hard links, so it cannot be copied safely. Copy it to a plain folder, then click “Import an old project copy”.',
+  'error.legacyImportLinkedTarget': 'The copy location is inside a linked folder, so it cannot be written safely. Click “Import an old project copy” again and choose a plain folder.',
   'error.legacyImportSourceBusy': 'Another program was using this project during the import. Close the old app and any sync tool, then click “Import an old project copy”.',
   'error.legacyImportKnowledgeOriginal': 'An original file used by the knowledge base is missing, has changed, or is outside the project folder. Put it back in the project folder, then click “Import an old project copy”.',
   'error.legacyImportIoFailed': 'A file could not be read or written. Make sure the copy location has enough space and write access, then click “Import an old project copy”.',

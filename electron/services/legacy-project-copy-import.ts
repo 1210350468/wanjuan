@@ -45,12 +45,12 @@ function within(root: string, candidate: string): boolean {
   const relative = path.relative(key(root), key(candidate))
   return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
 }
-function physicalDirectory(directory: string): void {
+function physicalDirectory(directory: string, code = 'LEGACY_IMPORT_UNSAFE_PATH'): void {
   let cursor = path.parse(path.resolve(directory)).root
   for (const part of path.resolve(directory).slice(cursor.length).split(path.sep).filter(Boolean)) {
     cursor = path.join(cursor, part)
     const info = fs.lstatSync(cursor)
-    if (!info.isDirectory() || info.isSymbolicLink() || key(fs.realpathSync.native(cursor)) !== key(cursor)) fail('LEGACY_IMPORT_UNSAFE_PATH')
+    if (!info.isDirectory() || info.isSymbolicLink() || key(fs.realpathSync.native(cursor)) !== key(cursor)) fail(code)
   }
 }
 function treeHash(root: string): string {
@@ -319,7 +319,7 @@ export async function importLegacyProjectCopy(options: {
   try {
     const sourceRoot = path.resolve(options.sourceRoot), targetRoot = path.resolve(options.targetRoot)
     const parent = path.dirname(targetRoot), checkpoint = options.checkpoint ?? (() => {})
-    physicalDirectory(sourceRoot); physicalDirectory(parent)
+    physicalDirectory(sourceRoot); physicalDirectory(parent, 'LEGACY_IMPORT_TARGET_UNSAFE_PATH')
     if (within(sourceRoot, targetRoot) || within(targetRoot, sourceRoot)) fail('LEGACY_IMPORT_PATH_OVERLAP')
     if (exists(targetRoot)) fail('LEGACY_IMPORT_TARGET_EXISTS')
     assertProjectStoragePathSupported(targetRoot, options.preflightOptions)

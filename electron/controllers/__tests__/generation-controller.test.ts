@@ -697,6 +697,11 @@ describe('generation public IPC with actual project authority and SQLite', () =>
     expect(JSON.stringify(result)).not.toContain(model.apiKey)
     expect(fetch).toHaveBeenCalledTimes(1)
   })
+  it('剧情树没有可用来源时，渲染端收到 NO_EVENT_SOURCES，不是通用失败码', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(mocks.handlers.get('graph-generation:begin')!({ sender },
+      { input: { kind: 'plot' }, modelId: model.id, uiActionNonce: 'plot-empty' }, { ...session })).rejects.toThrow(/^NO_EVENT_SOURCES$/u)
+  })
   it('logs an uncoded failure without request arguments before returning the generic code', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(generationIpcErrorCode('generation:commit-draft', new TypeError(`坏收据${'长'.repeat(400)}`))).toBe('GENERATION_REQUEST_FAILED')

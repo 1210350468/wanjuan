@@ -84,10 +84,13 @@ export const C8B_SCENARIOS = {
       sixDraftNote: await cardOf(section, 6).locator('.stage-ch-suggest-note').count(),
       removed: await cardOf(section, 6).locator('del').allInnerTexts(),
       added: await cardOf(section, 6).locator('ins').allInnerTexts(),
+      draftNoteGap: await cardOf(section, 4).locator('.stage-ch-suggest-note').evaluate(note =>
+        Math.round(note.getBoundingClientRect().top - note.previousElementSibling.getBoundingClientRect().bottom)),
     }
     assert.deepEqual(measured.cards, ['第 4 章', '第 6 章'])
     assert.deepEqual(measured.draftNote, ['第 4 章已有草稿，蓝图改了正文不会跟着变。'])
     assert.equal(measured.sixDraftNote, 0, '第 6 章没有草稿，不出这一行')
+    assert.equal(measured.draftNoteGap, 8, '「已有草稿」备注与上面的字段表隔开 --s-2')
     await cardOf(section, 6).scrollIntoViewIfNeeded()
     await context.shoot('c8b-1-suggestions')
 

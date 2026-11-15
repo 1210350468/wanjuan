@@ -1099,7 +1099,7 @@
   text-decoration-color: var(--danger);
 }
 
-.stage-ch-suggest-note,
+.stage-ch-suggest-card .stage-ch-suggest-note,
 .stage-ch-suggest-hint {
   margin-top: var(--s-2);
   color: var(--ink-3);

@@ -444,6 +444,23 @@ describe('写前的线索：延后与指定本章推进', () => {
     expect(threadCalls('db:narrative-thread-assignment-set')[0]![1]).toMatchObject({ note: 'Moved on while writing Ch. 5' })
     expect(document.querySelector('.stage-write-threads')?.textContent).not.toMatch(/[\u4e00-\u9fff]/u)
   })
+
+  it('\u82f1\u6587\u754c\u9762\u53ea\u591a\u51fa 1 \u6761\u65f6\u7528\u5355\u6570', async () => {
+    useLocaleStore.setState({ locale: 'en-US' })
+    threadViews = Array.from({ length: 7 }, (_, index) => threadView(index + 1, `Thread ${index + 1}`, 1, 2))
+    await render(<WriteChapterPopover chapterNumber={5} blueprint={blueprintWritePrefill(BLUEPRINT)} label="Write chapter 5" />)
+    await act(async () => page.getByRole('button', { name: '6 threads to handle here' }).click())
+    await expect.element(page.getByText('1 more stays out of this run')).toBeVisible()
+  })
+
+  it('\u6bcf\u884c\u6309\u94ae\u7684\u8bfb\u5c4f\u540d\u79f0\u5e26\u4e0a\u7ebf\u7d22\u540d\uff0c\u51e0\u6761\u7ebf\u7d22\u4e4b\u95f4\u5206\u5f97\u6e05', async () => {
+    threadViews = [threadView(1, '\u9752\u94dc\u94a5\u5319', 1, 2), threadView(2, '\u7236\u4eb2\u7684\u65e7\u4fe1', 1, 2)]
+    await renderPopover()
+    await act(async () => hint(2).click())
+    await expect.element(popover.getByRole('button', { name: '\u5ef6\u540e\u4e00\u7ae0\uff1a\u7236\u4eb2\u7684\u65e7\u4fe1', exact: true })).toBeVisible()
+    await act(async () => popover.getByRole('button', { name: '\u5ef6\u540e\u4e09\u7ae0\uff1a\u9752\u94dc\u94a5\u5319', exact: true }).click())
+    await expect.element(popover.getByRole('button', { name: '\u64a4\u9500\uff1a\u9752\u94dc\u94a5\u5319', exact: true })).toBeVisible()
+  })
 })
 
 describe('写作此章弹层', () => {

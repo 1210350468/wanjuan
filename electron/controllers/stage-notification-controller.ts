@@ -16,7 +16,7 @@ export function registerStageNotificationController() {
     if (!Notification.isSupported() || typeof notice?.title !== 'string' || typeof notice.body !== 'string') return { shown: false }
     const notification = new Notification({ title: notice.title, body: notice.body })
     shown.add(notification)
-    notification.on('click', () => { shown.delete(notification); focusExistingInstance(win) })
+    notification.on('click', () => { shown.delete(notification); focusExistingInstance(win.isDestroyed() ? BrowserWindow.getAllWindows()[0] : win) })
     notification.on('close', () => shown.delete(notification))
     notification.show()
     return { shown: true }

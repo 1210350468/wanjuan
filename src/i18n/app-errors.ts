@@ -50,6 +50,7 @@ const ERROR_KEYS = {
   LEGACY_IMPORT_UNMAPPED_ASSET: 'error.legacyImportIncompleteSource',
   LEGACY_IMPORT_INVALID_MANIFEST: 'error.legacyImportIncompleteSource',
   LEGACY_IMPORT_UNSAFE_PATH: 'error.legacyImportLinkedSource',
+  LEGACY_IMPORT_TARGET_UNSAFE_PATH: 'error.legacyImportLinkedTarget',
   LEGACY_IMPORT_SOURCE_CHANGED: 'error.legacyImportSourceBusy',
   LEGACY_IMPORT_COPY_CHANGED: 'error.legacyImportSourceBusy',
   LEGACY_IMPORT_KNOWLEDGE_ORIGINAL_UNAVAILABLE: 'error.legacyImportKnowledgeOriginal',

@@ -15,6 +15,7 @@ import type { ModelProfile, ProjectSessionContext } from '../../src/shared/ipc-c
 import { isProjectSessionContext } from '../../src/shared/project-session-context'
 import { getBuiltinPromptTemplate } from '../../src/services/builtin-prompt-templates'
 import { readBuiltinWritingSkill } from '../../src/shared/builtin-writing-skills'
+import { PlotTreeInputLimitError, PlotTreeSourceError, PlotTreeSourceLimitError } from '../../src/shared/plot-tree-generation-pure'
 import { getProjectDb, getCurrentProjectPath, onProjectDatabaseBeforeClose } from '../database'
 import { getGlobalDataRoot } from '../services/app-data-locator'
 import { getProjectDataRoot } from '../services/project-data-locator'
@@ -92,6 +93,7 @@ const DIAGNOSTIC_MESSAGE_LIMIT = 200
 export function generationIpcErrorCode(channel: string, error: unknown): string {
   if (error instanceof TaskBudgetPreflightError) return error.message
   if (error instanceof KnowledgeBaseUnavailableError || error instanceof LegacyVectorMigrationBlockedError) return error.code
+  if (error instanceof PlotTreeSourceError || error instanceof PlotTreeSourceLimitError || error instanceof PlotTreeInputLimitError) return error.code
   if (error instanceof ProjectSessionStaleError) {
     console.warn('[generation] stale project session rejected', { channel })
     return 'GENERATION_PROJECT_SESSION_STALE'
