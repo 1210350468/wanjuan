@@ -281,25 +281,26 @@ async function postProcessRecord(context, chapterNumber) {
 async function relationFacts(context) {
   const roster = await read(context, 'db:character-roster-read')
   const pair = ['林岚', '守塔人'].map(name => roster.entries.find(entry => entry.name === name).characterId)
-  const nodes = (await read(context, 'db:character-continuity-nodes', pair)).filter(node => node.aspect === 'relation' && pair.includes(node.targetId))
-  const derived = nodes.filter(node => node.provenance.kind === 'derived').sort((left, right) => left.effectiveChapter - right.effectiveChapter || left.seq - right.seq)
-    .map(node => ({ chapter: node.effectiveChapter, from: node.subjectName, value: node.value, matchedAuthor: Boolean(node.matchedAuthor), quote: node.quote?.text ?? '' }))
+  const isDerivedRelation = node => node.aspect === 'relation' && pair.includes(node.targetId) && node.provenance.kind === 'derived'
+  const derived = (await read(context, 'db:character-continuity-nodes', pair)).filter(isDerivedRelation)
+    .sort((left, right) => left.effectiveChapter - right.effectiveChapter || left.seq - right.seq)
+    .map(node => ({ chapter: node.effectiveChapter, from: node.subjectName, fromId: node.subjectId, value: node.value, matchedAuthor: Boolean(node.matchedAuthor), quote: node.quote?.text ?? '' }))
   const cards = (await context.invoke(context.page, 'finalized-character:list-relation-candidates', await uiSession(context.app)))
     .map(card => ({ chapter: card.source.chapterNumber, from: card.sourceName, value: card.value }))
   const facts = { derived, cards, author: roster.entries.flatMap(entry => entry.relationships.map(relationship => relationship.relation)) }
   const shown = JSON.stringify(facts)
   assert.deepEqual(facts.author, [KEEPER_RELATION], `定稿记录不改写作者设定。${shown}`)
+  assert.deepEqual(derived.map(node => node.chapter), Object.keys(RELATION_CHAPTERS).map(Number), `正文写明了关系变化的两章各记下一条定稿关系；模型没报时重跑。${shown}`)
+  const [earlier, later] = derived
+  assert.notEqual(earlier.value, KEEPER_RELATION, `第 ${earlier.chapter} 章写的是反目，和作者设定不同。${shown}`)
+  assert.equal(later.value, KEEPER_RELATION, `第 ${later.chapter} 章回到作者设定的说法；模型换了说法时没走到这条路，重跑。${shown}`)
   for (const node of derived) {
     assert.equal(node.matchedAuthor, node.value === KEEPER_RELATION, `和作者设定同值的定稿关系记为一致，不同值的不记。${shown}`)
-    assert.ok(RELATION_CHAPTERS[node.chapter]?.includes(node.quote), `定稿关系的原文出自那一章。${shown}`)
+    assert.ok(RELATION_CHAPTERS[node.chapter].includes(node.quote), `定稿关系的原文出自那一章。${shown}`)
+    const timeline = (await read(context, 'db:character-continuity-timeline', node.fromId)).nodes.filter(isDerivedRelation)
+    assert.ok(timeline.some(entry => entry.effectiveChapter === node.chapter && entry.value === node.value), `${node.from}的时间线第 ${node.chapter} 章有「${node.value}」。${JSON.stringify(timeline)}`)
   }
-  for (const card of cards) {
-    assert.ok(derived.some(node => node.chapter === card.chapter && node.value === card.value && node.from === card.from), `建议对得上一条定稿记录。${shown}`)
-  }
-  const latest = derived.at(-1)
-  if (latest && latest.value !== KEEPER_RELATION) {
-    assert.ok(cards.some(card => card.value === latest.value && card.from === latest.from), `最后一章的说法和作者设定不同，就有这条说法的建议可裁定。${shown}`)
-  }
+  assert.deepEqual(cards, [{ chapter: earlier.chapter, from: earlier.from, value: earlier.value }], `只有第 ${earlier.chapter} 章那条和作者设定不同的说法有建议。${shown}`)
   return facts
 }
 
@@ -464,19 +465,10 @@ export const REAL_SCENARIOS = {
     await openCharacterState(page)
     const root = stage.root(page)
     await root.locator('.cast-profile .cast-timeline-summary').click()
-    measured.timeline = await root.locator('.cast-profile .cast-timeline-chapter').evaluateAll(chapters => chapters.map(chapter => ({
-      chapter: chapter.querySelector('h3')?.textContent?.trim(),
-      rows: [...chapter.querySelectorAll('.cast-timeline-row')].map(row => row.textContent?.replace(/\s+/gu, ' ').trim()),
-    })))
-    measured.cardsOnCastPage = await root.getByRole('region', { name: '待处理的角色建议' }).locator('[data-kind="relation"]').count()
+    const cards = root.getByRole('region', { name: '待处理的角色建议' }).locator('[data-kind="relation"]')
+    await cards.first().waitFor({ state: 'visible' })
+    measured.cardsOnCastPage = await cards.count()
     assert.equal(measured.cardsOnCastPage, measured.relations.cards.length, '角色页列出的关系建议和库里的一样多')
-    const ofLin = measured.relations.derived.filter(node => node.from === '林岚')
-    if (ofLin.length === 2 && ofLin[0].value !== ofLin[1].value) {
-      for (const node of ofLin) {
-        const rows = measured.timeline.find(entry => entry.chapter === `第 ${node.chapter} 章`)?.rows ?? []
-        assert.ok(rows.some(row => row.includes(node.value)), `林岚的时间线第 ${node.chapter} 章有「${node.value}」：${JSON.stringify(measured.timeline)}`)
-      }
-    }
     return measured
   } },
 
