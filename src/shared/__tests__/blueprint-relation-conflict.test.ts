@@ -78,6 +78,16 @@ describe('蓝图关系与时间线相反', () => {
     expect(check(plan, [relation('挚友', 8)])).toHaveLength(1)
   })
 
+  it.each(['从原本的仇敌成为朋友', '从昔日的仇敌成为朋友', '从前是仇敌，如今成为朋友', 'former enemies who became friends', 'ex-enemies who became friends'])('一个方向写「%s」，说的是过去的关系，算转折，另一个方向的「朋友」不再报', (text) => {
+    const plan = blueprint(12, '朋友', { relationshipHints: [{ from: '林晚', to: '沈舟', relation: text }, { from: '沈舟', to: '林晚', relation: '朋友' }] })
+    expect(check(plan, [relation('仇敌', 8)])).toEqual([])
+  })
+
+  it.each(['没能成为朋友的仇敌', '假装成为朋友的仇敌'])('转折被否定或是假的（「%s」）不算转折，另一个方向的「朋友」照常提示', (text) => {
+    const plan = blueprint(12, '朋友', { relationshipHints: [{ from: '林晚', to: '沈舟', relation: text }, { from: '沈舟', to: '林晚', relation: '朋友' }] })
+    expect(check(plan, [relation('仇敌', 8)])).toHaveLength(1)
+  })
+
   const english = (text: string) => blueprint(12, text, { characters: ['Alice', 'Bob'], relationshipHints: [{ from: 'Alice', to: 'Bob', relation: text }] })
   const englishNode = (value: string) => relation(value, 8, { subjectName: 'Alice', targetName: 'Bob' })
 
