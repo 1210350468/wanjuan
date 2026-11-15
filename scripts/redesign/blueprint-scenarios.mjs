@@ -12,7 +12,7 @@ import * as project from './pages/project.mjs'
 import * as runSheet from './pages/run-sheet.mjs'
 import * as shell from './pages/shell.mjs'
 import * as stage from './pages/stage.mjs'
-import { contrastFailures, firstLine, seedStageSample, untilGateHolds } from './scenarios.mjs'
+import { afterIpc, contrastFailures, firstLine, seedStageSample, untilGateHolds } from './scenarios.mjs'
 import { STAGE_SAMPLE, stageChapterTitle } from './stage-sample.mjs'
 
 /** 示例作品的下一章：1、2 章定稿，权威下一章是 3。 */
@@ -165,7 +165,7 @@ async function rawBlueprintRow(projectPath, chapterNumber) {
 const chapterCard = (page, chapterNumber) => page.getByRole('region', { name: `第 ${chapterNumber} 章蓝图` })
 const nullChapterCard = page => chapterCard(page, NULL_CHAPTER)
 const RELATION_NOTICE = '第 5 章蓝图把 林岚 和 守塔人 写成「亲密同伴」，但第 3 章起两人是「决裂」。'
-const RELATION_BASIS = '依据：第 3 章 · 决裂'
+const RELATION_BASIS = '依据：你的设定 · 决裂'
 
 async function saveChapter(page, chapterNumber) {
   await blueprint.open(page)
@@ -352,13 +352,13 @@ export const BLUEPRINT_SCENARIOS = {
     await page.getByRole('region', { name: '角色档案' }).getByRole('heading', { level: 1, name: '守塔人' }).waitFor({ state: 'visible' })
   } },
 
-  'blueprint-relation-edited': { model: false, shell: 'stage', setup: withRelationConflict, run: async ({ page }) => {
-    await blueprint.open(page)
-    await blueprint.planItem(page, 5).click()
+  'blueprint-relation-edited': { model: false, shell: 'stage', setup: withRelationConflict, run: async ({ app, page }) => {
+    await saveChapter(page, 5)
+    await page.getByText(RELATION_BASIS).waitFor({ state: 'visible' })
     await chapterCard(page, 5).getByRole('textbox', { name: /^作者微操指导/ }).fill('这一章作者自己改过。')
-    await page.getByRole('button', { name: '保存此章' }).click()
+    await stage.saveStatus(page).getByText('未保存').waitFor({ state: 'visible' })
+    await afterIpc(app, page, 'db:continuity-list-before', () => page.getByRole('button', { name: '保存此章' }).click())
     await stage.saveStatus(page).getByText('已保存').waitFor({ state: 'visible' })
-    await page.waitForTimeout(500)
     assert.equal(await page.getByText(RELATION_BASIS).count(), 0, '作者改过这一章后回执不再代表作者的安排，不提示')
   } },
 
@@ -381,15 +381,14 @@ export const BLUEPRINT_SCENARIOS = {
     await restoreContinuity(app)
   } },
 
-  'blueprint-relation-exempted': { model: false, shell: 'stage', setup: withRelationConflict, run: async ({ page }) => {
+  'blueprint-relation-exempted': { model: false, shell: 'stage', setup: withRelationConflict, run: async ({ app, page }) => {
     await saveChapter(page, 5)
+    await page.getByText(RELATION_BASIS).waitFor({ state: 'visible' })
     await page.getByRole('button', { name: '这是有意安排' }).click()
     await page.getByText('已记下，这一章不再提示。').waitFor({ state: 'visible' })
     await page.getByRole('button', { name: '撤销' }).waitFor({ state: 'visible' })
     assert.equal(await page.getByText(RELATION_BASIS).count(), 0, '豁免后这一章不再提示')
-    await page.getByRole('button', { name: '保存此章' }).click()
-    await stage.saveStatus(page).getByText('已保存').waitFor({ state: 'visible' })
-    await page.waitForTimeout(500)
+    await afterIpc(app, page, 'db:continuity-list-before', () => page.getByRole('button', { name: '保存此章' }).click())
     assert.equal(await page.getByText(RELATION_BASIS).count(), 0, '再次保存也不提示：豁免已写进库')
   } },
 
