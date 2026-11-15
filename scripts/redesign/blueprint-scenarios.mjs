@@ -190,12 +190,6 @@ async function nullChapterFieldsAfterFilled(page) {
   return authorFields(page, NULL_CHAPTER)
 }
 
-async function saveWithCtrlS(page) {
-  await stage.saveStatus(page).getByText('未保存').waitFor({ state: 'visible' })
-  await page.keyboard.press('ControlOrMeta+S')
-  await stage.saveStatus(page).getByText('已保存').waitFor({ state: 'visible' })
-}
-
 async function saveOnExitWithoutClosing(app, page) {
   const wrapped = await app.evaluate(({ ipcMain }) => {
     const handlers = ipcMain._invokeHandlers
@@ -249,7 +243,7 @@ export const BLUEPRINT_SCENARIOS = {
     await blueprint.open(page)
     await nullChapterFieldsAfterFilled(page)
     await blueprint.titleInput(page).fill('第二盏灯亮起')
-    await saveWithCtrlS(page)
+    await stage.saveWithCtrlS(page)
     measured.dbAfterOtherFieldSave = await raw()
 
     await nullChapterFieldsAfterFilled(page)
@@ -262,7 +256,7 @@ export const BLUEPRINT_SCENARIOS = {
     await page.keyboard.type('补一句')
     await nullChapterCard(page).getByRole('textbox', { name: /^章节要点/ }).press('End')
     await page.keyboard.type('补一条')
-    await saveWithCtrlS(page)
+    await stage.saveWithCtrlS(page)
     measured.dbAfterTyping = await raw()
 
     await context.restart()

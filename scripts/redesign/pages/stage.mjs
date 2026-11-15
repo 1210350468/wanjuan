@@ -333,11 +333,16 @@ export async function openChapter(page, number) {
   return prose(page)
 }
 
-/** 正文按 Ctrl S 保存，等顶栏状态回到「已保存」。 */
+/** 按 Ctrl S 保存。先等顶栏是「未保存」：不脏时顶栏本来就写「已保存」，只等它证明不了这一下保存过。 */
+export async function saveWithCtrlS(page) {
+  await saveStatus(page).filter({ hasText: /^未保存$/ }).waitFor({ state: 'visible' })
+  await page.keyboard.press('ControlOrMeta+S')
+  await saveStatus(page).filter({ hasText: /^已保存$/ }).waitFor({ state: 'visible' })
+}
+
 export async function saveProse(page) {
   await prose(page).click()
-  await page.keyboard.press('ControlOrMeta+s')
-  await saveStatus(page).filter({ hasText: /^已保存$/ }).waitFor({ state: 'visible' })
+  await saveWithCtrlS(page)
 }
 
 /** 正文编辑区的文字，去掉 CodeMirror 的纸面标题装饰。 */

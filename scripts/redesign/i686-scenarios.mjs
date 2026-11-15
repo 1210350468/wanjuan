@@ -132,8 +132,7 @@ export const I686_SCENARIOS = {
     await chapterView.prose(context.page).getByText('你父亲也问过钟的事').first().click()
     await context.page.keyboard.press('End')
     await context.page.keyboard.type('钟声停了。')
-    await context.page.keyboard.press('ControlOrMeta+S')
-    await context.page.getByText('已保存', { exact: true }).first().waitFor({ state: 'visible', timeout: 10_000 })
+    await stage.saveWithCtrlS(context.page)
 
     context.fake.failProse()
     await chapterView.prose(context.page).getByText('你父亲也问过钟的事').first().click({ clickCount: 3 })
