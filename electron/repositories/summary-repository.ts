@@ -495,7 +495,8 @@ function pendingRelationCandidates(db: BetterSqlite3.Database): PendingFinalized
       return []
     }
   })
-  const runs = derivedRelationRuns(markDeclinedRelations(db, readCharacterContinuityNodes(db)))
+  if (!standing.length) return standing
+  const runs = derivedRelationRuns(markDeclinedRelations(db, readCharacterContinuityNodes(db, standing.flatMap(candidate => [candidate.sourceId, candidate.targetId]))))
   const shown = new Set<DerivedRelationRun>()
   return standing.filter(candidate => {
     const run = runs.get(derivedRelationSeries(candidate.sourceId, candidate.targetId))?.find(item => item.observations.some(node =>
