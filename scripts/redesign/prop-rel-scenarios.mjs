@@ -6,7 +6,7 @@ import * as blueprint from './pages/blueprint.mjs'
 import * as runSheet from './pages/run-sheet.mjs'
 import * as stage from './pages/stage.mjs'
 import { finalizeChapter } from './f491-scenarios.mjs'
-import { seedStageSample } from './scenarios.mjs'
+import { afterIpc, seedStageSample } from './scenarios.mjs'
 
 async function generate(page, fake, from, to) {
   const before = fake.chats.length
@@ -77,7 +77,7 @@ export const PROPREL_SCENARIOS = {
     await shoot('prop-rel-3-adopted')
     return measured
   } },
-  'prop-rel-stale': { model: true, shell: 'stage', setup: context => seedStageSample(context, { totalChapters: 16 }), run: async ({ page, fake, shoot }) => {
+  'prop-rel-stale': { model: true, shell: 'stage', setup: context => seedStageSample(context, { totalChapters: 16 }), run: async ({ app, page, fake, shoot }) => {
     await blueprint.open(page)
     fake.replyDirectoryBlueprints(13)
     await generate(page, fake, 13, 14)
@@ -89,9 +89,10 @@ export const PROPREL_SCENARIOS = {
     await blueprint.planItem(page, 13).click()
     await blueprint.titleInput(page).fill('第十三夜改名')
     await stage.saveWithCtrlS(page)
-    await architecture.open(page)
-    await architecture.openCast(page)
-    await page.waitForTimeout(1500)
+    await afterIpc(app, page, 'character-proposal:list-pending-finalized', async () => {
+      await architecture.open(page)
+      await architecture.openCast(page)
+    })
     const measured = { listed: await suggestions.count() }
     await shoot('prop-rel-4-stale')
     assert.equal(measured.listed, 0, '改过来源蓝图后不再出建议')

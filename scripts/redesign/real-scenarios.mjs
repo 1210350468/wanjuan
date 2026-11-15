@@ -11,6 +11,7 @@ import * as chapterView from './pages/chapter-view.mjs'
 import * as refs from './pages/refs.mjs'
 import * as runSheet from './pages/run-sheet.mjs'
 import * as stage from './pages/stage.mjs'
+import { recoveryListed } from './i686-scenarios.mjs'
 import { countUnits, STAGE_SAMPLE, stageChapterTitle } from './stage-sample.mjs'
 
 const BOOK = STAGE_SAMPLE.name
@@ -282,11 +283,10 @@ async function batchRecovery(page) {
   return { text: await card.first().innerText(), continueEnabled: await button.isEnabled() }
 }
 
-async function batchUnlisted(page) {
-  await runSheet.openFromPalette(page)
-  await page.waitForTimeout(2000)
-  await runSheet.recovery(page).getByRole('article').filter({ hasText: /批量正文：/ }).first().waitFor({ state: 'detached', timeout: 30_000 })
-  return true
+/** 等运行侧页读完一次可恢复列表，再数这一批的卡片。 */
+async function batchCards(context) {
+  await recoveryListed(context.app, context.page)
+  return runSheet.recovery(context.page).getByRole('article').filter({ hasText: /批量正文：/ }).count()
 }
 
 export const REAL_SCENARIOS = {
@@ -448,7 +448,8 @@ export const REAL_SCENARIOS = {
     assert.equal(measured.recoveryBeforeFinalize.continueEnabled, true, '未定稿任何章的批次照旧可续')
     await openChapter(page, 3)
     measured.finalize = await finalizeAndPostProcess(page, 3)
-    measured.recoveryAfterFinalize = await batchUnlisted(page)
+    measured.recoveryAfterFinalize = await batchCards(context)
+    assert.equal(measured.recoveryAfterFinalize, 0, '定稿第 3 章后这一批不再列为可恢复')
     await openChapter(page, 3)
     await chapterView.view(page).getByRole('button', { name: '重新打开修改', exact: true }).click()
     await page.getByRole('dialog', { name: '重新打开第 3 章？' }).getByRole('button', { name: '重新打开', exact: true }).click()
@@ -459,7 +460,8 @@ export const REAL_SCENARIOS = {
 
     await restartAndOpen(context)
     page = context.page
-    measured.recovery = await batchUnlisted(page)
+    measured.recovery = await batchCards(context)
+    assert.equal(measured.recovery, 0, '重启后这一批仍不列为可恢复')
     await shoot('real-batch-unlisted-after-restart')
     return measured
   } },
