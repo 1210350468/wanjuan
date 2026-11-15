@@ -426,14 +426,20 @@ function authorRelationsOfPair(db: BetterSqlite3.Database, sourceId: string, tar
 
 const unorderedPairKey = (left: string, right: string) => JSON.stringify([left, right].sort())
 
-function relationCandidateKey(source: FinalizedSourceIdentity, change: Pick<FinalizedRelationChange, 'sourceId' | 'targetId' | 'relation'>): string {
-  return `fcs-relation:${sha256(JSON.stringify([source.draftId, source.finalizationId, source.contentHash, unorderedPairKey(change.sourceId, change.targetId), sha256(change.relation)]))}`
+type RelationStatement = Pick<FinalizedRelationChange, 'sourceId' | 'targetId' | 'relation'>
+
+function relationCandidateKey(source: FinalizedSourceIdentity, change: RelationStatement): string {
+  return `fcs-relation:${sha256(JSON.stringify([source.draftId, source.finalizationId, source.contentHash, change.sourceId, change.targetId, sha256(change.relation)]))}`
 }
 
-interface RelationStatement { change: FinalizedRelationChange; matchesAuthor: boolean; authorLinesAtExtraction: string[] | undefined }
+/** 键带方向，重跑改了方向就是另一张建议。作者的拒绝和当初的作者行快照跟着说法走，换了方向也认。 */
+const candidateKeysInEitherDirection = (source: FinalizedSourceIdentity, change: RelationStatement) =>
+  [relationCandidateKey(source, change), relationCandidateKey(source, { ...change, sourceId: change.targetId, targetId: change.sourceId })]
 
-function oneStatementPerPair(changes: readonly FinalizedRelationChange[], authorRelations: FinalizedCharacterContext['authorRelations']): RelationStatement[] {
-  const statements = new Map<string, RelationStatement>()
+interface PairStatement { change: FinalizedRelationChange; matchesAuthor: boolean; authorLinesAtExtraction: string[] | undefined }
+
+function oneStatementPerPair(changes: readonly FinalizedRelationChange[], authorRelations: FinalizedCharacterContext['authorRelations']): PairStatement[] {
+  const statements = new Map<string, PairStatement>()
   for (const change of changes) {
     const pair = unorderedPairKey(change.sourceId, change.targetId)
     const authorAtExtraction = authorRelations?.filter(line => unorderedPairKey(line.sourceId, line.targetId) === pair)
@@ -474,8 +480,12 @@ function mergeRelationCandidates(db: BetterSqlite3.Database, source: FinalizedSo
   const byPair = new Map(store.relationPending.map(candidate => [unorderedPairKey(candidate.sourceId, candidate.targetId), candidate]))
   for (const pair of touched) byPair.delete(unorderedPairKey(pair.sourceId, pair.targetId))
   // 重跑同一份定稿时沿用当初的作者行快照，否则作者后改作废的建议会复活。
-  for (const candidate of candidates) if (!decided.has(candidate.candidateKey)) byPair.set(unorderedPairKey(candidate.sourceId, candidate.targetId),
-    { ...candidate, authorLinesAtCreation: stored.get(candidate.candidateKey)?.authorLinesAtCreation ?? candidate.authorLinesAtCreation })
+  for (const candidate of candidates) {
+    const keys = candidateKeysInEitherDirection(source, { sourceId: candidate.sourceId, targetId: candidate.targetId, relation: candidate.value })
+    if (keys.some(key => decided.has(key))) continue
+    const earlier = keys.map(key => stored.get(key)).find(Boolean)
+    byPair.set(unorderedPairKey(candidate.sourceId, candidate.targetId), { ...candidate, authorLinesAtCreation: earlier?.authorLinesAtCreation ?? candidate.authorLinesAtCreation })
+  }
   if (isDeepStrictEqual([...byPair.values()], store.relationPending)) return
   store.relationPending = [...byPair.values()]
   db.prepare("UPDATE summary_snapshots_all SET character_state_candidates=?,created_at=datetime('now') WHERE id=?").run(JSON.stringify(store), row.id)
@@ -489,7 +499,7 @@ function candidateReceipts(db: BetterSqlite3.Database): StoredCharacterStateDeci
 function markDeclinedRelations(db: BetterSqlite3.Database, nodes: ContinuityNode[]): ContinuityNode[] {
   const declinedKeys = new Set(candidateReceipts(db).filter(receipt => receipt.decision === 'decline').map(receipt => receipt.candidateKey))
   return nodes.map(node => node.aspect === 'relation' && node.provenance.kind === 'derived'
-    && declinedKeys.has(relationCandidateKey(node.provenance.source, { sourceId: node.subjectId, targetId: node.targetId, relation: node.value }))
+    && candidateKeysInEitherDirection(node.provenance.source, { sourceId: node.subjectId, targetId: node.targetId, relation: node.value }).some(key => declinedKeys.has(key))
     ? { ...node, authorDeclined: true as const } : node)
 }
 

@@ -1664,6 +1664,45 @@ describe('一次抽取对一对人物只记一条说法，方向也算说法的�
       .toEqual([{ source: SHEN, target: LIN, relation: '暗恋' }])
   })
 
+  it('作者打开建议卡之后同一份定稿重跑改了方向：原来那张卡不能再采用，关系表不动，改后的是另一张卡', () => {
+    openProject()
+    authorRelation('师徒')
+    const draftId = finalizeNew(8, CHAPTER_EIGHT)
+    commitModelOutput(draftId, { updates: [], relations: [relationChange('暗恋', BREAK_UP)] })
+    const [opened] = pending()
+
+    commitModelOutput(draftId, { updates: [], relations: [relationChange('暗恋', BREAK_UP, SHEN, LIN)] })
+    expect(() => SummaryRepository.decideFinalizedRelationCandidate({ draftId, candidateKey: opened.candidateKey, expectedAuthorRelations: opened.authorRelations,
+      operationId: 'accept-opened-before-rerun', decision: 'accept' }, scope, db())).toThrow('FINALIZED_CHARACTER_STATE_CANDIDATE_NOT_FOUND')
+    expect(authorRows()).toEqual(['师徒'])
+    expect(cards()).toEqual([[SHEN, LIN, '暗恋']])
+    expect(pending()[0].candidateKey).not.toBe(opened.candidateKey)
+  })
+
+  it('保留原设定之后同一份定稿重跑改了方向：不再出建议，生效的只有作者设定', () => {
+    openProject()
+    authorRelation('师徒')
+    const draftId = finalizeNew(8, CHAPTER_EIGHT)
+    commitModelOutput(draftId, { updates: [], relations: [relationChange('暗恋', BREAK_UP)] })
+    decide('decline')
+
+    commitModelOutput(draftId, { updates: [], relations: [relationChange('暗恋', BREAK_UP, SHEN, LIN)] })
+    expect(cards()).toEqual([])
+    expect(latestNodesBefore(SummaryRepository.readContinuityNodesForPreflight(db()), 9).relations.flatMap(pair => pair.lines.map(line => line.value))).toEqual(['师徒'])
+  })
+
+  it('作者改了设定、建议作废之后同一份定稿重跑改了方向：作废的建议不复活', () => {
+    openProject()
+    authorRelation('师徒')
+    const draftId = finalizeNew(8, CHAPTER_EIGHT)
+    commitModelOutput(draftId, { updates: [], relations: [relationChange('暗恋', BREAK_UP)] })
+    db().prepare("UPDATE character_relationships SET relation='宿敌' WHERE relationship_id='author-line'").run()
+    expect(cards()).toEqual([])
+
+    commitModelOutput(draftId, { updates: [], relations: [relationChange('暗恋', BREAK_UP, SHEN, LIN)] })
+    expect(cards()).toEqual([])
+  })
+
   it('作者设定盟友，同一次抽取报林岚→沈砚「仇敌」和沈砚→林岚「盟友」：生效的关系里有建议卡上的「仇敌」，待作者裁定', () => {
     openProject()
     authorRelation('盟友')
