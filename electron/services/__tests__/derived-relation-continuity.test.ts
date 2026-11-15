@@ -1650,6 +1650,20 @@ describe('一次抽取对一对人物只记一条说法，方向也算说法的�
     expect(timelineRows(LIN)).toEqual([])
   })
 
+  it('和作者设定不同的建议在重跑时改了方向：建议卡跟着换方向，采用后关系表是改后的方向', () => {
+    openProject()
+    authorRelation('师徒')
+    const draftId = finalizeNew(8, CHAPTER_EIGHT)
+    commitModelOutput(draftId, { updates: [], relations: [relationChange('暗恋', BREAK_UP)] })
+    expect(cards()).toEqual([[LIN, SHEN, '暗恋']])
+
+    commitModelOutput(draftId, { updates: [], relations: [relationChange('暗恋', BREAK_UP, SHEN, LIN)] })
+    expect(cards()).toEqual([[SHEN, LIN, '暗恋']])
+    decide('accept')
+    expect(db().prepare('SELECT source_character_id AS source,target_character_id AS target,relation FROM character_relationships').all())
+      .toEqual([{ source: SHEN, target: LIN, relation: '暗恋' }])
+  })
+
   it('作者设定盟友，同一次抽取报林岚→沈砚「仇敌」和沈砚→林岚「盟友」：生效的关系里有建议卡上的「仇敌」，待作者裁定', () => {
     openProject()
     authorRelation('盟友')

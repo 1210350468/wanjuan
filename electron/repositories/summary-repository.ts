@@ -468,7 +468,8 @@ function mergeRelationCandidates(db: BetterSqlite3.Database, source: FinalizedSo
   const byPair = new Map(store.relationPending.map(candidate => [unorderedPairKey(candidate.sourceId, candidate.targetId), candidate]))
   for (const pair of touched) byPair.delete(unorderedPairKey(pair.sourceId, pair.targetId))
   // 重跑同一份定稿时沿用当初的作者行快照，否则作者后改作废的建议会复活。
-  for (const candidate of candidates) if (!decided.has(candidate.candidateKey)) byPair.set(unorderedPairKey(candidate.sourceId, candidate.targetId), stored.get(candidate.candidateKey) ?? candidate)
+  for (const candidate of candidates) if (!decided.has(candidate.candidateKey)) byPair.set(unorderedPairKey(candidate.sourceId, candidate.targetId),
+    { ...candidate, authorLinesAtCreation: stored.get(candidate.candidateKey)?.authorLinesAtCreation ?? candidate.authorLinesAtCreation })
   if (isDeepStrictEqual([...byPair.values()], store.relationPending)) return
   store.relationPending = [...byPair.values()]
   db.prepare("UPDATE summary_snapshots_all SET character_state_candidates=?,created_at=datetime('now') WHERE id=?").run(JSON.stringify(store), row.id)
