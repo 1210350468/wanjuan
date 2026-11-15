@@ -11,7 +11,7 @@ import { syncBuiltinESMExports } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { gunzipSync } from 'node:zlib'
 import { ROOT, PLANNED_CALL_ALLOCATION, CAMPAIGN_ID, campaignIdFor, hash, currentProtocolBinding, assertProtocolBinding, validateHistoricalLedgerBoundary, validateHistoricalSupersessionBoundary, validateCampaignBinding, buildFixtureExports, validatePair, selectPhase, forwardReasoningFor, forwardQualificationWindowFor, assertScenarioMatchesProtocol, reconcileDispatchedAttempts, updateLedger, main, inspectTarget, freezeEnvironment, fixedStartup, validateFrozenExecution, runnerAdapterHash, assertCommittedProductionFiles, assertFormalTargetCandidateClean, createShortIsolationRoot, assertOwnedIsolationRoot, validatePhysicalLedger, registeredCampaignWorktree, developmentLedgerPath } from '../quality-modernization-run.mjs'
-import { freezeProductionEnvironment } from '../quality-modernization-run.mjs'
+import { freezeProductionEnvironment, probeReceiptMatches } from '../quality-modernization-run.mjs'
 import { COMMAND_PROBES, selectOwnerDispatch, productionBridgeHash, copyIsolatedRealModelConfig, PHASE_SCENARIOS, classifyProductionPair,
   fullExecutionSchedule, classifyFullProduction, validateFullAcceptedPredecessor,
   adjudicateEarlyReviewReferenceNonconformance, EARLY_REVIEW_REFERENCE_ADJUDICATION_REVISION,
@@ -7722,4 +7722,13 @@ test('freezes the better-sqlite3 binary the target runtime actually loaded, also
     assert.equal(frozen.sqlite.binary, fs.realpathSync(builtBinary))
     assert.equal(frozen.sqlite.sha256, hash(fs.readFileSync(builtBinary)))
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('探针收据认冻结基线驱动写的旧接缝名，也认现驱动的新名，别的名和非 dry-run 都拒', () => {
+  const receipt = executionSeam => ({ mode: 'dry-run', provenance: { sourceSha: 'a'.repeat(40) }, executionSeam })
+  assert.equal(probeReceiptMatches(receipt('generation-runtime-with-in-memory-adapter-lease'), 'a'.repeat(40)), true)
+  assert.equal(probeReceiptMatches(receipt('generation-harness-with-in-memory-adapter-lease'), 'a'.repeat(40)), true)
+  assert.equal(probeReceiptMatches(receipt('something-else'), 'a'.repeat(40)), false)
+  assert.equal(probeReceiptMatches(receipt('generation-harness-with-in-memory-adapter-lease'), 'b'.repeat(40)), false)
+  assert.equal(probeReceiptMatches({ ...receipt('generation-harness-with-in-memory-adapter-lease'), mode: 'live' }, 'a'.repeat(40)), false)
 })

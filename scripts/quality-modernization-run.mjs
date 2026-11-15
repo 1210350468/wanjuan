@@ -729,12 +729,15 @@ export function probeTarget(target) {
   const result = spawnSync(target.startup.executable, target.startup.argv, { cwd: target.startup.cwd, env, encoding: 'utf8', timeout: 60000, maxBuffer: 4 * 1024 * 1024, windowsHide: true })
   if (result.status !== 0) fail('BASELINE_RUNTIME_PROBE_FAILED')
   const receipt = JSON.parse(result.stdout)
-  if (receipt.mode !== 'dry-run' || receipt.provenance.sourceSha !== target.codeSha || receipt.executionSeam !== 'generation-harness-with-in-memory-adapter-lease') fail('PROBE_RECEIPT_MISMATCH')
+  if (!probeReceiptMatches(receipt, target.codeSha)) fail('PROBE_RECEIPT_MISMATCH')
   inspectTarget(target)
   const commands = runProductionCommandProbe(target, env, guard)
   inspectTarget(target)
   return { status: 'passed', evidenceLevel: 'production-generation-runtime-with-synthetic-completion', physicalModelRequests: 0, codeSha: target.codeSha, sourceHash: observed.sourceHash, driverHash: target.driver.sha256, environment: target.environment, startup: target.startup, nativeProfile: target.nativeProfile, receipt, commands, limitations: ['非桌面或IPC资格', '非预注册章节质量结果', '仅内存模拟供应商完成；未读真实模型配置'] }
 }
+// 冻结基线 2264390d6 的驱动走 generation runtime，写旧接缝名；现驱动走 generation harness。各自写的都是自己走过的接缝。
+const PROBE_EXECUTION_SEAMS = new Set(['generation-runtime-with-in-memory-adapter-lease', 'generation-harness-with-in-memory-adapter-lease'])
+export const probeReceiptMatches = (receipt, codeSha) => receipt.mode === 'dry-run' && receipt.provenance.sourceSha === codeSha && PROBE_EXECUTION_SEAMS.has(receipt.executionSeam)
 
 // A single append-only campaign file; wx lock prevents concurrent reservations.
 // A torn final record fails closed. Dispatched/unknown attempts never release capacity.
