@@ -312,6 +312,7 @@ describe('导入旧项目副本的拒绝原因', () => {
     ['LEGACY_IMPORT_UNMAPPED_ASSET', '资料不完整'],
     ['LEGACY_IMPORT_INVALID_MANIFEST', '资料不完整'],
     ['LEGACY_IMPORT_UNSAFE_PATH', '符号链接'],
+    ['LEGACY_IMPORT_TARGET_UNSAFE_PATH', '副本位置'],
     ['LEGACY_IMPORT_SOURCE_CHANGED', '别的程序占用'],
     ['LEGACY_IMPORT_COPY_CHANGED', '别的程序占用'],
     ['LEGACY_IMPORT_KNOWLEDGE_ORIGINAL_UNAVAILABLE', '知识库'],

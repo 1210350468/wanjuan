@@ -743,6 +743,17 @@ it('所选文件夹在选择后消失仍是读写失败，不说成「不是旧�
     .toEqual({ state: 'blocked', code: 'LEGACY_IMPORT_IO_FAILED' })
 })
 
+it('副本位置在链接文件夹下时报复制位置的码，不说成源文件夹有链接', async () => {
+  const f = fixture('v110')
+  const real = path.join(path.dirname(f.target), 'real-parent')
+  const linked = path.join(path.dirname(f.target), 'linked-parent')
+  fs.mkdirSync(real)
+  fs.symlinkSync(real, linked, 'junction')
+  expect(await importLegacyProjectCopy({ sourceRoot: f.source, targetRoot: path.join(linked, 'new'), preflightOptions }))
+    .toEqual({ state: 'blocked', code: 'LEGACY_IMPORT_TARGET_UNSAFE_PATH' })
+  expect(fs.readdirSync(real)).toEqual([])
+})
+
 it('缺失必需旧库或目标发布前中断均不留下半成品', async () => {
   const missing = fixture('v110')
   fs.unlinkSync(path.join(missing.legacy, 'vela.db'))
