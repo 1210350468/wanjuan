@@ -990,6 +990,20 @@ describe('待确认项和写稿提示跟着作者的决定走', () => {
     expect(pending().map(card => [card.source.chapterNumber, card.value])).toEqual([[9, '师徒']])
   })
 
+  it.each([
+    ['又写回旧关系：时间线记下这一章', '师徒', [[10, '师徒']]],
+    ['照着新设定写：时间线不记', '同门', []],
+  ])('定稿重述作者设定之后作者手改了设定，隔一章定稿%s', (_label, relation, finalizedRows) => {
+    openProject()
+    authorRelation('师徒')
+    commitModelOutput(finalizeNew(8, CHAPTER_EIGHT), output(relationChange('师徒', BREAK_UP)))
+    reviseAuthorRelation('同门')
+    commitModelOutput(finalizeNew(10, '第十章：沈砚仍把林岚当徒弟。'), output(relationChange(relation, '仍把林岚当徒弟')))
+
+    expect(characterTimeline(readCharacterContinuityTimeline(db(), LIN).nodes).flatMap(group => group.changes
+      .filter(change => change.source === 'finalized').map(change => [group.chapter, change.value]))).toEqual(finalizedRows)
+  })
+
   it('定稿重述作者设定之后作者手改了设定，再替换这一章写成别的关系：两条并存待作者裁定，有这一章的建议', async () => {
     openProject()
     authorRelation('师徒')
