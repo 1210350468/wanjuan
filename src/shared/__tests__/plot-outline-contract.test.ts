@@ -178,7 +178,9 @@ describe('chapter Markdown outline contract', () => {
   it.each([
     ['第二卷：第八章：下一章', false], ['第二卷·第八章：下一章', false], ['第二卷，第八章：下一章', false], ['第2卷第8章：下一章', false],
     ['### 第八章', false], ['- 第八章：', false], ['第八、九章：', false], ['Chapter 8:', false],
+    ['Chapters 8 and 9: The escape', false], ['Chapter VIII: The escape', false], ['Chapter Eight: The escape', false],
     ['第一次读第二章，她发现了秘密。', true], ['他翻开第三章，', true], ['第三章的结尾让她落泪。', true],
+    ['She reread chapter three, then slept.', true],
   ] as const)('a body line with a chapter title mark ending in a colon or the line starts another chapter: %s → valid %s', (line, valid) => {
     expect(validPlotOutlineEntry(`## 第7章：标题\n行动和结果。\n${line}\n后续内容。`, 7)).toBe(valid)
   })
