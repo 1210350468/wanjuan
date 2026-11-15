@@ -1705,6 +1705,21 @@ describe('派生关系的系列是这对人物，方向和说法照定稿原样'
     expect(linesInForce(8)).toEqual([[SHEN, LIN, '收徒']])
   })
 
+  it('第 3 章林岚→沈砚「暗恋」，第 7 章沈砚→林岚「暗恋」：说法一样、方向换了也是变化，第 7 章进沈砚的时间线，写第 8 章用新方向', async () => {
+    openProject()
+    commitModelOutput(finalizeNew(3, '第三章：林岚暗恋沈砚。'), { updates: [], relations: [relationChange('暗恋', '林岚暗恋沈砚')] })
+    commitModelOutput(finalizeNew(7, '第七章：沈砚暗恋林岚。'), { updates: [], relations: [relationChange('暗恋', '沈砚暗恋林岚', SHEN, LIN)] })
+
+    const chapters = (characterId: string) => characterTimeline(readCharacterContinuityTimeline(db(), characterId).nodes).map(group => group.chapter)
+    expect(chapters(SHEN)).toEqual([7])
+    expect(chapters(LIN)).toEqual([3])
+    expect(linesInForce(4)).toEqual([[LIN, SHEN, '暗恋']])
+    expect(linesInForce(8)).toEqual([[SHEN, LIN, '暗恋']])
+    const nodes = await continuityNodesHandler()({}, [SHEN], getCurrentProjectPath()) as ContinuityNode[]
+    expect(characterTimelinePromptLines({ nodes, chapter: 8, characterIds: [SHEN], currentNames: new Map(Object.entries(NAMES)), language: 'zh-CN' }))
+      .toEqual({ [SHEN]: ['定稿记录·与林岚的关系（第7章，原文：沈砚暗恋林岚）'] })
+  })
+
   it('作者写了林岚→沈砚「拜师」，定稿报沈砚→林岚「收徒」：建议和采用都是沈砚对林岚「收徒」', () => {
     openProject()
     authorRelation('拜师')

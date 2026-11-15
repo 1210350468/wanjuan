@@ -70,8 +70,10 @@ const pairKey = (node: CharacterRelationNode) => JSON.stringify([node.subjectId,
 const withoutAuthorRepeats = (lines: readonly CharacterRelationNode[]) =>
   lines.filter(line => line.provenance.kind !== 'derived' || !lines.some(other => other.provenance.kind !== 'derived' && other.value === line.value))
 
+const sameStatement = (left: CharacterRelationNode, right: CharacterRelationNode) => left.value === right.value && left.subjectId === right.subjectId
+
 /**
- * 定稿对一对人物的说法里，值相同、matchedAuthor 也相同的连续几章是一段，head 是最早那一章。
+ * 定稿对一对人物的说法里，值、方向、matchedAuthor 都相同的连续几章是一段，head 是最早那一章。
  * 作者拒绝过其中一章的说法，整段都算拒绝。
  */
 export interface DerivedRelationRun {
@@ -99,7 +101,7 @@ export function derivedRelationRuns(nodes: readonly ContinuityNode[]): Map<strin
     const runs: DerivedRelationRun[] = []
     for (const node of [...series.values()].sort((left, right) => left.effectiveChapter - right.effectiveChapter)) {
       const run = runs.at(-1)
-      if (run && run.head.value === node.value && run.head.matchedAuthor === node.matchedAuthor) {
+      if (run && sameStatement(run.head, node) && run.head.matchedAuthor === node.matchedAuthor) {
         run.observations.push(node)
         run.declined ||= !!node.authorDeclined
       } else runs.push({ head: node, observations: [node], declined: !!node.authorDeclined })
@@ -192,7 +194,7 @@ function foldAdoptedRelations(changes: readonly CharacterTimelineChange[]): Char
 }
 
 /**
- * 时间线只列变化：一段定稿关系只留段首。值和上一段相同、或第一段的值和这一章之前就生效的设定相同时是重述，也不留。
+ * 时间线只列变化：一段定稿关系只留段首。值和方向都和上一段相同、或第一段的值和这一章之前就生效的设定相同时是重述，也不留。
  * nodes 要带上这对人物两个方向的节点，只有一边时会把隔着对方说法的两段并成一段。
  */
 export function withoutRelationRestatements(nodes: readonly ContinuityNode[]): ContinuityNode[] {
@@ -200,7 +202,7 @@ export function withoutRelationRestatements(nodes: readonly ContinuityNode[]): C
   const changes = new Set<ContinuityNode>()
   for (const runs of derivedRelationRuns(nodes).values()) runs.forEach(({ head }, index) => {
     const previous = runs[index - 1]?.head
-    const restated = previous ? previous.value === head.value
+    const restated = previous ? sameStatement(previous, head)
       : latestNodesBefore(settings.filter(node => node.effectiveChapter < head.effectiveChapter), head.effectiveChapter).relations
         .some(pair => pair.lines.some(line => pairKey(line) === pairKey(head) && line.value === head.value))
     if (!restated) changes.add(head)
