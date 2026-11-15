@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import { isDeepStrictEqual } from 'node:util'
 import type { ApproveCharacterProposalRequest, CancelCharacterProposalRequest, CharacterIdentitySnapshot, CharacterProposalBatch, CharacterProposalItem, CharacterProposalSource, CharacterStaticFields, PendingFinalizedCharacterProposalSummary } from '../../src/shared/character-proposal'
+import { directoryProposalChapter } from '../../src/shared/character-proposal'
 import { resolveScopedCharacterIdentity, type CharacterStaticProvenance } from '../../src/shared/character-identity'
 import { CHARACTER_ROLES } from '../../src/shared/character-role'
 import { CharacterRosterRepository, commitCharacterIdentities, refreshCharacterIdentityProjection, type CharacterIdentityCommitRequest } from '../repositories/character-roster-repository'
@@ -141,6 +142,14 @@ export class CharacterProposalService {
           return [{ proposalBatchId: proposal_id, revision: envelope.batch.revision, importOperationId: envelope.batch.source.operationId,
             itemCount: envelope.batch.items.length, ...(purpose ? { importPurpose: purpose } : {}) }]
         }
+        if (envelope.batch.source.kind === 'directory') {
+          if (!envelope.batch.items.length) return []
+          // 提出它的蓝图或生成来源变了，接受必然失败；这里抛错就不列出。
+          this.sourceProof(envelope.batch.source, true, envelope.architectureDerivationVersion ?? 1)
+          const chapters = envelope.batch.items.map(item => directoryProposalChapter(item.selectionKey))
+          return [{ proposalBatchId: proposal_id, revision: envelope.batch.revision,
+            blueprintChapters: { from: Math.min(...chapters), to: Math.max(...chapters) }, itemCount: envelope.batch.items.length }]
+        }
         return envelope.batch.source.kind === 'finalized-generation'
           ? [{ proposalBatchId: proposal_id, revision: envelope.batch.revision, finalizationId: source.sourceId }] : []
       } catch { return [] }
@@ -148,8 +157,9 @@ export class CharacterProposalService {
   }
   readPendingFinalized(proposalBatchId: string): CharacterProposalBatch {
     const batch = this.read(proposalBatchId)
-    if (batch.status !== 'pending-approval' || !['finalized-generation', 'import'].includes(batch.source.kind))
+    if (batch.status !== 'pending-approval' || !['finalized-generation', 'import', 'directory'].includes(batch.source.kind))
       throw new Error('CHARACTER_PROPOSAL_NOT_PENDING_FINALIZED')
+    if (batch.source.kind === 'directory') this.sourceProof(batch.source, true, 1)
     return batch
   }
   evidence(proposalBatchId: string) {
@@ -277,7 +287,8 @@ export class CharacterProposalService {
           || !byKey.get(from.selectionKey)!.relationships.some(item => item.relation === relation.relation
             && (item.targetSelectionKey ? item.targetSelectionKey === relation.targetSelectionKey : Boolean(item.targetName)))) throw new Error('CHARACTER_RELATIONSHIP_PROPOSAL_INVALID')
         identityRequest.relationships.push({ ...(from.action === 'create' ? { sourceSelectionKey: from.selectionKey } : { sourceCharacterId: from.characterId }),
-          ...(to ? to.action === 'create' ? { targetSelectionKey: to.selectionKey } : { targetCharacterId: to.characterId } : { targetCharacterId: relation.targetCharacterId }), relation: relation.relation })
+          ...(to ? to.action === 'create' ? { targetSelectionKey: to.selectionKey } : { targetCharacterId: to.characterId } : { targetCharacterId: relation.targetCharacterId }), relation: relation.relation,
+          ...(batch.source.kind === 'directory' ? { effectiveChapter: directoryProposalChapter(from.selectionKey) } : {}) })
       }
       const frozenRequest = JSON.stringify(identityRequest)
       const receipt = commitCharacterIdentities(this.db, identityRequest, candidate => JSON.stringify(candidate) === frozenRequest)

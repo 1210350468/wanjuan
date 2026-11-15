@@ -6,18 +6,19 @@ import { useLocaleStore } from '../../../stores/locale-store'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowReasoningStore } from '../../../stores/workflow-reasoning-store'
 import { useWorkflowStore, type WorkflowRun, type WorkflowStep } from '../../../stores/workflow-store'
-import { runProgress } from '../../../stores/navigation/stage-progress'
+import { runProgress, stepWait, type StepWait } from '../../../stores/navigation/stage-progress'
 import { CharacterProposalSelectionPanel } from '../../characters/CharacterProposalSelectionPanel'
 import { isCurrentSessionRun, openArchitectureFor, openNovelConfigurationFor, runFailure, useResumePlotOutline } from '../../run/run-failure'
 import { ACTIVE_RUN_STATUSES, splitThinking } from '../../run/run-output'
-import { useReviewWaitLines } from '../../run/use-review-wait'
+import { useNow } from '../../run/use-now'
+import { useReviewWaitLines, type WaitLine } from '../../run/use-review-wait'
 import { useWorkflowConfirmation, type WorkflowConfirmation } from '../../run/use-workflow-confirmation'
 import { Button } from '../../ui/Button'
 import MarkdownContent from '../../ui/MarkdownContent'
 import { Notice } from '../../ui/Notice'
 import { ProgressRing } from '../ProgressRing'
 import { ImportSuggestions } from './ImportSuggestions'
-import { clockTime, stepDuration } from './run-format'
+import { clockTime, durationText, stepDuration } from './run-format'
 
 type Text = (zh: string, en: string) => string
 
@@ -120,7 +121,7 @@ function RunConfirmation({ confirmation, primary, text }: { confirmation: Workfl
           <p className="run-confirm-summary">{text(`${proposal.batch.items.length} 个角色候选`, `${proposal.batch.items.length} character ${pluralEn(proposal.batch.items.length, 'candidate')}`)}</p>
           <div className="run-proposals">
             <CharacterProposalSelectionPanel batch={proposal.batch} choices={proposal.choices}
-              identities={proposal.identities} disabled={!ready} onChange={proposal.onChange} />
+              disabled={!ready} onChange={proposal.onChange} />
           </div>
         </>
       )}
@@ -145,6 +146,7 @@ function RunSteps({ run, live, text }: { run: WorkflowRun; live: boolean; text: 
           <RunStep
             key={step.id}
             step={step}
+            runStatus={run.status}
             live={live && step.status === 'running'}
             reasoning={current ? reasoning : ''}
             open={open[step.id] ?? openByDefault}
@@ -176,8 +178,9 @@ function stepMeta(step: WorkflowStep, text: Text): string {
   return ''
 }
 
-function RunStep({ step, live, reasoning, open, onToggle, text }: {
+function RunStep({ step, runStatus, live, reasoning, open, onToggle, text }: {
   step: WorkflowStep
+  runStatus: WorkflowRun['status']
   /** 这一步正在运行：输出持续追加，自动滚到最新。 */
   live: boolean
   reasoning: string
@@ -189,7 +192,7 @@ function RunStep({ step, live, reasoning, open, onToggle, text }: {
   const thinking = reasoning || output.thinking
   const hasDetail = Boolean(output.raw || thinking || step.error)
   const expanded = hasDetail && open
-  const reviewing = live && step.generationActivity?.operation === 'review-chapter'
+  const reviewing = runStatus === 'running' && step.generationActivity?.operation === 'review-chapter'
   const row = (
     <>
       <StepIcon step={step} />
@@ -203,7 +206,7 @@ function RunStep({ step, live, reasoning, open, onToggle, text }: {
       {hasDetail
         ? <button type="button" className="run-step-row pi-focusable" aria-expanded={expanded} onClick={onToggle}>{row}</button>
         : <div className="run-step-row">{row}</div>}
-      {reviewing && <ReviewWait step={step} />}
+      {live && (reviewing ? <ReviewWait step={step} runStatus={runStatus} text={text} /> : <StepWait step={step} runStatus={runStatus} text={text} />)}
       {expanded && (
         <div className="run-step-detail">
           {thinking && (
@@ -220,10 +223,27 @@ function RunStep({ step, live, reasoning, open, onToggle, text }: {
   )
 }
 
-function ReviewWait({ step }: { step: WorkflowStep }) {
+function waitLine(wait: StepWait, text: Text): string {
+  const waited = durationText(wait.waitedMs, text)
+  return wait.on === 'model'
+    ? text(`正在等模型回复，已等 ${waited}`, `Waiting for the model, ${waited} so far`)
+    : text(`这一步还在进行，已等 ${waited}`, `This step is still running, ${waited} so far`)
+}
+
+function ReviewWait({ step, runStatus, text }: { step: WorkflowStep; runStatus: WorkflowRun['status']; text: Text }) {
   const locale = useLocaleStore(s => s.locale)
-  const lines = useReviewWaitLines(step, locale)
-  return <div className="run-step-wait" role="status">{lines.map(line => <p key={line}>{line}</p>)}</div>
+  return <StepWait step={step} runStatus={runStatus} text={text} more={useReviewWaitLines(step, locale)} />
+}
+
+function StepWait({ step, runStatus, text, more = [] }: { step: WorkflowStep; runStatus: WorkflowRun['status']; text: Text; more?: WaitLine[] }) {
+  const wait = stepWait(step, runStatus, useNow())
+  const lines: WaitLine[] = [
+    ...(runStatus === 'running' && step.activityText ? [{ key: 'activity', text: step.activityText }] : []),
+    ...(wait ? [{ key: 'wait', text: waitLine(wait, text), ticking: true }] : []),
+    ...more,
+  ]
+  if (lines.length === 0) return null
+  return <div className="run-step-wait">{lines.map(line => <p key={line.key} role={line.ticking ? undefined : 'status'}>{line.text}</p>)}</div>
 }
 
 /** 输出框贴着底部时随新内容滚动；作者往上翻看时不打断。 */

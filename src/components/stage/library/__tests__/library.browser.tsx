@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { page } from 'vitest/browser'
 import type { StoreApi } from 'zustand'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -11,10 +10,12 @@ import { useDraftStore } from '../../../../stores/draft-store'
 import { useEditorStore } from '../../../../stores/editor-store'
 import { useLayoutStore } from '../../../../stores/layout-store'
 import { useLLMStore } from '../../../../stores/llm-store'
+import { useLocaleStore } from '../../../../stores/locale-store'
 import { useStageStore } from '../../../../stores/navigation/stage-store'
 import { useProjectStore } from '../../../../stores/project-store'
 import NewWorkDialog from '../NewWorkDialog'
 import StageLibrary from '../StageLibrary'
+import { resizeViewport } from '../../../ui/__tests__/viewport'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -25,7 +26,7 @@ function snapshot<T>(store: StoreApi<T>): () => void {
   const state = store.getState()
   return () => store.setState(state, true)
 }
-const restores = [snapshot(useLayoutStore), snapshot(useProjectStore), snapshot(useLLMStore), snapshot(useStageStore), snapshot(useDraftStore), snapshot(useEditorStore)]
+const restores = [snapshot(useLayoutStore), snapshot(useProjectStore), snapshot(useLLMStore), snapshot(useStageStore), snapshot(useDraftStore), snapshot(useEditorStore), snapshot(useLocaleStore)]
 
 const LIGHTHOUSE = { name: '灯塔', path: 'C:\\novels\\lighthouse', updatedAt: '2026-10-11T21:14:00.000Z', previewCapabilityId: 'cap-lighthouse' }
 const ISLAND = { name: '雾岛', path: 'C:\\novels\\island', updatedAt: '2026-10-02T09:00:00.000Z', previewCapabilityId: 'cap-island' }
@@ -85,7 +86,7 @@ async function type(input: HTMLInputElement, value: string) {
 
 beforeEach(async () => {
   // 书房按桌面宽度排版。默认 414 宽的视口放不下，对话框关闭后焦点回到菜单按钮会横向滚动页面，晚到的滚动把刚打开的菜单关掉。
-  await page.viewport(1440, 900)
+  await resizeViewport(1440, 900)
   invoke = vi.fn(async (channel: string) => {
     if (channel === 'project:peek-overview') return READY
     if (channel === 'project:overview-current') return { ...READY, projectId: 'lighthouse', name: '灯塔', excerpt: '守塔人把灯又擦了一遍。' }
@@ -242,7 +243,7 @@ describe('书房', () => {
 
   it('窗口最窄 1024×640 时书房不横向溢出，书架菜单与确认框照常可用', async () => {
     // 真实应用的最小窗口（electron/main.ts 的 minWidth、minHeight）。
-    await page.viewport(1024, 640)
+    await resizeViewport(1024, 640)
     openCurrent()
     useProjectStore.setState({ recentProjects: [LIGHTHOUSE, ISLAND] })
     await mount(1024, 640)
@@ -327,5 +328,75 @@ describe('书房', () => {
       useDraftStore.setState({ draftsByChapter: { 1: draft(1, 0) } as never })
     })
     expect(primary()).toEqual(['继续写作 · 架构'])
+  })
+})
+
+describe('导入旧项目副本被拒时的提示', () => {
+  function answerImport(outcome: () => unknown) {
+    const plain = invoke.getMockImplementation()!
+    invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
+      if (channel === 'dialog:select-legacy-project') return { grantId: 'source-grant', displayName: 'AI稿子' }
+      if (channel === 'dialog:select-project-restore-target') return { grantId: 'target-grant' }
+      if (channel === 'project:import-legacy-copy') return outcome()
+      return plain(channel, ...args)
+    })
+  }
+  async function importAndReadNotice(name: string) {
+    await mount()
+    await click(button(name))
+    return vi.waitFor(() => {
+      const notice = host!.querySelector<HTMLElement>('[role="status"]')
+      expect(notice).toBeTruthy()
+      return notice!.textContent!
+    })
+  }
+
+  it('选的不是旧项目：说明原因和原文件没动，指向界面上真实存在的入口，不露错误码', async () => {
+    answerImport(() => ({ state: 'blocked', code: 'LEGACY_IMPORT_NOT_LEGACY_PROJECT' }))
+    const shown = await importAndReadNotice('导入旧项目副本')
+    expect(shown).not.toContain('LEGACY_IMPORT')
+    expect(shown).toContain('没有导入，原文件没有改动。')
+    expect(shown).toContain('这个文件夹不是旧版项目')
+    for (const entry of ['小说拆解与仿写', '打开作品']) {
+      expect(shown).toContain(`「${entry}」`)
+      expect(button(entry), `界面上有「${entry}」按钮`).toBeTruthy()
+    }
+  })
+
+  it('英文界面同样说明原因并用英文按钮名', async () => {
+    useLocaleStore.setState({ locale: 'en-US' })
+    answerImport(() => ({ state: 'blocked', code: 'LEGACY_IMPORT_NOT_LEGACY_PROJECT' }))
+    const shown = await importAndReadNotice('Import an old project copy')
+    expect(shown).not.toContain('LEGACY_IMPORT')
+    expect(shown).toContain('Nothing was imported. Your original files were not changed.')
+    expect(shown).toContain('This folder is not an old project')
+    for (const entry of ['Novel breakdown & imitation', 'Open a book']) {
+      expect(shown).toContain(`“${entry}”`)
+      expect(button(entry), `the "${entry}" button exists`).toBeTruthy()
+    }
+  })
+
+  it('真实读写失败：说明没有导入、原文件没动和可以怎么办', async () => {
+    answerImport(() => ({ state: 'blocked', code: 'LEGACY_IMPORT_IO_FAILED' }))
+    const shown = await importAndReadNotice('导入旧项目副本')
+    expect(shown).not.toContain('LEGACY_IMPORT')
+    expect(shown).toContain('没有导入，原文件没有改动。')
+    expect(shown).toContain('写入权限')
+    expect(shown).toContain('「导入旧项目副本」')
+  })
+
+  it('没登记的错误走兜底说明，异常里的路径不进界面', async () => {
+    answerImport(() => { throw new Error("ENOENT: no such file or directory, lstat 'C:/Users/author/私人稿子'") })
+    const thrown = await importAndReadNotice('导入旧项目副本')
+    expect(thrown).toContain('没有导入，原文件没有改动。')
+    expect(thrown).not.toContain('私人稿子')
+    expect(thrown).not.toContain('ENOENT')
+  })
+
+  it('服务层放行的未知码也走兜底说明，不露码', async () => {
+    answerImport(() => ({ state: 'blocked', code: 'PROJECT_MIGRATION_SOMETHING_NEW' }))
+    const shown = await importAndReadNotice('导入旧项目副本')
+    expect(shown).toContain('没有导入，原文件没有改动。')
+    expect(shown).not.toContain('PROJECT_MIGRATION')
   })
 })

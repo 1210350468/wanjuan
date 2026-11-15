@@ -10,6 +10,8 @@ import { _electron as electron } from 'playwright'
 import { verifyWindowsPackage, verifyPackagedBetterSqliteLoad } from './verify-win-package.mjs'
 import * as stage from './redesign/pages/stage.mjs'
 import { resolveWindowsExecutable } from './product-identity.mjs'
+import { CURRENT_PROJECT_SCHEMA_VERSION } from './lib/current-project-schema.mjs'
+import { documentEndKey } from './redesign/keys.mjs'
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const scriptPath = fileURLToPath(import.meta.url)
@@ -331,7 +333,7 @@ try { process.stdout.write(JSON.stringify({version:db.pragma('user_version',{sim
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', windowsHide: true, timeout: 20_000 })
   assert.equal(result.status, 0, `schema read failed: ${result.stderr || result.error || result.stdout}`)
   const schema = JSON.parse(result.stdout.trim())
-  assert.equal(schema.version, 7)
+  assert.equal(schema.version, CURRENT_PROJECT_SCHEMA_VERSION)
   assert.deepEqual(schema.mergeFields, ['cycle_id', 'body'])
 }
 async function upload(panel) {
@@ -565,7 +567,7 @@ async function main() {
     assert.equal(await stage.proseBody(editor), initialBody, 'chapter editor did not display the draft body before continuation')
     const continued = ` 续写-${runId.slice(0, 8)}`
     await editor.click()
-    await resumedA.page.keyboard.press('Control+End')
+    await resumedA.page.keyboard.press(documentEndKey())
     await resumedA.page.keyboard.type(continued)
     await stage.saveProse(resumedA.page)
     const savedOpen = await invoke(resumedA.page, 'project:open', selectedRecent.path, randomUUID(), null)

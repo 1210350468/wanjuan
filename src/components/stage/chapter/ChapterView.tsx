@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DRAFT_STATUS_INFO } from '../../../shared/draft-status'
 import { countDraftUnits } from '../../../shared/draft-units'
 import { formatResourceUri } from '../../../shared/project-paths'
@@ -6,12 +6,12 @@ import type { EditorTab } from '../../../stores/editor-store'
 import { readDraftBody } from '../../../stores/draft-store'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { chapterPhase } from '../../../stores/navigation/stage-progress'
-import { useStageStore } from '../../../stores/navigation/stage-store'
+import { useStageStore, type StageSheet } from '../../../stores/navigation/stage-store'
 import { useProjectStore } from '../../../stores/project-store'
 import type { ReviewEntry } from '../../../services/draft-index'
 import { ipc } from '../../../services/ipc-client'
 import { confirmationSourceReviewId, parseHumanConfirmedReviewSnapshot } from '../../../shared/human-confirmed-review'
-import CodeMirrorEditor from '../../editor/CodeMirrorEditor'
+import CodeMirrorEditor, { type AnnotationRevision } from '../../editor/CodeMirrorEditor'
 import { useReviewCycle } from '../../editor/review-checklist'
 import { useDraftActions } from '../../editor/use-draft-actions'
 import { sameProjectSessionContext } from '../../../shared/project-session-context'
@@ -24,6 +24,7 @@ import { useChapterBlueprint } from './use-chapter-blueprint'
 import ChapterPlan from './ChapterPlan'
 import { STAGE_STEP } from './chapter-lifecycle'
 import VersionSwitcher from './VersionSwitcher'
+import AnnotationRevisionHistory from './AnnotationRevisionHistory'
 import { pluralEn } from '../../../shared/plural-en'
 
 /**
@@ -62,6 +63,16 @@ function useShownReview(reviews: readonly ReviewEntry[], projectKey: string) {
   return report?.key === key ? report : null
 }
 
+const stickyActionsHeight = (inside: HTMLElement) => inside.closest('.stage-ch-scroll')?.querySelector<HTMLElement>('.stage-ch-actions-sticky')?.offsetHeight ?? 0
+
+/** 条高会随审稿读完出现、纸面宽窄变化；chapter.css 的 scroll-padding-top 与搜索面板 top 读这个变量。 */
+const syncStickyTopVar = (scroller: HTMLDivElement | null) => {
+  if (!scroller) return
+  const observer = new ResizeObserver(() => scroller.style.setProperty('--stage-ch-sticky-top', `${stickyActionsHeight(scroller)}px`))
+  observer.observe(scroller.firstElementChild!)
+  return () => observer.disconnect()
+}
+
 /**
  * 正文单章视图：章节头、生命周期、章节动作条、版本切换器与纸面正文。待写章显示本章蓝图与写作此章。
  * 审稿报告是视图里的侧页，修稿合并在纸面上逐段选择，定稿后显示后处理四步；全程不需要离开这个标签。
@@ -91,9 +102,13 @@ function DraftChapter({ tab, filePath, projectKey }: { tab: EditorTab; filePath:
     // 复验完成时新增一份审稿而显示的仍是原审稿，审稿记录也算进来，周期随之重读。
     refreshKey: `${draft.status}:${draft.pendingRevisions.map(revision => revision.id).join(',')}:${draft.reviews.map(entry => entry.id).join(',')}` })
   const [charCount, setCharCount] = useState(() => countDraftUnits(tab.content ?? ''))
+  const [annotationHistoryRevision, setAnnotationHistoryRevision] = useState(0)
   // 沉浸写作底部的字数进度，目标取设定里的每章字数。
   const target = useProjectStore(s => s.currentProject?.novelConfig.wordsPerChapter) || 0
   const [sheetSlot, setSheetSlot] = useState<HTMLDivElement | null>(null)
+  const sheetFree = useStageStore(s => s.focus || s.sheet === null || (s.sheet.kind === 'review' && (s.sheet.filePath !== filePath || latest === null)))
+  // 批注坞顶掉的侧页，批注用完放回；作者已另开别的则不动。
+  const sheetBeforeDock = useRef<StageSheet | null>(null)
 
   const facts = useStageStore(s => draft.meta && s.chapterFacts && session && sameProjectSessionContext(s.chapterFacts.session, session)
     ? s.chapterFacts.byDraft[draft.meta.id]
@@ -110,8 +125,25 @@ function DraftChapter({ tab, filePath, projectKey }: { tab: EditorTab; filePath:
   useEffect(() => {
     if (!request || request.filePath !== filePath || !sameProjectSessionContext(request.session, captureProjectSession(useProjectStore.getState().currentProject))) return
     useStageStore.setState({ chapterRequest: null, sheet: null })
+    sheetBeforeDock.current = null
     reload()
   }, [request, filePath, reload])
+
+  // 请求只交给看得见的编辑器；被合并视图或批注审阅盖住时留在 store，露出后再交。交接后清掉，重挂不会重开气泡。
+  const [annotationRevision, setAnnotationRevision] = useState<AnnotationRevision | null>(null)
+  const covered = draft.mergeData !== null || annotationRevision?.phase === 'review'
+  const recovery = useStageStore(s => !covered && s.selectionRequest?.filePath === filePath && session && sameProjectSessionContext(s.selectionRequest.session, session)
+    ? s.selectionRequest : undefined)
+  useEffect(() => {
+    if (!recovery) return
+    useStageStore.setState({ selectionRequest: null, sheet: null })
+    sheetBeforeDock.current = null
+  }, [recovery])
+  useEffect(() => {
+    if (!covered) return
+    useStageStore.setState({ coveredProseFile: filePath })
+    return () => useStageStore.setState({ coveredProseFile: null })
+  }, [covered, filePath])
 
   const title = blueprint?.title || draft.meta?.chapterTitle || ''
   const units = charCount.toLocaleString(locale)
@@ -123,7 +155,7 @@ function DraftChapter({ tab, filePath, projectKey }: { tab: EditorTab; filePath:
 
   return (
     <div className="stage-ch" data-focus={focus || undefined}>
-      <div className="stage-ch-scroll">
+      <div ref={syncStickyTopVar} className="stage-ch-scroll">
         <article className="stage-ch-page" aria-busy={!draft.loaded}>
           {chapterNumber !== undefined && (
             <ChapterHead
@@ -149,6 +181,7 @@ function DraftChapter({ tab, filePath, projectKey }: { tab: EditorTab; filePath:
               facts={facts}
               review={latest ? { report: latest.content, reviewId: latest.id, snapshot: review.snapshot, cycle: review.cycle, reloadCycle: review.reloadCycle } : null}
               focus={focus}
+              annotation={annotationRevision}
             />
           )}
           {chapterNumber !== undefined && (
@@ -164,15 +197,38 @@ function DraftChapter({ tab, filePath, projectKey }: { tab: EditorTab; filePath:
               <CodeMirrorEditor
                 mode="prose"
                 fitContent
+                stickyTopInset={stickyActionsHeight}
                 paragraphIndent
                 content={tab.content ?? ''}
                 filePath={filePath}
+                recoveryHandle={recovery?.handle}
+                recoveryNonce={recovery?.nonce}
                 editable={editable}
+                draftReadonly={draft.isReadonly}
                 hideStatusBar
                 onCharCountChange={setCharCount}
                 onChange={draft.onBodyChange}
                 onSave={body => draft.save(body)}
+                annotationSlot={sheetFree ? sheetSlot : null}
+                onAnnotationAdded={first => {
+                  const { sheet } = useStageStore.getState()
+                  if (sheet) sheetBeforeDock.current = sheet
+                  else if (first) sheetBeforeDock.current = null
+                  useStageStore.setState({ sheet: null })
+                }}
+                onAnnotationsCleared={() => {
+                  const sheet = sheetBeforeDock.current
+                  sheetBeforeDock.current = null
+                  if (sheet && useStageStore.getState().sheet === null) useStageStore.setState({ sheet })
+                }}
+                onAnnotationRevisionChange={setAnnotationRevision}
+                chapterAnnotations
+                onCommitAnnotations={async (before, after, annotations) => {
+                  await draft.commitAnnotations(before, after, annotations)
+                  setAnnotationHistoryRevision(value => value + 1)
+                }}
               />
+              {draft.meta && <AnnotationRevisionHistory draftId={draft.meta.id} projectKey={projectKey} refresh={annotationHistoryRevision} />}
             </div>
           )}
         </article>

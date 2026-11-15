@@ -11,6 +11,9 @@ import { SummaryRepository } from '../../repositories/summary-repository'
 import { CharacterRosterRepository, refreshCharacterIdentityProjection } from '../../repositories/character-roster-repository'
 import { createCanonicalProjectManifest } from '../../../src/shared/project-format'
 import { parseFinalizedCharacterStateResponse } from '../../../src/shared/finalized-continuity'
+import { commitAuthorCharacterRoster } from '../character-roster-author'
+import { readCharacterContinuityTimeline } from '../../repositories/character-continuity-repository'
+import { characterTimeline } from '../../../src/shared/character-continuity'
 import { exportPortableProject } from '../project-archive-service'
 import { restorePortableProject } from '../project-restore-service'
 import { readPortableCurrentAuthority } from '../portable-current-authority'
@@ -113,7 +116,7 @@ const CHAPTER_1 = '第一章：林岚在北塔顶层找到铜钥匙。'
 const CHAPTER_2 = '第二章：林岚离开北塔，住进南港旅店。'
 const CHAPTER_3 = '第三章：林岚在南港旅店收到师父的来信。'
 
-describe('#491 角色状态来源经过多次备份往返', { timeout: 30_000 }, () => {
+describe('#491 角色状态来源经过多次备份往返', () => {
   it('导出→恢复→再导出→再恢复后，定稿派生字段仍是当前来源，最新章定稿可提交', async () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), 'f491-'))
     roots.push(base)
@@ -269,7 +272,7 @@ async function deleteFinalizedChapter(project: OpenProject, draftId: number, cha
   expect(getProjectDb()!.prepare('SELECT COUNT(*) FROM finalization_outbox WHERE draft_id=?').pluck().get(draftId)).toBe(0)
 }
 
-describe('#484 写入派生字段的章节已删除后再定稿后面的章节', { timeout: 30_000 }, () => {
+describe('#484 写入派生字段的章节已删除后再定稿后面的章节', () => {
   it('原项目：删掉第 1 章后定稿第 2 章，地点按第 2 章更新', async () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), 'f484-'))
     roots.push(base)
@@ -473,5 +476,29 @@ describe('#484 删章记录作为来源证明的边界', { timeout: 60_000 }, ()
     expect(String(characterRow().cs_provenance)).toContain(a.projectId)
     finalizeChapter(c, 2, 2, CHAPTER_2)
     expect(() => deriveCharacterState(c, 2, { location: '南港旅店' }, '住进南港旅店')).toThrow('FINALIZED_CHARACTER_SOURCE_CONFLICT')
+  })
+})
+
+describe('角色时间线经过便携导出恢复', () => {
+  it('导出再恢复后，每章的字段、值、来历和原文证据都和导出前一样', async () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'timeline-'))
+    roots.push(base)
+    const a = createSourceProject(base)
+    finalizeChapter(a, 1, 1, CHAPTER_1)
+    deriveCharacterState(a, 1, { location: '北塔顶层' }, '林岚在北塔顶层找到铜钥匙')
+    const db = getProjectDb()!
+    const read = CharacterRosterRepository.read(db), entries = structuredClone(read.entries)
+    entries[0].currentState = { ...entries[0].currentState!, keyItems: '玉佩' }
+    commitAuthorCharacterRoster(db, { operationId: 'author-edit', schemaVersion: 1, intent: 'manual_edit', expectedRevision: read.revision,
+      expectedIdentityRevision: read.identityRevision!, entries }, { projectId: a.projectId, epoch: 'session' }, () => undefined)
+    const shown = () => characterTimeline(readCharacterContinuityTimeline(getProjectDb()!, CHARACTER_ID).nodes)
+      .map(group => [group.chapter, group.changes.map(change => [change.node.aspect, change.value, change.source, change.node.quote])])
+    const before = shown()
+    expect(before).toEqual([
+      [2, [['keyItems', '玉佩', 'author', null]]],
+      [1, [['location', '北塔顶层', 'finalized', expect.objectContaining({ text: '林岚在北塔顶层找到铜钥匙' })]]],
+    ])
+    await exportAndRestore(base, a, 'timeline')
+    expect(shown()).toEqual(before)
   })
 })

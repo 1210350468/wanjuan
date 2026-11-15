@@ -27,6 +27,8 @@ interface ToastStackInput {
   actions?: ToastStackAction[]
   /** 毫秒；0 表示不自动消失。 */
   duration: number
+  /** 这条离开时（到时、点关闭、点动作或被挤掉）调一次。 */
+  onDismiss?: () => void
 }
 
 interface ToastStackEntry extends ToastStackInput {
@@ -74,7 +76,9 @@ function ensureStack() {
 const liveEntries = (list: ToastStackEntry[]) => list.filter(entry => !entry.exiting)
 
 function dismissToast(id: number) {
-  if (!liveEntries(entries).some(entry => entry.id === id)) return
+  const leaving = liveEntries(entries).find(entry => entry.id === id)
+  if (!leaving) return
+  leaving.onDismiss?.()
   publish(entries.map(entry => (entry.id === id ? { ...entry, exiting: true } : entry)))
   setTimeout(() => publish(entries.filter(entry => entry.id !== id)), EXIT_MS)
 }

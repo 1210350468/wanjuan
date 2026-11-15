@@ -9,7 +9,6 @@ import { CURRENT_DESKTOP_SCHEMA_VERSION, getDesktopMigrationRegistry } from '../
 import { migrateSchema } from '../../migrations/runner'
 import { SqliteSchemaAdapter } from '../../migrations/sqlite-schema-adapter'
 import { ProjectPeekService } from '../project-peek'
-import { WINDOWS_RUNNER_IO_STALL_TIMEOUT_MS } from '../../../test/helpers/windows-runner-io-stall'
 
 const require = createRequire(import.meta.url)
 const Database = require('better-sqlite3') as typeof import('better-sqlite3')
@@ -20,7 +19,7 @@ const handles: DatabaseHandle[] = []
 afterEach(() => {
   for (const database of handles.splice(0)) database.close()
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true })
-}, WINDOWS_RUNNER_IO_STALL_TIMEOUT_MS)
+})
 
 function manifest(projectId: string) {
   return {
@@ -126,7 +125,7 @@ function ready<T extends { state: string }>(overview: T): asserts overview is T 
   expect(overview.state).toBe('ready')
 }
 
-describe('ProjectPeekService source-zero-write overview', { timeout: WINDOWS_RUNNER_IO_STALL_TIMEOUT_MS }, () => {
+describe('ProjectPeekService source-zero-write overview', () => {
   it('accepts only a live opaque capability and invalidates it on revoke or manifest drift', () => {
     const f = fixture()
     const service = new ProjectPeekService({ scratchRoot: f.scratch })
@@ -191,12 +190,13 @@ describe('ProjectPeekService source-zero-write overview', { timeout: WINDOWS_RUN
     }
   })
 
-  // #564 M07 把库升到 8；最近项目列表在正常打开升级之前就预览，schema 7 的项目必须照常统计（合并前即如此）。
-  it('previews a schema-7 project by migrating only its private snapshot, leaving the source at 7', () => {
-    const f = fixture({ schemaVersion: 7, journalMode: 'wal' })
+  // 最近项目列表在正常打开升级之前就预览，旧 schema 也必须照常统计。
+  it.each([7, 8])('previews a schema-%i project by migrating only its private snapshot, leaving the source as it was', version => {
+    const f = fixture({ schemaVersion: version, journalMode: 'wal' })
     seedCore(f.database)
     addChapter(f.database, 1, { blueprint: true, draft: true, review: true, finalized: true })
     addChapter(f.database, 2, { draft: true })
+    f.database.prepare("INSERT INTO characters(character_id,name,cs_location) VALUES('c1','林澈','北门')").run()
     const before = sourceState(f.databasePath)
     const service = new ProjectPeekService({ scratchRoot: f.scratch })
     const overview = service.peek(service.issueCapability(f.root)!.capabilityId)
@@ -205,7 +205,7 @@ describe('ProjectPeekService source-zero-write overview', { timeout: WINDOWS_RUN
     expect(overview).toMatchObject({ projectId: f.projectId, name: '雨夜来信', totalWords: 24, finalizedChapters: 1 })
     expect(overview.stages.find(stage => stage.id === 'drafting')).toEqual({ id: 'drafting', status: 'in-progress', count: 2 })
     expect(sourceState(f.databasePath)).toEqual(before)
-    expect(f.database.pragma('user_version', { simple: true })).toBe(7)
+    expect(f.database.pragma('user_version', { simple: true })).toBe(version)
     expect(fs.readdirSync(f.storage).sort()).toEqual(['project.db', 'project.db-shm', 'project.db-wal', 'project.json'])
     expect(fs.readdirSync(f.scratch)).toEqual([])
   })

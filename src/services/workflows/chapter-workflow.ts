@@ -5,6 +5,7 @@ import type { DraftMeta } from '../draft-index'
 import { ipc } from '../ipc-client'
 
 import type { DraftStatus } from '../../shared/draft-status'
+import type { ChapterThreadTask } from '../../shared/narrative-thread'
 import type { ProjectSessionContext } from '../../shared/ipc-channels'
 import { sameProjectPathKey } from '../../shared/project-session-context'
 import { FINALIZATION_SHARED_WRITE_RESOURCE_KINDS, type WorkflowResourceClaims } from '../../shared/workflow-resource-claims'
@@ -12,6 +13,7 @@ import { normalizeChapterWordsTarget } from './chapter-creation-parameters'
 import { localize } from '../../i18n/core'
 import type { Locale } from '../../i18n/types'
 import { useLocaleStore } from '../../stores/locale-store'
+import { FINALIZE_POST_PROCESS_KEY } from './stage-notice'
 
 // ==========================================
 // 1. 结构与类型导出 (保留对外的向后兼容)
@@ -32,6 +34,8 @@ export interface ChapterInfo {
   wordsTarget?: number
   /** 用户自定义知识库检索关键词（追加到向量搜索 query） */
   knowledgeQueryHint?: string
+  /** 开写时冻结的本章线索硬任务；从恢复记录读回时沿用记录里的值。旧记录没有这一项。 */
+  threadTasks?: readonly ChapterThreadTask[]
 }
 
 export interface ChapterWorkflowOptions {
@@ -237,6 +241,7 @@ export function createChapterWorkflow(
     chapterWordsTarget,
     resourceKeys: [workflowResourceKey('chapter', chapterInfo.chapterNumber)],
     readResourceKeys: CHAPTER_CONTEXT_READ_RESOURCE_KEYS,
+    backgroundNotice: { stage: 'draft', chapterNumber: chapterInfo.chapterNumber },
     title: localize(uiLocale,
       `第 ${chapterInfo.chapterNumber} 章 · 写稿`,
       `Chapter ${chapterInfo.chapterNumber} · Draft`,
@@ -282,6 +287,7 @@ export function createRefineOnlyWorkflow(
     projectSession: workflowProjectSession(params.projectPath, sourceProjectSession),
     uiLocale,
     ...draftAIResourceClaims(params.chapterNumber),
+    backgroundNotice: { stage: 'revise', chapterNumber: params.chapterNumber },
     title: localize(uiLocale,
       `第 ${params.chapterNumber} 章 · 修稿`,
       `Chapter ${params.chapterNumber} · Revise`,
@@ -325,6 +331,7 @@ export function createRefineFromReviewWorkflow(
     uiLocale,
     ...(generationModelId ? { generationModelId } : {}),
     ...draftAIResourceClaims(params.chapterNumber),
+    backgroundNotice: { stage: 'revise', chapterNumber: params.chapterNumber },
     title: localize(uiLocale,
       `第 ${params.chapterNumber} 章 · 审稿修复`,
       `Chapter ${params.chapterNumber} · Apply review`,
@@ -369,6 +376,7 @@ export function createReviewOnlyWorkflow(
     projectSession: workflowProjectSession(params.projectPath, sourceProjectSession),
     uiLocale,
     ...draftAIResourceClaims(params.chapterNumber),
+    backgroundNotice: { stage: 'review', chapterNumber: params.chapterNumber },
     title: localize(uiLocale,
       `第 ${params.chapterNumber} 章 · 审稿`,
       `Chapter ${params.chapterNumber} · Review`,
@@ -419,6 +427,7 @@ export function createFinalizeWorkflow(
     projectSession: workflowProjectSession(params.projectPath, sourceProjectSession),
     uiLocale,
     ...finalizeResourceClaims(params.chapterNumber),
+    backgroundNotice: { stage: 'finalize', chapterNumber: params.chapterNumber },
     title: localize(uiLocale,
       `第 ${params.chapterNumber} 章 · 定稿`,
       `Chapter ${params.chapterNumber} · Finalize`,
@@ -440,7 +449,7 @@ export function createFinalizeWorkflow(
             chapterInfo,
             snapshot: params.snapshot,
           })
-          return cmd.execute({ step, context, callbacks })
+          context.data[FINALIZE_POST_PROCESS_KEY] = await cmd.execute({ step, context, callbacks })
         },
       },
     ],
@@ -543,11 +552,11 @@ export function createRepairFinalizeWorkflow(
           const { getChapterFinalizeScope, readPostProcessStatus } = await import('./workflow-utils')
           const { planFinalizationRetry } = await import('../../shared/finalization-step-error')
           const current = await readPostProcessStatus(projectPath, getChapterFinalizeScope(chapterNumber), projectSession)
-          let stepKeys: readonly string[] | undefined
-          if (current) {
-            const plan = planFinalizationRetry(current.steps)
-            stepKeys = stepKey ? [stepKey].filter(key => plan.rows.has(key)) : plan.card
+          const arrange = (steps: Parameters<typeof planFinalizationRetry>[0]) => {
+            const plan = planFinalizationRetry(steps)
+            return stepKey ? plan.rows.get(stepKey) ?? [] : plan.card
           }
+          let stepKeys = current ? arrange(current.steps) : undefined
           if (stepKeys?.length === 0) throw new Error(text(
             '没有可以重试的失败步骤，请按各步骤的说明处理。',
             'No failed step can be retried. Follow the note on each step.',
@@ -555,7 +564,7 @@ export function createRepairFinalizeWorkflow(
 
           // 修复运行也冻结一次模型租约，全部 LLM 后处理共享一个预算。
           const { RunFinalizePostProcessCommand } = await import('./commands/finalize-chapter.command')
-          const status = await new RunFinalizePostProcessCommand({
+          const run = (keys: readonly string[] | undefined) => new RunFinalizePostProcessCommand({
             project,
             chapterNumber,
             chapterTitle,
@@ -568,9 +577,16 @@ export function createRepairFinalizeWorkflow(
             ),
             onlyFailed: true,
             retryInvalidResult: true,
-            stepKeys,
+            stepKeys: keys,
             chapterEntities,
           }).execute({ step: {}, context, callbacks })
+          let status = await run(stepKeys)
+          const afterThisRun = stepKeys && arrange(status.steps)
+          const predecessorTurnedOutStale = afterThisRun?.some(key => status.steps[key]?.ok)
+          if (stepKeys && afterThisRun && predecessorTurnedOutStale) {
+            status = await run(afterThisRun)
+            stepKeys = [...new Set([...stepKeys, ...afterThisRun])]
+          }
 
           // 后处理修复不会产生新定稿快照，只请求项目资源刷新。
           const { globalEventBus } = await import('../../shared/event-bus')

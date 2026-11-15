@@ -87,6 +87,26 @@ describe('review and revision generation through the actual owner and SQLite', (
     expect(list.reviews.map(item => [item.view.handle.runId, item.recovery.context.operation])).toContainEqual([request.handle.runId, operation])
     expect(list).toMatchObject({ drafts: [], planning: [], editors: [], partial: false })
   })
+  it.each(['review-chapter', 'refine-draft'] as const)('%s 保存后不再列为可恢复，正式结果照常读得到（#686）', async operation => {
+    const f = fixture(operation === 'review-chapter' ? undefined : async (_request, options) => {
+      options.onVisible({ kind: 'delta', text: revisedProse }); return { finishReason: 'stop', usage: null }
+    })
+    const request = await f.run(operation)
+    expect(f.owner.listRecovery().reviews.map(item => item.view.handle.runId)).toEqual([request.handle.runId])
+    const saved = operation === 'review-chapter' ? f.owner.commitReview(request) : f.owner.commitRevision({ contextId: request.contextId, handle: request.handle,
+      expectedCompositionHash: f.owner.composeVisible(request.handle, [request.artifact.artifactId], textHash(revisedProse), 'visible-append-v1').textHash })
+    expect(f.owner.listRecovery()).toMatchObject({ reviews: [], partial: false })
+    expect(f.owner.readReviewRevisionRecovery(request.handle).saved).toEqual(saved)
+  })
+  it('没保存、不能续跑、也没写出任何字的审修不列；写出过字的仍列出供复制（#686）', async () => {
+    const f = fixture()
+    const empty = f.owner.begin({ ...f.selection(f.prepare()), uiActionNonce: 'empty' })
+    f.owner.cancel(empty.handle)
+    const written = await f.run()
+    f.owner.cancel(written.handle)
+    expect(f.owner.readReviewRevisionRecovery(empty.handle).saved).toBeUndefined()
+    expect(f.owner.listRecovery().reviews.map(item => item.view.handle.runId)).toEqual([written.handle.runId])
+  })
   it.each([
     'Here is the truth: I never left the island. Everyone who said otherwise was lying.',
     '以下是我从父亲遗物中找到的最后一份内容。它改变了我们所有人的命运。',
@@ -192,10 +212,10 @@ describe('review and revision generation through the actual owner and SQLite', (
       '【后续蓝图/计划｜非既定历史】', JSON.stringify(context.blueprints.filter(item => item.chapterNumber !== context.source.chapterNumber), null, 2),
     ].join('\n\n'), ['【当前及未来蓝图/计划｜非既定历史】', JSON.stringify(context.blueprints, null, 2)].join('\n\n')))
     const f = fixture(), prepared = f.prepare(), selection = f.selection(prepared)
-    const admission = await selectFrozenReviewRevisionMaterials(prepared.context, { projectId: 'project', epoch: 'epoch-1' })
+    const view = f.owner.begin(selection)
+    const admission = await selectFrozenReviewRevisionMaterials(prepared.context, { projectId: 'project', epoch: 'epoch-1' }, f.owner.readContext(view.handle).materialAdmission!, 0)
     const prompt = admission.admitted.map(item => item.text).join('\n\n')
     expect(prompt).toContain('【当前及未来蓝图/计划｜非既定历史】')
-    const view = f.owner.begin(selection)
     f.owner.bindMaterialDecision(view.handle, { ...admission.decision, promptHash: textHash(prompt) })
     await f.owner.execute({ handle: view.handle, invocationNonce: 'old-material', task: { purpose: 'review-chapter', output: 'structured-data', messages: [{ role: 'user', content: prompt }] } })
     const artifact = f.owner.read(view.handle).artifacts[0]!
@@ -236,6 +256,7 @@ describe('review and revision generation through the actual owner and SQLite', (
           return f.owner.commitRevision(input as Parameters<typeof f.owner.commitRevision>[0])
         case 'generation:begin': return f.owner.begin(input as BeginGenerationRequest)
         case 'generation:read': return f.owner.read(input as typeof original.handle)
+        case 'generation:read-context': return f.owner.readContext((input as { handle: typeof original.handle }).handle)
         case 'generation:resume': return f.owner.resume(input as typeof original.handle)
         case 'generation:execute':
           if (failDispatch) { failDispatch = false; throw new Error('SYNTHETIC_BEFORE_DISPATCH') }
@@ -295,9 +316,12 @@ describe('review and revision generation through the actual owner and SQLite', (
   })
   it('admits the renderer author-material receipt through main and retains the frozen recovery context', async () => {
     const f = fixture(), prepared = f.prepare(), selection = f.selection(prepared)
-    const admission = await selectFrozenReviewRevisionMaterials(prepared.context, { projectId: 'project', epoch: 'epoch-1' })
-    const prompt = admission.admitted.map(material => material.text).join('\n\n')
     const view = f.owner.begin(selection)
+    // 审修先开运行、后选材：收据绑定前额度来自运行冻结的模型。
+    const frozenAdmission = f.owner.readContext(view.handle).materialAdmission!
+    expect(frozenAdmission).toMatchObject({ kind: 'budget', budget: { reservedOutputTokens: expect.any(Number) } })
+    const admission = await selectFrozenReviewRevisionMaterials(prepared.context, { projectId: 'project', epoch: 'epoch-1' }, frozenAdmission, 0)
+    const prompt = admission.admitted.map(material => material.text).join('\n\n')
     f.owner.bindMaterialDecision(view.handle, { ...admission.decision, promptHash: textHash(prompt) })
     await f.owner.execute({ handle: view.handle, invocationNonce: 'materials', task: { purpose: 'review-chapter',
       output: 'structured-data', messages: [{ role: 'user', content: prompt }] } })
@@ -357,7 +381,7 @@ describe('review and revision generation through the actual owner and SQLite', (
     },
   )
   it('源稿进回收站后审修恢复稿既不列出也读不出，不算读坏；放回后照常（#564）', async () => {
-    const f = fixture(), request = await f.run(), saved = f.owner.commitReview(request)
+    const f = fixture(), request = await f.run()
     const status = (deleted: boolean) => f.db.prepare(deleted
       ? "UPDATE drafts_all SET status='deleted',deletion_id='trash-1',deleted_from_status='finalized',deleted_at='now' WHERE id=1"
       : "UPDATE drafts_all SET status='draft',deletion_id='',deleted_from_status='',deleted_at='' WHERE id=1").run()
@@ -366,8 +390,9 @@ describe('review and revision generation through the actual owner and SQLite', (
     expect(() => f.owner.readReviewRevisionRecovery(request.handle)).toThrow('GENERATION_REVIEW_SOURCE_DELETED')
     expect(f.owner.listRecovery()).toMatchObject({ reviews: [], partial: false })
     status(false)
-    expect(f.owner.readReviewRevisionRecovery(request.handle).saved).toEqual(saved)
     expect(f.owner.listRecovery().reviews).toHaveLength(1)
+    const saved = f.owner.commitReview(request)
+    expect(f.owner.readReviewRevisionRecovery(request.handle).saved).toEqual(saved)
   })
   it('源稿彻底删除后（收据留作删除证明）照样不列出；没有删除收据的工作稿被删，仍保留冲突恢复（#564）', async () => {
     const purged = fixture(), purgedRun = await purged.run()

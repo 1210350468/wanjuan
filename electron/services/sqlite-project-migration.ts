@@ -11,6 +11,7 @@ import { SqliteSchemaAdapter } from '../migrations/sqlite-schema-adapter'
 import { M02_ADDED_CHARACTER_COLUMNS, M02_AUXILIARY_TABLES } from '../migrations/m02-character-identity'
 import { M03_REVIEW_CYCLE_TABLES } from '../migrations/m03-review-cycle'
 import { M07_DRAFT_COLUMNS, logicalTableName } from '../migrations/m07-chapter-recycle'
+import { M08_EXEMPTION_COLUMNS, M08_TABLES } from '../migrations/m08-continuity-foundation'
 import { initializeLegacyBaselineSchema } from '../migrations/baseline-schema'
 import { ensureBaselineBlueprintTables } from '../migrations/baseline-blueprint-schema'
 import { initializeCharacterRosterMetadata } from '../repositories/character-roster-schema'
@@ -23,9 +24,13 @@ const QUALIFIED_V110_SCHEMA = '1207fd8203e31503e3cd09ba5b60a959c606ded34a8c8c777
 const QUALIFIED_EARLY_V110_SCHEMA = '2504dde08865f758f654d38ae3d972420c28fa60d1f747e92898390455272de6'
 const QUALIFIED_OFFICIAL_V100_LAZY_SCHEMA = '29838d67b3b0338b717c7488a7a2841c40fdacbb58598a83358bd73b6bda4673'
 const QUALIFIED_V092_LAZY_SCHEMA = '7a34ee78ddace39804d64ce8a42c054f11d9d27a559ff99cbd345921088ba050'
+const QUALIFIED_V100_LAZY_SCHEMA = '90ef4323d226be7e5593b8b33c6839656f88c4a5da3d9ebaf9aff9150eb95cb6'
+const QUALIFIED_V110_LAZY_SCHEMA = '6482cec23151f65e9fa1b0535cb7f9fa8ab16cfafa7cd264243730f1e54ac7b5'
 const QUALIFIED_PRE_V110_SCHEMAS = [QUALIFIED_V100_SCHEMA, QUALIFIED_OFFICIAL_V100_SCHEMA,
-  QUALIFIED_OFFICIAL_V100_LAZY_SCHEMA, QUALIFIED_V092_LAZY_SCHEMA]
-const QUALIFIED_LEGACY_SCHEMAS = [...QUALIFIED_PRE_V110_SCHEMAS, QUALIFIED_V110_SCHEMA, QUALIFIED_EARLY_V110_SCHEMA]
+  QUALIFIED_OFFICIAL_V100_LAZY_SCHEMA, QUALIFIED_V092_LAZY_SCHEMA, QUALIFIED_V100_LAZY_SCHEMA]
+const QUALIFIED_LAZY_SCHEMAS = [QUALIFIED_V092_LAZY_SCHEMA, QUALIFIED_OFFICIAL_V100_LAZY_SCHEMA,
+  QUALIFIED_V100_LAZY_SCHEMA, QUALIFIED_V110_LAZY_SCHEMA]
+const QUALIFIED_LEGACY_SCHEMAS = [...QUALIFIED_PRE_V110_SCHEMAS, QUALIFIED_V110_SCHEMA, QUALIFIED_V110_LAZY_SCHEMA, QUALIFIED_EARLY_V110_SCHEMA]
 const V092_MISSING_REVIEW_COLUMNS = ['source_draft_chapter_number', 'source_draft_version', 'source_draft_status', 'source_content']
 const EARLY_V110_TABLES = [
   'blueprints', 'characters', 'contents', 'drafts', 'llm_calls', 'post_process_runs',
@@ -43,6 +48,8 @@ export interface ProjectSqliteEvidence {
   preIdentityDomain?: { tableCounts: Record<string, number>; authorContentHash: string }
   preAssetDomain?: { tableCounts: Record<string, number>; authorContentHash: string }
   preRecycleDomain?: { tableCounts: Record<string, number>; authorContentHash: string }
+  preContinuityDomain?: { tableCounts: Record<string, number>; authorContentHash: string }
+  preAnnotationDomain?: { tableCounts: Record<string, number>; authorContentHash: string }
 }
 
 function regular(file: string): void {
@@ -102,14 +109,19 @@ function physicalSnapshot(source: string) {
 type DomainColumns = { name: string; columns: string[] }[]
 const quoteIdentifier = (value: string) => '"' + value.replaceAll('"', '""') + '"'
 const M05_ASSET_TABLES = ['character_avatar_assets', 'character_avatar_unresolved'] as const
-function domainColumns(db: BetterSqlite3.Database, preIdentity = false, preAsset = false, preRecycle = preIdentity): DomainColumns {
+// 跨版本比对正文时，后来迁移加的表和列不算，M08 补的基线节点同理。
+function domainColumns(db: BetterSqlite3.Database, preIdentity = false, preAsset = false, preRecycle = preIdentity,
+  preContinuity = preRecycle, preAnnotation = preContinuity): DomainColumns {
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as { name: string }[]
   const postLegacyTables = [...M02_AUXILIARY_TABLES, ...M03_REVIEW_CYCLE_TABLES, ...M05_ASSET_TABLES] as readonly string[]
-  return tables.filter(({ name }) => (!preIdentity || !postLegacyTables.includes(name))
-    && (!preAsset || !(M05_ASSET_TABLES as readonly string[]).includes(name))).map(({ name }) => ({ name,
+  return tables.filter(({ name }) => (!preAnnotation || name !== 'annotation_history')
+    && (!preIdentity || !postLegacyTables.includes(name))
+    && (!preAsset || !(M05_ASSET_TABLES as readonly string[]).includes(name))
+    && (!preContinuity || !(M08_TABLES as readonly string[]).includes(name))).map(({ name }) => ({ name,
     columns: (db.prepare(`PRAGMA table_info(${quoteIdentifier(name)})`).all() as { name: string }[]).map(column => column.name)
       .filter(column => !preIdentity || name !== 'characters' || !(M02_ADDED_CHARACTER_COLUMNS as readonly string[]).includes(column))
-      .filter(column => !preRecycle || logicalTableName(name) !== 'drafts' || !(M07_DRAFT_COLUMNS as readonly string[]).includes(column)),
+      .filter(column => !preRecycle || logicalTableName(name) !== 'drafts' || !(M07_DRAFT_COLUMNS as readonly string[]).includes(column))
+      .filter(column => !preContinuity || name !== 'consistency_exemptions' || !(M08_EXEMPTION_COLUMNS as readonly string[]).includes(column)),
   }))
 }
 function domain(db: BetterSqlite3.Database, selection = domainColumns(db)): ProjectSqliteEvidence['domain'] {
@@ -131,7 +143,9 @@ function inspect(db: BetterSqlite3.Database, registry: MigrationRegistry, target
   return { schemaVersion: result.version, fingerprint: result.fingerprint, domain: domain(db),
     ...(result.version >= 3 ? { preIdentityDomain: domain(db, domainColumns(db, true)) } : {}),
     ...(result.version >= 6 ? { preAssetDomain: domain(db, domainColumns(db, false, true)) } : {}),
-    ...(result.version >= 8 ? { preRecycleDomain: domain(db, domainColumns(db, false, false, true)) } : {}) }
+    ...(result.version >= 8 ? { preRecycleDomain: domain(db, domainColumns(db, false, false, true)) } : {}),
+    ...(result.version >= 9 ? { preContinuityDomain: domain(db, domainColumns(db, false, false, false, true)) } : {}),
+    ...(result.version >= 10 ? { preAnnotationDomain: domain(db, domainColumns(db, false, false, false, false, true)) } : {}) }
 }
 function qualifiedLegacySource(db: BetterSqlite3.Database): string | null {
   const adapter = new SqliteSchemaAdapter(db)
@@ -148,7 +162,7 @@ function inspectSource(db: BetterSqlite3.Database, registry: MigrationRegistry, 
 function copyQualifiedLegacy(source: BetterSqlite3.Database, staging: BetterSqlite3.Database, sourceColumns: DomainColumns, fingerprint: string): void {
   initializeLegacyBaselineSchema(staging)
   const v092 = fingerprint === QUALIFIED_V092_LAZY_SCHEMA
-  if (v092 || fingerprint === QUALIFIED_OFFICIAL_V100_LAZY_SCHEMA) ensureBaselineBlueprintTables(staging)
+  if (QUALIFIED_LAZY_SCHEMAS.includes(fingerprint)) ensureBaselineBlueprintTables(staging)
   const targetColumns = domainColumns(staging)
   const columnSets = (tables: DomainColumns) => tables.map(({ name, columns }) => [name, [...columns].sort()])
   const missingColumns = v092 ? { ...V100_MISSING_COLUMNS,

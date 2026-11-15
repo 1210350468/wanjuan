@@ -25,6 +25,9 @@ export type CharacterProposalSource =
       artifact: { artifactId: string; revision: number; textHash: string } }
   | { kind: 'legacy-roster-generation'; handle: MainGenerationRunHandle;
       artifact: { artifactId: string; revision: number; textHash: string } }
+export const directoryProposalSelectionKey = (chapterNumber: number, index: number) => `${chapterNumber}:${index}`
+export const directoryProposalChapter = (selectionKey: string) => Number(selectionKey.slice(0, selectionKey.indexOf(':')))
+
 export interface CharacterProposalStageEvidence { proposalBatchId: string; sourceHash: string }
 export interface CharacterProposalItem {
   selectionKey: string
@@ -62,8 +65,9 @@ export interface CancelCharacterProposalRequest {
 export type PendingFinalizedCharacterProposalSummary = {
   proposalBatchId: string
   revision: number
-} & ({ finalizationId: string; importOperationId?: never }
-  | { importOperationId: string; importPurpose?: ImportPurpose; itemCount: number; finalizationId?: never })
+} & ({ finalizationId: string; importOperationId?: never; blueprintChapters?: never }
+  | { importOperationId: string; importPurpose?: ImportPurpose; itemCount: number; finalizationId?: never; blueprintChapters?: never }
+  | { blueprintChapters: { from: number; to: number }; itemCount: number; finalizationId?: never; importOperationId?: never })
 export interface CharacterIdentitySnapshot {
   revision: number
   characters: { characterId: string; fields: CharacterStaticFields; retired: boolean; revision: number;

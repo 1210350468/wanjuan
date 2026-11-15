@@ -1,5 +1,5 @@
 import type { Locale } from '../../i18n/types'
-import type { MainGenerationRunView } from '../../services/generation/generation-runtime'
+import type { MainGenerationRunHandle, MainGenerationRunView } from '../../services/generation/generation-runtime'
 import type { GenerationBudgetDiagnostic } from '../../services/generation/task-budget-planner'
 import { canCommitRecoveredReview } from '../../services/workflows/commands/review-chapter.command'
 import { withoutDraftReconciliationArtifacts } from '../../shared/draft-reconciliation'
@@ -7,6 +7,7 @@ import type { EditorInlineRecovery } from '../../shared/editor-inline-generation
 import type { GenerationBatchHistory, GenerationRecoveryContext, GenerationRecoveryList } from '../../shared/generation-owner-contract'
 import { plotOutlineSourceInvalidText } from '../../shared/plot-outline-contract'
 import { pluralEn } from '../../shared/plural-en'
+import { editorCanContinue, reviewCanResume } from '../../shared/recovery-actions'
 import type { RecoveryCandidate } from '../../shared/recovery-candidate'
 import { buildReviewCycleRecheckReport, recheckCommitPolicy, type ReviewCycleRecheckContext } from '../../shared/review-cycle'
 import { parseReviewGenerationResult } from '../../shared/review-generation-report'
@@ -46,12 +47,18 @@ export interface PlanningEntry {
   kind: 'planning'
   key: string
   title: string
+  /** 「缺第 16 章 · 11月7日 14:32 生成」：作者靠它分清同一范围的几份。 */
+  meta: string
   note: string
   actionLabel: string
+  canDismiss: boolean
+  /** 同一范围更早的几份，新的在前。 */
+  earlier: PlanningEntry[]
+  labels: { earlier: string }
   recovery: GenerationRecoveryContext
 }
 
-/** 正文选区的 AI 建议（润色、扩写等）中断。 */
+/** 正文选区或整章批注的 AI 建议中断。 */
 export interface EditorEntry extends Usage {
   kind: 'editor'
   key: string
@@ -63,6 +70,7 @@ export interface EditorEntry extends Usage {
   tails: RecoveryText[]
   documentText: string
   canContinue: boolean
+  hideKey: string
   labels: { copySuggestion: string; copyTail: string; copyDocument: string; continue: string }
   recovery: EditorInlineRecovery
 }
@@ -85,6 +93,7 @@ export interface ReviewEntry extends Usage {
   canAct: boolean
   /** 结果已经保存：卡片只留给作者打开或复制，不再算可恢复。 */
   saved: boolean
+  hideKey: string
   labels: { copy: string; copyTail: string }
   view: MainGenerationRunView
 }
@@ -94,11 +103,10 @@ export interface BatchEntry {
   kind: 'batch'
   key: string
   title: string
-  staleNote?: string
-  canContinue: boolean
   actionLabel: string
   batchId: string
   range: { startChapter: number; endChapter: number }
+  handle: MainGenerationRunHandle
 }
 
 /** 单章写作中断、没保存：勾选保留的片段续写，或沿已存细纲继续。 */
@@ -111,13 +119,12 @@ export interface DraftEntry extends Usage {
   tails: RecoveryText[]
   note: string
   actionLabel: string
-  /** 「不再显示」记的是这一刻列出的内容：同一运行之后又留下新候选或新尾段时，标记对不上，卡片重新出现。 */
   hideKey: string
   /** 草稿保存后正文又改过：只能复制。 */
   changed: boolean
   /** 没有已存的续写方案时，至少要勾选一段才能继续。 */
   needsPick: boolean
-  labels: { copy: string; tailLead: string; hide: string }
+  labels: { copy: string; tailLead: string }
   view: MainGenerationRunView
 }
 
@@ -143,6 +150,9 @@ function usageOf(view: Pick<MainGenerationRunView, 'budgetDiagnostics' | 'ledger
 /** 没写出任何字的片段（例如刚发出请求就取消）没有可复制、可续接的内容，不列出。 */
 export const hasText = (item: { text: string }) => item.text.trim().length > 0
 
+/** 1.4.0 本机「不再显示」的标记：运行 id 加当时列出的片段与尾段。 */
+const hideKeyOf = (runId: string, items: readonly RecoveryText[]) => `${runId}#${items.map(item => `${item.id}:${item.text.length}`).join(',')}`
+
 const texts = (items: readonly { attemptId: string; text: string }[] | undefined): RecoveryText[] =>
   (items ?? []).filter(hasText).map(item => ({ id: item.attemptId, text: item.text }))
 
@@ -162,14 +172,31 @@ export function candidateEntry(candidate: RecoveryCandidate, locale: Locale): Ca
   }
 }
 
-/** 大纲分批生成会留下多份恢复稿，标题带上各自的章节范围以便区分。 */
-export function planningTitle(recovery: Pick<GenerationRecoveryContext, 'plotOutlineRecovery' | 'plotOutline'>, locale: Locale): string {
+const chapterSpan = (range: { from: number; to: number }) => range.from === range.to ? `${range.from}` : `${range.from}–${range.to}`
+
+export function planningTitle(recovery: Pick<GenerationRecoveryContext, 'plotOutlineRecovery' | 'plotOutline' | 'planningDraft'>, locale: Locale): string {
   const t = lang(locale)
-  if (!recovery.plotOutlineRecovery) return t('蓝图恢复稿', 'Blueprint recovery draft')
-  const range = recovery.plotOutline?.range
-  if (!range) return t('大纲恢复稿', 'Outline recovery draft')
-  const chapters = range.from === range.to ? `${range.from}` : `${range.from}–${range.to}`
-  return t(`大纲恢复稿 · 第 ${chapters} 章`, `Outline recovery draft · ch. ${chapters}`)
+  const outline = Boolean(recovery.plotOutlineRecovery)
+  const range = recovery.planningDraft?.requestedRange ?? (outline ? recovery.plotOutline?.range : undefined)
+  if (!range) return outline ? t('大纲恢复稿', 'Outline recovery draft') : t('蓝图恢复稿', 'Blueprint recovery draft')
+  const chapters = chapterSpan(range)
+  return outline ? t(`大纲恢复稿 · 第 ${chapters} 章`, `Outline recovery draft · ch. ${chapters}`)
+    : t(`蓝图恢复稿 · 第 ${chapters} 章`, `Blueprint recovery draft · ch. ${chapters}`)
+}
+
+/** 时间按作者电脑的时区。 */
+export function planningMeta(recovery: Pick<GenerationRecoveryContext, 'planningContinuation' | 'planningDraft'>, locale: Locale): string {
+  const t = lang(locale)
+  const remaining = recovery.planningContinuation?.remainingRange
+  const createdAt = recovery.planningDraft?.createdAtMs
+  return [
+    remaining && t(`缺第 ${chapterSpan(remaining)} 章`, `Missing ch. ${chapterSpan(remaining)}`),
+    createdAt !== undefined && t(`${planningTime(createdAt, locale)} 生成`, `Generated ${planningTime(createdAt, locale)}`),
+  ].filter(Boolean).join(' · ')
+}
+
+function planningTime(ms: number, locale: Locale): string {
+  return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
 }
 
 /** 恢复稿编辑器顶部的待完成范围；只剩一章时与标题一样写「第 6 章」。 */
@@ -211,40 +238,66 @@ export function outlineSourceChangedNote(recovery: Pick<GenerationRecoveryContex
       'The model settings, book settings, a prompt template or a writing skill changed, so this recovery draft cannot replace saved content. View or copy it, then generate the plot outline again.')
 }
 
-function planningEntry(recovery: GenerationRecoveryContext, locale: Locale): PlanningEntry {
+function planningEntry(recovery: GenerationRecoveryContext, locale: Locale, earlier: PlanningEntry[] = []): PlanningEntry {
   const t = lang(locale)
   const sourceChanged = outlineSourceChangedNote(recovery, locale)
   return {
     kind: 'planning',
     key: recovery.handle.runId,
     title: planningTitle(recovery, locale),
+    meta: planningMeta(recovery, locale),
     note: outlineSourceInvalidNote(recovery, locale) ?? sourceChanged
       ?? t('自动生成已保留候选。可编辑并本地保存，或明确继续缺少的章节。', 'The candidate is preserved. Edit and save it locally, or explicitly generate the remaining chapters.'),
     actionLabel: sourceChanged ? t('查看恢复稿', 'View recovery draft') : t('编辑恢复稿', 'Edit recovery draft'),
+    canDismiss: recovery.planningContinuation?.state !== 'in-flight',
+    earlier,
+    labels: {
+      earlier: t(`更早的 ${earlier.length} 份`, `${earlier.length} earlier ${pluralEn(earlier.length, 'draft')}`),
+    },
     recovery,
   }
+}
+
+function groupPlanning(recoveries: readonly GenerationRecoveryContext[], locale: Locale): PlanningEntry[] {
+  const groups = new Map<string, GenerationRecoveryContext[]>()
+  for (const recovery of recoveries) {
+    const range = recovery.planningDraft?.requestedRange
+    const key = range ? `${recovery.plotOutlineRecovery ? 'outline' : 'blueprint'}:${range.from}-${range.to}` : `run:${recovery.handle.runId}`
+    groups.set(key, [...groups.get(key) ?? [], recovery])
+  }
+  const createdAt = (recovery: GenerationRecoveryContext) => recovery.planningDraft?.createdAtMs ?? 0
+  return [...groups.values()]
+    .map(group => [...group].sort((a, b) => createdAt(b) - createdAt(a)))
+    .sort((a, b) => createdAt(b[0]) - createdAt(a[0]))
+    .map(([newest, ...earlier]) => planningEntry(newest, locale, earlier.map(recovery => planningEntry(recovery, locale))))
 }
 
 function editorEntry(recovery: EditorInlineRecovery, locale: Locale): EditorEntry {
   const t = lang(locale)
   const { view } = recovery
+  const suggestions = (view.candidates ?? view.artifacts).filter(hasText).map(artifact => ({
+    id: artifact.artifactId,
+    text: artifact.text,
+    incompleteNote: artifact.status === 'completed' ? undefined : t('生成未完整完成，保留的文字仅供参考。', 'Generation is incomplete; the saved text is for reference.'),
+  }))
+  const tails = texts(view.unsavedTails)
   return {
     kind: 'editor',
     key: view.handle.runId,
-    title: t('编辑器选区建议', 'Editor selection suggestion'),
+    title: recovery.context.action === 'batch-instruct' ? t('批注修改建议', 'Annotation revision') : t('编辑器选区建议', 'Editor selection suggestion'),
     selectedText: recovery.context.selectedText,
-    instructionNote: recovery.context.action === 'instruct' ? t(`作者意见：${recovery.context.instruction}`, `Author note: ${recovery.context.instruction}`) : undefined,
+    instructionNote: recovery.context.action === 'instruct'
+      ? t(`作者意见：${recovery.context.instruction}`, `Author note: ${recovery.context.instruction}`)
+      : recovery.context.action === 'batch-instruct'
+        ? t(`作者批注 ${recovery.context.annotations.length} 条`, `${recovery.context.annotations.length} author ${pluralEn(recovery.context.annotations.length, 'annotation')}`)
+        : undefined,
     ...usageOf(view, locale),
     conflictNote: recovery.sourceStatus === 'conflict' ? t('来源已变化；原建议仍可复制。', 'Sources changed; the original suggestion can still be copied.') : undefined,
-    suggestions: (view.candidates ?? view.artifacts).filter(hasText).map(artifact => ({
-      id: artifact.artifactId,
-      text: artifact.text,
-      incompleteNote: artifact.status === 'completed' ? undefined : t('生成未完整完成，保留的文字仅供参考。', 'Generation is incomplete; the saved text is for reference.'),
-    })),
-    tails: texts(view.unsavedTails),
+    suggestions,
+    tails,
     documentText: recovery.context.documentText,
-    canContinue: recovery.sourceStatus === 'current' && view.status !== 'cancelled'
-      && view.ledger?.physicalRequests === 0 && !(view.candidates?.length || view.artifacts.length),
+    canContinue: editorCanContinue(recovery),
+    hideKey: hideKeyOf(view.handle.runId, [...suggestions, ...tails]),
     labels: {
       copySuggestion: t('复制建议', 'Copy suggestion'),
       copyTail: t('复制未保存文字', 'Copy unsaved text'),
@@ -330,9 +383,11 @@ function reviewEntry({ view, recovery }: RecoverySources['reviews'][number], loc
       && t('候选未通过保存校验；可复制保留，请从原稿重新发起任务。', 'The candidate failed save validation. Copy it if needed, then start a new action from the source draft.'),
     current && live && !recovery.saved && !recovery.canResume && review
       && t('当前任务的审稿请求次数已用尽。原稿保留，可从原稿发起新的审稿任务。', 'This task has used all review attempts. The source draft is preserved. Start a new review task from the source draft.'),
-    requestsReview && current && live && recovery.canResume
+    requestsReview && reviewCanResume(view, recovery)
       && t('尚无完整审稿报告。重新审稿会重新调用模型；原稿保留。', 'No complete review report is available. Reviewing again sends a new model request; the source draft is preserved.'),
   ].filter((note): note is string => Boolean(note))
+  const artifacts = (view.candidates ?? view.artifacts).filter(hasText).map(artifact => shown({ id: artifact.artifactId, text: artifact.text }))
+  const tails = texts(view.unsavedTails).map(shown)
   return {
     kind: 'review',
     key: view.handle.runId,
@@ -341,12 +396,13 @@ function reviewEntry({ view, recovery }: RecoverySources['reviews'][number], loc
       `Chapter ${recovery.context.source.chapterNumber} ${review ? 'review' : 'revision'} candidate`),
     ...usageOf(view, locale),
     notes,
-    artifacts: (view.candidates ?? view.artifacts).filter(hasText).map(artifact => shown({ id: artifact.artifactId, text: artifact.text })),
-    tails: texts(view.unsavedTails).map(shown),
+    artifacts,
+    tails,
     actionLabel: recovery.saved ? t('打开已保存结果', 'Open saved result')
       : requestsReview ? t('重新审稿', 'Review again') : t('恢复此审修任务', 'Recover this review or revision'),
-    canAct: Boolean(recovery.saved) || (recovery.canResume && current && live),
+    canAct: Boolean(recovery.saved) || reviewCanResume(view, recovery),
     saved: Boolean(recovery.saved),
+    hideKey: hideKeyOf(view.handle.runId, [...artifacts, ...tails]),
     labels: { copy: t('复制', 'Copy'), copyTail: t('复制未保存文字', 'Copy unsaved text') },
     view,
   }
@@ -359,12 +415,10 @@ function batchEntry(batch: GenerationBatchHistory, locale: Locale): BatchEntry {
     key: batch.batchId,
     title: t(`批量正文：已保存 ${batch.completedChapters.length} 章，下一章 ${batch.nextChapterNumber}`,
       `Batch drafts: ${batch.completedChapters.length} saved; next chapter ${batch.nextChapterNumber}`),
-    staleNote: batch.sourceCurrent ? undefined : t('批次来源已变化，不能继续此批次。请从当前正文发起新任务。',
-      'The batch source changed. This batch cannot continue. Start a new task from the current text.'),
-    canContinue: batch.sourceCurrent,
     actionLabel: t('继续此批次', 'Continue this batch'),
     batchId: batch.batchId,
     range: batch.range,
+    handle: batch.rootHandle,
   }
 }
 
@@ -382,15 +436,15 @@ function draftEntry({ view, recovery }: RecoverySources['drafts'][number], local
   return {
     kind: 'draft',
     key: view.handle.runId,
-    hideKey: `${view.handle.runId}#${[...artifacts, ...tails].map(item => `${item.id}:${item.text.length}`).join(',')}`,
+    hideKey: hideKeyOf(view.handle.runId, [...artifacts, ...tails]),
     chapterNumber: recovery.chapterNumber,
     title: changed ? t(`第${recovery.chapterNumber}章生成记录`, `Chapter ${recovery.chapterNumber} generation history`)
       : t(`第${recovery.chapterNumber}章候选`, `Chapter ${recovery.chapterNumber} candidate`),
     ...usageOf(view, locale),
     artifacts,
     tails,
-    note: changed ? t('草稿已保存，正文后来已修改。请从草稿箱打开当前正文；原生成文字仍可复制。',
-      'The draft was saved and later edited. Open the current text from Drafts. The original generated text can still be copied.')
+    note: changed ? t(`草稿已保存，之后又改过。在「正文」打开第 ${recovery.chapterNumber} 章看当前稿；原生成文字仍可复制。`,
+      `The draft was saved and later edited. Open Chapter ${recovery.chapterNumber} in Manuscript to see the current text. The original generated text can still be copied.`)
       : t('勾选顺序决定续接顺序；未完成或来源冲突的片段仍可复制。', 'Selection order determines continuation order. Incomplete or conflicted text can still be copied.'),
     actionLabel: changed ? t('已保存，正文已修改', 'Saved, then edited')
       : outlineOnly ? recovery.draftShortOutline?.retry?.kind === 'available'
@@ -399,7 +453,7 @@ function draftEntry({ view, recovery }: RecoverySources['drafts'][number], local
         : t('确认继续已选正文', 'Confirm selected draft continuation'),
     changed,
     needsPick: !recovery.composition && !outlineOnly,
-    labels: { copy: t('复制', 'Copy'), tailLead: t('尚未落盘的正文，可先复制保留：', 'Text not yet saved; copy it to preserve it:'), hide: t('不再显示', 'Hide') },
+    labels: { copy: t('复制', 'Copy'), tailLead: t('尚未落盘的正文，可先复制保留：', 'Text not yet saved; copy it to preserve it:') },
     view,
   }
 }
@@ -408,12 +462,15 @@ function draftEntry({ view, recovery }: RecoverySources['drafts'][number], local
  * 这次打开作品后还在进行的工作：它正显示在运行卡片里，不是中断留下的。
  * 单章与审修要这次打开里有单章运行正占着这一章：会话内失败时持久状态不会改，仍记为 running，不能当作还在写。
  * 批量运行也占着各章，但它写的正文带批次号、不列为单章条目（use-run-recovery），也不跑审修，所以不算。
- * 选区生成不是工作流运行，看 epoch：上次打开时没写完的换过会话，仍算可恢复。
+ * 选区生成不是工作流运行，看 epoch：上次打开时没写完的换过会话，仍算可恢复。这次打开里写完的运行状态仍是 running，有完整建议就不算在写。
  * 批量看进行中（含暂停）的批量运行：资源锁让同一批章同时只有一个批量运行在写，范围相同就是它在推进这一批。
  */
 export function isInFlight(entry: RecoveryEntry, leaseId: string | undefined, liveRuns: readonly Pick<WorkflowRun, 'type' | 'resourceKeys'>[]): boolean {
   if (entry.kind === 'batch') return liveRuns.some(run => run.type === 'batch_generate' && sameChapters(run.resourceKeys, entry.range))
-  if (entry.kind === 'editor') return entry.recovery.view.status === 'running' && entry.recovery.view.handle.epoch === leaseId
+  if (entry.kind === 'editor') {
+    const { view } = entry.recovery
+    return view.status === 'running' && view.handle.epoch === leaseId && !(view.candidates ?? view.artifacts).some(item => item.status === 'completed')
+  }
   if ((entry.kind !== 'draft' && entry.kind !== 'review') || entry.chapterNumber === undefined) return false
   const chapter = workflowResourceKey('chapter', entry.chapterNumber)
   return entry.view.status === 'running' && entry.view.handle.epoch === leaseId
@@ -431,10 +488,21 @@ export function canResumeDraft(entry: DraftEntry, picked: readonly string[]): bo
   return !entry.changed && (picked.length > 0 || !entry.needsPick)
 }
 
+/** 旧恢复候选表不是生成运行，没有可放弃的运行。 */
+export function abandonHandle(entry: RecoveryEntry): MainGenerationRunHandle | undefined {
+  switch (entry.kind) {
+    case 'planning': return entry.canDismiss ? entry.recovery.handle : undefined
+    case 'editor': return entry.recovery.view.handle
+    case 'review': case 'draft': return entry.view.handle
+    case 'batch': return entry.handle
+    case 'candidate': return undefined
+  }
+}
+
 /** 列出顺序与旧 AI 输出一致：恢复稿、选区建议、审修、批量、单章，最后是旧的恢复候选表。 */
 export function buildRecoveryEntries(sources: RecoverySources, locale: Locale): RecoveryEntry[] {
   return [
-    ...sources.planning.map(recovery => planningEntry(recovery, locale)),
+    ...groupPlanning(sources.planning, locale),
     ...sources.editors.map(recovery => editorEntry(recovery, locale)),
     ...sources.reviews.map(item => reviewEntry(item, locale)),
     ...sources.batches.map(batch => batchEntry(batch, locale)),

@@ -1,10 +1,11 @@
+import { ChevronRight, X } from 'lucide-react'
 import { useId, useRef, useState, type ReactNode } from 'react'
 import { countDraftUnits } from '../../../shared/draft-units'
 import { useLocaleStore } from '../../../stores/locale-store'
 import GenerationBudgetDiagnostics from '../../panels/GenerationBudgetDiagnostics'
 import { useProjectStore } from '../../../stores/project-store'
 import type { WorkflowRun } from '../../../stores/workflow-store'
-import { canResumeDraft, isInFlight, type CandidateEntry, type DraftEntry, type RecoveryEntry } from '../../run/run-recovery'
+import { abandonHandle, canResumeDraft, isInFlight, type CandidateEntry, type DraftEntry, type PlanningEntry, type RecoveryEntry } from '../../run/run-recovery'
 import type { RunRecovery } from '../../run/use-run-recovery'
 import { Button } from '../../ui/Button'
 import { Check } from '../../ui/Check'
@@ -31,17 +32,15 @@ export function RunRecoveryList({ recovery, liveRuns }: { recovery: RunRecovery;
 function RecoveryCard({ entry, recovery, text }: { entry: RecoveryEntry; recovery: RunRecovery; text: Text }) {
   const locale = useLocaleStore(s => s.locale)
   const { busy } = recovery
+  const abandon = abandonHandle(entry) && <AbandonButton disabled={busy} onClick={() => recovery.abandon(entry)} text={text} />
   switch (entry.kind) {
     case 'candidate':
       return <CandidateCard entry={entry} recovery={recovery} text={text} />
     case 'planning':
-      return (
-        <RecoveryShell title={entry.title} text={text} notes={[entry.note]}
-          actions={<Button variant="secondary" size="sm" disabled={busy} onClick={() => recovery.openPlanning(entry)}>{entry.actionLabel}</Button>} />
-      )
+      return <PlanningCard entry={entry} recovery={recovery} text={text} abandon={abandon} />
     case 'editor':
       return (
-        <RecoveryShell title={entry.title} text={text} notes={[entry.instructionNote, entry.usage, entry.conflictNote]}
+        <RecoveryShell title={entry.title} text={text} abandon={abandon} notes={[entry.instructionNote, entry.usage, entry.conflictNote]}
           budget={<GenerationBudgetDiagnostics diagnostics={entry.budget} locale={locale} />}
           actions={<>
             <Button variant="secondary" size="sm" disabled={busy || !entry.canContinue} onClick={() => recovery.continueEditor(entry)}>{entry.labels.continue}</Button>
@@ -56,7 +55,7 @@ function RecoveryCard({ entry, recovery, text }: { entry: RecoveryEntry; recover
       )
     case 'review':
       return (
-        <RecoveryShell title={entry.title} text={text} saved={entry.saved} notes={[entry.usage, ...entry.notes]}
+        <RecoveryShell title={entry.title} text={text} abandon={abandon} saved={entry.saved} notes={[entry.usage, ...entry.notes]}
           budget={<GenerationBudgetDiagnostics diagnostics={entry.budget} locale={locale} />}
           actions={<Button variant="secondary" size="sm" disabled={busy || !entry.canAct} onClick={() => recovery.resumeReview(entry)}>{entry.actionLabel}</Button>}>
           {entry.artifacts.map(item => <Excerpt key={item.id} text={item.display} copyLabel={entry.labels.copy} onCopy={() => recovery.copy(item.text)} />)}
@@ -65,35 +64,72 @@ function RecoveryCard({ entry, recovery, text }: { entry: RecoveryEntry; recover
       )
     case 'batch':
       return (
-        <RecoveryShell title={entry.title} text={text} notes={[entry.staleNote]}
-          actions={<Button variant="secondary" size="sm" disabled={busy || !entry.canContinue} onClick={() => recovery.resumeBatch(entry)}>{entry.actionLabel}</Button>} />
+        <RecoveryShell title={entry.title} text={text} abandon={abandon}
+          actions={<Button variant="secondary" size="sm" disabled={busy} onClick={() => recovery.resumeBatch(entry)}>{entry.actionLabel}</Button>} />
       )
     case 'draft':
-      return <DraftCard entry={entry} recovery={recovery} text={text} />
+      return <DraftCard entry={entry} recovery={recovery} text={text} abandon={abandon} />
   }
 }
 
-function RecoveryShell({ title, text, saved = false, notes = [], budget, actions, children }: {
+/** 可在提示条里撤销，所以不用危险色，也不先确认。 */
+function AbandonButton({ disabled, onClick, text }: { disabled: boolean; onClick: () => void; text: Text }) {
+  return <Button variant="text" size="sm" className="run-card-abandon" disabled={disabled} onClick={onClick}><X aria-hidden />{text('不再恢复', 'Dismiss')}</Button>
+}
+
+function RecoveryShell({ title, meta, text, abandon, saved = false, notes = [], budget, actions, children, after }: {
   title: string
+  abandon?: ReactNode
+  meta?: string
   text: Text
   saved?: boolean
   notes?: (string | undefined)[]
   budget?: ReactNode
   actions?: ReactNode
   children?: ReactNode
+  after?: ReactNode
 }) {
   const titleId = useId()
   return (
     <article className="run-card" data-state="recoverable" aria-labelledby={titleId}>
-      <header className="run-card-heading">
-        <p className="run-card-kicker">{saved ? text('已保存', 'Saved') : text('可恢复', 'Recoverable')}</p>
-        <h3 id={titleId} className="run-card-title">{title}</h3>
+      <header className="run-card-head">
+        <div className="run-card-heading">
+          <p className="run-card-kicker">{saved ? text('已保存', 'Saved') : text('可恢复', 'Recoverable')}</p>
+          <h3 id={titleId} className="run-card-title">{title}</h3>
+          {meta && <p className="run-card-meta">{meta}</p>}
+        </div>
+        {abandon}
       </header>
       {notes.filter(Boolean).map(note => <p key={note} className="run-note">{note}</p>)}
       {children}
       {budget}
       {actions && <div className="run-card-buttons">{actions}</div>}
+      {after}
     </article>
+  )
+}
+
+function PlanningCard({ entry, recovery, text, abandon }: { entry: PlanningEntry; recovery: RunRecovery; text: Text; abandon: ReactNode }) {
+  return (
+    <RecoveryShell title={entry.title} meta={entry.meta} text={text} abandon={abandon} notes={[entry.note]}
+      actions={<Button variant="secondary" size="sm" disabled={recovery.busy} onClick={() => recovery.openPlanning(entry)}>{entry.actionLabel}</Button>}
+      after={entry.earlier.length > 0 && (
+        <details className="run-earlier">
+          <summary><ChevronRight size={14} aria-hidden />{entry.labels.earlier}</summary>
+          <ul className="run-earlier-list">
+            {entry.earlier.map(item => (
+              <li key={item.key} className="run-earlier-item">
+                <p className="run-card-meta">{item.meta}</p>
+                {item.note !== entry.note && <p className="run-note">{item.note}</p>}
+                <div className="run-card-buttons">
+                  <Button variant="secondary" size="sm" disabled={recovery.busy} onClick={() => recovery.openPlanning(item)}>{item.actionLabel}</Button>
+                  {abandonHandle(item) && <AbandonButton disabled={recovery.busy} onClick={() => recovery.abandon(item)} text={text} />}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )} />
   )
 }
 
@@ -107,16 +143,13 @@ function Excerpt({ text, note, copyLabel, onCopy }: { text: string; note?: strin
   )
 }
 
-function DraftCard({ entry, recovery, text }: { entry: DraftEntry; recovery: RunRecovery; text: Text }) {
+function DraftCard({ entry, recovery, text, abandon }: { entry: DraftEntry; recovery: RunRecovery; text: Text; abandon: ReactNode }) {
   const locale = useLocaleStore(s => s.locale)
   const picked = recovery.picked(entry)
   return (
-    <RecoveryShell title={entry.title} text={text} notes={[entry.usage, entry.note]}
+    <RecoveryShell title={entry.title} text={text} abandon={abandon} notes={[entry.usage, entry.note]}
       budget={<GenerationBudgetDiagnostics diagnostics={entry.budget} locale={locale} />}
-      actions={<>
-        <Button variant="secondary" size="sm" disabled={recovery.busy || !canResumeDraft(entry, picked)} onClick={() => recovery.resumeDraft(entry)}>{entry.actionLabel}</Button>
-        <Button variant="text" size="sm" onClick={() => recovery.hideDraft(entry)}>{entry.labels.hide}</Button>
-      </>}>
+      actions={<Button variant="secondary" size="sm" disabled={recovery.busy || !canResumeDraft(entry, picked)} onClick={() => recovery.resumeDraft(entry)}>{entry.actionLabel}</Button>}>
       {entry.artifacts.map(item => (
         <figure key={item.id} className="run-excerpt">
           <Check

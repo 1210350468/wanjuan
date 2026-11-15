@@ -59,7 +59,7 @@ describe('installed M07 lane', () => {
         receipts: rows(db, 'SELECT * FROM chapter_deletion_operations'),
       }
       const result = migrateSchema(new SqliteSchemaAdapter(db), getDesktopMigrationRegistry(), 8)
-      expect(CURRENT_DESKTOP_SCHEMA_VERSION).toBe(8)
+      expect(CURRENT_DESKTOP_SCHEMA_VERSION).toBe(10)
       expect(result.completedSteps).toEqual(['M07'])
       const v8 = getDesktopMigrationRegistry().recognizedSchemas.filter(schema => schema.version === 8).map(schema => schema.fingerprint)
       expect(v8).toContain(sqliteSchemaFingerprint(db))
@@ -130,6 +130,7 @@ describe('M07 deletion columns and live views', () => {
 
   it('gives a new project the same tables, views, foreign keys and triggers as an upgraded v7 project', () => {
     const upgraded = v8(), created = new Database(':memory:')
+    migrateSchema(new SqliteSchemaAdapter(upgraded), getDesktopMigrationRegistry(), CURRENT_DESKTOP_SCHEMA_VERSION)
     try {
       created.pragma('foreign_keys=ON')
       created.transaction(() => initializeLegacyBaselineSchema(created))()
@@ -198,12 +199,15 @@ describe('M07 deletion columns and live views', () => {
 
 // G6：经外键挂在草稿上的表，要么本身改名为 _all 并在原名上有 live 视图，要么写明为什么暂不需要。
 const LIVE_VIEW_EXEMPT_TABLES: Readonly<Record<string, string>> = {
+  annotation_history: '批注历史读取只通过 drafts live 视图定位父稿，删除章节后不显示',
   contents: '只按 id 读，id 取自 drafts、reviews、revisions 的行；本身没有章号与状态',
   reviews: '按 id 或 base_draft_id 读；ReviewRepository 的读取都带 LIVE_PARENT（父稿在 drafts 视图里），回收站章节的审稿读不出。用例见 live-row-sentinel.test.ts 与 m03-review-cycle.test.ts',
   revisions: '按 id 或 base_draft_id 读；RevisionRepository 的读取和改状态都带 LIVE_PARENT，回收站章节的修稿读不出、改不了。用例见 live-row-sentinel.test.ts',
   review_cycles: '按 cycle、review、revision 的 id 读，挂在 reviews 与 revisions 之下；getByReviewId 只认父稿还在的审稿',
   review_findings: '只按 cycle_id 读，挂在 review_cycles 之下',
   review_cycle_merges: '只按 cycle_id 读，挂在 review_cycles 之下',
+  character_continuity_events: '只有派生节点挂稿，作者、采用与基线节点 draft_id 为空。派生节点要绑当前定稿，读取须 JOIN drafts 视图并限 status=finalized，比 live 视图更严，回收站章的派生节点随之读不出',
+  blueprint_continuity_suggestions: '挂在触发它的替换定稿上；读取须 JOIN finalization_outbox 视图，替换章进回收站后建议读不出，接受前还要比对蓝图哈希',
 }
 
 /** 从 drafts_all 与 contents 沿外键反向闭包出的表里，既没有 live 视图也没有豁免理由的。 */

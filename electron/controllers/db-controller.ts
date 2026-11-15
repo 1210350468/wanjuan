@@ -2,7 +2,7 @@ import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { isProjectSessionContext } from '../../src/shared/project-session-context'
 import { closeProjectDatabase, getCurrentProjectPath, getProjectDb } from '../database'
 import type { MainGenerationRunHandle } from '../../src/services/generation/generation-runtime'
-import { assertGenerationSourcesCurrent, assertGenerationSynopsisCommit, commitGenerationPlotOutlineAuthorEdit, commitGenerationBlueprintAuthorEdit, assertImportGenerationSourcesCurrent, recordGenerationDirectoryCommit, withGenerationAgentChildEffect } from './generation-controller'
+import { assertGenerationSourcesCurrent, assertGenerationSynopsisCommit, commitGenerationPlotOutlineAuthorEdit, commitGenerationBlueprintAuthorEdit, assertImportGenerationSourcesCurrent, recordGenerationDirectoryCommit, recordGenerationPlotOutlineCommit, withGenerationAgentChildEffect } from './generation-controller'
 import { projectAccess } from '../services/project-access'
 import { getProjectDataRoot } from '../services/project-data-locator'
 import { readPortableCurrentAuthority } from '../services/portable-current-authority'
@@ -21,11 +21,15 @@ import {
   BlueprintData,
   type BlueprintRangeCommitRequest,
 } from '../repositories/blueprint-repository'
-import { CharacterRepository, hasCharacterIdentitySchema } from '../repositories/character-repository'
+import { CharacterRepository } from '../repositories/character-repository'
 import { commitAuthorCharacterRoster } from '../services/character-roster-author'
+import { readCharacterContinuityTimeline } from '../repositories/character-continuity-repository'
 import { CharacterRosterRepository } from '../repositories/character-roster-repository'
 import type { CharacterRosterCommitRequest } from '../../src/shared/character-roster'
+import type { BlueprintForPreflight } from '../../src/shared/consistency-preflight'
 import { DraftRepository } from '../repositories/draft-repository'
+import { validateEditorInlineInput } from '../services/editor-inline-generation'
+import { countDraftUnits } from '../../src/shared/draft-units'
 import type { DraftSourceDependency } from '../../src/shared/draft-source-dependency'
 import { FinalizedDraftImportRepository } from '../repositories/finalized-draft-import-repository'
 import { FinalizationRepository } from '../repositories/finalization-repository'
@@ -102,6 +106,7 @@ const MUTATING_DATABASE_CHANNELS = new Set([
   'db:draft-create',
   'db:draft-update-status',
   'db:draft-update-content',
+  'db:annotation-commit',
   'db:draft-delete',
   'db:recovery-candidate-record',
   'db:recovery-candidate-update',
@@ -118,12 +123,12 @@ const MUTATING_DATABASE_CHANNELS = new Set([
   'db:post-process-mark-step-ok',
   'db:post-process-mark-step-failed',
   'db:log-llm-call',
-  'db:save-summary-snapshot',
   'db:narrative-thread-plan-create',
   'db:narrative-thread-plan-update',
   'db:narrative-thread-plan-delete',
   'db:narrative-thread-event-confirm',
-  'db:plot-tree-save',
+  'db:narrative-thread-assignment-set',
+  'db:narrative-thread-assignment-remove',
   'db:plot-tree-clear',
 ])
 
@@ -222,8 +227,10 @@ export function registerDatabaseController() {
       return { success: true, receipt }
     }
     const commit = () => {
-      if (request.generationRunHandle && assertGenerationSynopsisCommit(request.generationRunHandle, request.synopsis, request.expected)) return true
-      return ProjectCoreRepository.commitSynopsis(request)
+      const handle = request.generationRunHandle
+      const committed = handle && assertGenerationSynopsisCommit(handle, request.synopsis, request.expected) || ProjectCoreRepository.commitSynopsis(request)
+      if (committed && handle) recordGenerationPlotOutlineCommit(handle)
+      return committed
     }
     const database = getProjectDb()
     if (request.generationRunHandle && !database) throw new Error('GENERATION_DATABASE_NOT_READY')
@@ -671,6 +678,13 @@ export function registerDatabaseController() {
     return CharacterRepository.getAll()
   })
 
+  ipcMain.handle('db:character-continuity-nodes', async (_event, characterIds: string[], expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    const database = getProjectDb()
+    if (!database) throw new Error('DB_NOT_OPEN')
+    return SummaryRepository.readContinuityNodesForWriting(characterIds, database)
+  })
+
   ipcMain.handle('db:character-roster-read', async (_event, expectedProjectPath: string) => {
     assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
     const roster = CharacterRosterRepository.read()
@@ -686,6 +700,25 @@ export function registerDatabaseController() {
     return { ...roster, currentDerivedFields }
   })
 
+  ipcMain.handle('db:character-continuity-timeline', async (_event, characterId: string, expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    const database = getProjectDb()
+    if (!database) throw new Error('DB_NOT_OPEN')
+    return readCharacterContinuityTimeline(database, characterId)
+  })
+
+  ipcMain.handle('db:blueprint-relationship-hints', async (_event, blueprints: BlueprintForPreflight[], expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    return BlueprintRepository.committedRelationshipHints(blueprints)
+  })
+
+  ipcMain.handle('db:character-continuity-preflight-nodes', async (_event, expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    const database = getProjectDb()
+    if (!database) throw new Error('DB_NOT_OPEN')
+    return SummaryRepository.readContinuityNodesForPreflight(database)
+  })
+
   ipcMain.handle('db:character-roster-commit', async (
     _event,
     request: CharacterRosterCommitRequest,
@@ -694,17 +727,14 @@ export function registerDatabaseController() {
     try {
       assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
       const authorDb = getProjectDb()
-      if (request.intent === 'manual_edit' && authorDb && hasCharacterIdentitySchema(authorDb)) {
-        const authorSession = projectAccess.captureCurrentSession()
-        if (!authorSession) throw new Error('CHARACTER_AUTHOR_SCOPE_REQUIRED')
-        return { success: true, receipt: commitAuthorCharacterRoster(authorDb, request,
-          { projectId: authorSession.projectId, epoch: authorSession.leaseId }, () => {
-            projectAccess.assertCurrentSession(authorSession)
-            assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
-          }) }
-      }
-      return { success: true, receipt: CharacterRosterRepository.commit(request,
-        request.generationRunHandle ? () => assertGenerationSourcesCurrent(request.generationRunHandle!) : undefined) }
+      if (!authorDb) throw new Error('PROJECT_NOT_OPEN')
+      const authorSession = projectAccess.captureCurrentSession()
+      if (!authorSession) throw new Error('CHARACTER_AUTHOR_SCOPE_REQUIRED')
+      return { success: true, receipt: commitAuthorCharacterRoster(authorDb, request,
+        { projectId: authorSession.projectId, epoch: authorSession.leaseId }, () => {
+          projectAccess.assertCurrentSession(authorSession)
+          assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+        }) }
     } catch (err) {
       return { success: false, error: String(err) }
     }
@@ -827,20 +857,20 @@ export function registerDatabaseController() {
     return ConsistencyExemptionRepository.list()
   })
 
-  ipcMain.handle('db:consistency-exemption-save', async (_event, stableFactKey: string, reason: string, expectedProjectPath: string) => {
+  ipcMain.handle('db:consistency-exemption-save', async (_event, stableFactKey: string, reason: string, chapterNumber: number | null, expectedProjectPath: string) => {
     try {
       assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
-      ConsistencyExemptionRepository.save(stableFactKey, reason)
+      ConsistencyExemptionRepository.save(stableFactKey, reason, chapterNumber)
       return { success: true }
     } catch (error) {
       return { success: false, error: String(error) }
     }
   })
 
-  ipcMain.handle('db:consistency-exemption-revoke', async (_event, stableFactKey: string, expectedProjectPath: string) => {
+  ipcMain.handle('db:consistency-exemption-revoke', async (_event, stableFactKey: string, chapterNumber: number | null, expectedProjectPath: string) => {
     try {
       assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
-      ConsistencyExemptionRepository.revoke(stableFactKey)
+      ConsistencyExemptionRepository.revoke(stableFactKey, chapterNumber)
       return { success: true }
     } catch (error) {
       return { success: false, error: String(error) }
@@ -855,6 +885,11 @@ export function registerDatabaseController() {
   ipcMain.handle('db:narrative-thread-list-relevant', async (_event, context, expectedProjectPath: string) => {
     assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
     return NarrativeThreadRepository.listRelevantActive(context)
+  })
+
+  ipcMain.handle('db:narrative-thread-review-candidates', async (_event, expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    return NarrativeThreadRepository.listReviewCandidates()
   })
 
   ipcMain.handle('db:narrative-thread-plan-create', async (_event, input, expectedProjectPath: string) => {
@@ -878,23 +913,23 @@ export function registerDatabaseController() {
     return { success: true, event: NarrativeThreadRepository.confirmEvent(input) }
   })
 
+  ipcMain.handle('db:narrative-thread-assignment-set', async (_event, input, expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    NarrativeThreadRepository.setAssignment(input)
+    return { success: true, threads: NarrativeThreadRepository.list() }
+  })
+
+  ipcMain.handle('db:narrative-thread-assignment-remove', async (
+    _event, planId: number, chapterNumber: number, restoreEndChapter: number | null, expectedProjectPath: string,
+  ) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    NarrativeThreadRepository.removeAssignment(planId, chapterNumber, restoreEndChapter)
+    return { success: true, threads: NarrativeThreadRepository.list() }
+  })
+
   ipcMain.handle('db:plot-tree-read', async (_event, expectedProjectPath: string) => {
     assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
     return PlotTreeRepository.read()
-  })
-
-  ipcMain.handle('db:plot-tree-save', async (
-    _event,
-    _snapshot,
-    _expectedSourceRevision: string,
-    expectedProjectPath: string,
-  ) => {
-    try {
-      assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
-      throw new Error('GENERATION_GRAPH_ADMISSION_REQUIRED')
-    } catch (error) {
-      return { success: false, error: String(error) }
-    }
   })
 
   ipcMain.handle('db:plot-tree-clear', async (_event, expectedProjectPath: string) => {
@@ -916,6 +951,30 @@ export function registerDatabaseController() {
     } catch (err) {
       return { success: false, error: String(err) }
     }
+  })
+
+  ipcMain.handle('db:annotation-history-list', async (_event, draftId: number, expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    const db = getProjectDb()
+    if (!db || !DraftRepository.getMeta(draftId)) throw new Error('DRAFT_NOT_FOUND')
+    const rows = db.prepare(`SELECT id, before_text AS before, after_text AS after, annotations_json AS annotationsJson, created_at AS createdAt FROM annotation_history
+      WHERE draft_id IN (SELECT id FROM drafts WHERE chapter_number = (SELECT chapter_number FROM drafts WHERE id = ?)) ORDER BY id DESC`).all(draftId) as Array<{ id: number; before: string; after: string; annotationsJson: string; createdAt: string }>
+    return rows.map(({ annotationsJson, ...row }) => ({ ...row, annotations: JSON.parse(annotationsJson) }))
+  })
+
+  ipcMain.handle('db:annotation-commit', async (_event, input: { draftId: number; expectedSaved: string; before: string; after: string; annotations: import('../../src/shared/editor-inline-generation').EditorInlineAnnotation[] }, expectedProjectPath: string) => {
+    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
+    const db = getProjectDb()
+    if (!db || typeof input.expectedSaved !== 'string' || typeof input.before !== 'string' || typeof input.after !== 'string') throw new Error('ANNOTATION_COMMIT_INVALID')
+    validateEditorInlineInput({ action: 'batch-instruct', documentText: input.before, selectedText: input.before, from: 0, to: input.before.length, annotations: input.annotations })
+    db.transaction(() => {
+      const draft = DraftRepository.getFull(input.draftId)
+      if (!draft || !['draft', 'reviewed', 'revised'].includes(draft.status)) throw new Error('DRAFT_NOT_WRITABLE')
+      if (draft.content !== input.expectedSaved) throw new Error('SOURCE_DRAFT_CHANGED')
+      db.prepare('INSERT INTO annotation_history(draft_id,before_text,after_text,annotations_json) VALUES(?,?,?,?)').run(input.draftId, input.before, input.after, JSON.stringify(input.annotations))
+      DraftRepository.updateContent(input.draftId, input.after, countDraftUnits(input.after))
+    }).immediate()
+    return { success: true }
   })
 
   ipcMain.handle('db:draft-update-content', async (_event, id: number, content: string, wordCount: number, expectedProjectPath: string) => {
@@ -1252,16 +1311,5 @@ export function registerDatabaseController() {
   ipcMain.handle('db:get-llm-history', async (_event, limit: number | undefined, expectedProjectPath: string) => {
     assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
     return LLMHistoryRepository.getHistory(limit ?? 50)
-  })
-
-  ipcMain.handle('db:save-summary-snapshot', async (_event, chapterNumber: number, characterStates: string, expectedProjectPath: string) => {
-    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
-    SummaryRepository.saveSnapshot(chapterNumber, characterStates)
-    return { success: true }
-  })
-
-  ipcMain.handle('db:get-latest-summary', async (_event, expectedProjectPath: string) => {
-    assertRequiredExpectedProjectPath(getCurrentProjectPath(), expectedProjectPath)
-    return SummaryRepository.getLatestSnapshot()
   })
 }

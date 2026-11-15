@@ -39,6 +39,11 @@ interface ImportNovelDialogProps {
 
 const kTokens = (tokens: number) => `${(tokens / 1_000).toFixed(0)}K`
 
+const ESTIMATE_BOX_STYLE = {
+  backgroundColor: 'color-mix(in srgb, var(--color-info) 6%, transparent)',
+  border: '1px solid color-mix(in srgb, var(--color-info) 15%, transparent)',
+}
+
 /** 小说拆解与仿写向导对话框 */
 export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogProps) {
   const createProject = useProjectStore((s) => s.createProject)
@@ -527,9 +532,10 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
     }
   }
 
-  // 成本预估
-  const runsInference = purpose === 'reference' || authorInference
-  const costEstimate = runsInference && splitDone && inspection
+  const authorNewChapters = purpose === 'author-manuscript' && splitDone && !authorPreviewLoading && authorPreview?.classification === 'ready'
+    ? authorPreview.newChapterNumbers.length
+    : null
+  const costEstimate = purpose === 'reference' && splitDone && inspection
     ? estimateImportCost(inspection.totalWords, inspection.chapterCount)
     : null
 
@@ -583,7 +589,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
             </div>
             <div className="mt-2 text-xs" style={{ color: 'var(--color-text-secondary)' }} data-testid="import-purpose-explanation">
               {purpose === 'reference'
-                ? text('用于知识库、结构与文风拆解，不会写入草稿箱或正文章节。', 'Used for knowledge, structure, and style analysis. It never becomes a draft or manuscript chapter.')
+                ? text('用于知识库、结构与文风拆解，不会变成章节草稿或正文。', 'Used for knowledge, structure, and style analysis. It never becomes a draft or manuscript chapter.')
                 : text('按章节号导入为不可变权威定稿，用于连续性与后续写作；不会进入参考语料或生成仿写拆解。', 'Imported by chapter number as immutable authoritative finalized text for continuity and future writing. It is not added to reference corpus or imitation analysis.')}
             </div>
             {purpose === 'author-manuscript' && (
@@ -911,13 +917,28 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
             </>
           )}
 
-          {/* ===== Token 预估 ===== */}
+          {authorNewChapters !== null && (
+            <div data-testid="author-import-workload" className="rounded-lg px-3 py-2.5 space-y-1.5" style={ESTIMATE_BOX_STYLE}>
+              <div className="flex items-center gap-1.5">
+                <Zap size={13} style={{ color: 'var(--color-accent)' }} />
+                <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
+                  {text('AI 工作量', 'AI workload')}
+                </span>
+              </div>
+              <div className="text-xs space-y-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                <p>{text(
+                  `新增 ${authorNewChapters} 章通常需 ${authorNewChapters * 2} 次 AI 请求（每章剧情要点、角色状态各一次），重试另计。`,
+                  `Adding ${authorNewChapters} new ${pluralEn(authorNewChapters, 'chapter')} usually takes ${authorNewChapters * 2} AI requests (plot notes and character state for each). Retries add more.`,
+                )}</p>
+                {authorInference && <p>{text(
+                  '已开反推，还会补设定、架构、角色、文风和缺失的蓝图。',
+                  'Inference is on, so settings, architecture, characters, style, and missing blueprints are filled too.',
+                )}</p>}
+              </div>
+            </div>
+          )}
           {costEstimate && (
-            <div className="rounded-lg px-3 py-2.5 space-y-1.5"
-              style={{
-                backgroundColor: 'color-mix(in srgb, var(--color-info) 6%, transparent)',
-                border: '1px solid color-mix(in srgb, var(--color-info) 15%, transparent)',
-              }}>
+            <div className="rounded-lg px-3 py-2.5 space-y-1.5" style={ESTIMATE_BOX_STYLE}>
               <div className="flex items-center gap-1.5">
                 <Zap size={13} style={{ color: 'var(--color-accent)' }} />
                 <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
