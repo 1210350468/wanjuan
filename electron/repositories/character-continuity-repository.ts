@@ -62,13 +62,15 @@ function requireTransaction(db: BetterSqlite3.Database): void {
 }
 
 function appendNode(db: BetterSqlite3.Database, node: NodeWrite): void {
-  const series = db.prepare(`SELECT
+  const position = `SELECT
       MAX(CASE WHEN e.draft_id IS NULL OR d.status='finalized' THEN e.effective_chapter END) AS chapter,
       COALESCE(MAX(json_extract(e.evidence_json,'$.seq')),0) AS seq
-    FROM character_continuity_events e LEFT JOIN drafts d ON d.id=e.draft_id
-    WHERE e.aspect=@aspect AND (CASE WHEN @series IS NULL THEN e.subject_id=@subjectId AND e.target_id IS NULL
-      ELSE json_extract(e.evidence_json,'$.relationshipId')=@series END)`)
-    .get({ subjectId: node.subjectId, aspect: node.aspect, series: node.evidence.relationshipId ?? null }) as { chapter: number | null; seq: number }
+    FROM character_continuity_events e LEFT JOIN drafts d ON d.id=e.draft_id`
+  // 派生关系的系列是一对人物，两个方向的节点主语不同，都要算进来。
+  const series = (node.target
+    ? db.prepare(`${position} WHERE e.subject_id IN (?,?) AND e.aspect='relation' AND json_extract(e.evidence_json,'$.relationshipId')=?`)
+      .get(node.subjectId, node.target.id, node.evidence.relationshipId)
+    : db.prepare(`${position} WHERE e.subject_id=? AND e.aspect=? AND e.target_id IS NULL`).get(node.subjectId, node.aspect)) as { chapter: number | null; seq: number }
   // 不早于同系列已有节点：否则按章折叠会读到更早写入的值，与当前列分叉。派生关系没有当前列，按章记。
   const effectiveChapter = node.provenance.kind === 'derived' && node.target ? node.effectiveChapter : Math.max(node.effectiveChapter, series.chapter ?? 0)
   db.prepare(`INSERT INTO character_continuity_events(event_id,subject_id,subject_name,target_id,target_name,aspect,value,effective_chapter,provenance_json,draft_id,evidence_json)

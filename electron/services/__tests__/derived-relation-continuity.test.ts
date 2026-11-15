@@ -1573,6 +1573,15 @@ describe('派生关系的系列是这对人物，方向和说法照定稿原样'
     expect(JSON.stringify(lines)).not.toContain('盟友')
   })
 
+  it('同一份定稿重跑时方向和说法都换了：生效的是后一次的说法', () => {
+    openProject()
+    const draftId = finalizeNew(8, CHAPTER_EIGHT)
+    commitModelOutput(draftId, { updates: [], relations: [relationChange('恩断义绝', BREAK_UP)] })
+    commitModelOutput(draftId, { updates: [], relations: [relationChange('形同陌路', BREAK_UP, SHEN, LIN)] })
+
+    expect(linesInForce(9)).toEqual([[SHEN, LIN, '形同陌路']])
+  })
+
   it('林岚→沈砚「拜师」之后模型报沈砚→林岚「收徒」：时间线是沈砚对林岚「收徒」', () => {
     openProject()
     commitModelOutput(finalizeNew(3, APPRENTICE), { updates: [], relations: [relationChange('拜师', '向沈砚拜师')] })
