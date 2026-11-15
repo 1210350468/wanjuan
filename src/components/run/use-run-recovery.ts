@@ -306,16 +306,8 @@ function showUndo(session: ProjectSessionContext, handle: MainGenerationRunHandl
   const handles = [...merged?.handles ?? [], handle], titles = [...merged?.titles ?? [], title]
   const { text } = useLocaleStore.getState()
   const message = titles.length === 1
-    ? text(`已不再恢复「${title}」
-
-生成记录仍保留。`, `“${title}” won't be recovered
-
-The generation record is kept.`)
-    : text(`已不再恢复 ${titles.length} 张卡片
-
-生成记录仍保留。`, `${titles.length} cards won't be recovered
-
-The generation records are kept.`)
+    ? text(`已不再恢复「${title}」`, `“${title}” won't be recovered`)
+    : text(`已不再恢复 ${titles.length} 张卡片`, `${titles.length} cards won't be recovered`)
   const shown = {
     session, handles, titles,
     close: actionToast.show({
