@@ -112,7 +112,7 @@ describe('写前延后和指定本章推进', () => {
     expect(narrativeThreadSchedule(thread(id), 5)).toEqual({ kind: 'due' })
   })
 
-  it('7 条逾期加 1 条指定：指定的在 6 条之内，弹层列全部，只把进任务的标为任务', () => {
+  it('7 条逾期加 1 条指定：指定的在 6 条之内，弹层列全部，只把进任务的标为任务并给出未纳入条数', () => {
     const overdue = Array.from({ length: 7 }, (_, index) => plan(`逾期${index + 1}`, 1, 2).id)
     const assigned = plan('作者指定', 3, 12).id
     advance(assigned, 8)
@@ -127,7 +127,7 @@ describe('写前延后和指定本章推进', () => {
     expect(panel.rows.map(row => row.thread.id)).toEqual([assigned, ...overdue])
     expect(panel.rows.filter(row => row.state === 'task').map(row => row.thread.id)).toEqual(tasks.map(task => task.planId))
     expect(panel.rows.filter(row => row.state === 'left-out').map(row => row.thread.id)).toEqual(overdue.slice(5))
-    expect(panel.taskCount).toBe(6)
+    expect(panel).toMatchObject({ taskCount: 6, leftOut: 2 })
   })
 
   it('弹层：本次会话延后的线索变成可撤销的一行，区间内的进「也可以本章推进」', () => {
@@ -144,7 +144,7 @@ describe('写前延后和指定本章推进', () => {
     expect(panel.rows).toEqual([expect.objectContaining({ state: 'deferred', deferredTo: 8, thread: expect.objectContaining({ id: due }) })])
     expect(panel.canAdvance.map(item => item.id)).toEqual([inWindow])
     expect(panel.canAdvance.map(item => item.id)).not.toContain(later)
-    expect(panel.taskCount).toBe(0)
+    expect(panel).toMatchObject({ taskCount: 0, leftOut: 0 })
   })
 
   it('旧版本冻结的线索任务（只有 due、overdue）和新的 assigned 都能读回，键序不变', () => {

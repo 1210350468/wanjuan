@@ -52,6 +52,13 @@ describe('作者最后一次改回收章生效，延后只是改回收章的快�
     expect(narrativeThreadSchedule(view(id), 6)).toEqual({ kind: 'due' })
   })
 
+  it('写到最后几章时延后三章，回收章可以落在规划章数之外', () => {
+    const { id } = plan(12)
+    defer(id, 12, 15)
+    expect(view(id).targetEndChapter).toBe(15)
+    expect(taskIds(12)).toEqual([])
+  })
+
   it('延后后线索的回收章就是第 6 章，编辑表单预填的正是它', () => {
     const { id } = plan(5)
     defer(id, 5, 6)

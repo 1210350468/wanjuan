@@ -170,6 +170,7 @@ export interface ChapterThreadPanel {
   rows: ChapterThreadPanelRow[]
   canAdvance: NarrativeThreadView[]
   taskCount: number
+  leftOut: number
 }
 
 /**
@@ -178,7 +179,7 @@ export interface ChapterThreadPanel {
  */
 export function chapterThreadPanel(threads: readonly NarrativeThreadView[], chapterNumber: number,
   movedHere: ReadonlyMap<number, { to: number }>): ChapterThreadPanel {
-  const { tasks } = chapterThreadTasks(threads, chapterNumber)
+  const { tasks, leftOut } = chapterThreadTasks(threads, chapterNumber)
   const taskIds = new Set(tasks.map(task => task.planId))
   const deferred: ChapterThreadPanelRow[] = []
   const canAdvance: NarrativeThreadView[] = []
@@ -192,6 +193,7 @@ export function chapterThreadPanel(threads: readonly NarrativeThreadView[], chap
       .map(task => ({ state: taskIds.has(task.thread.id) ? 'task' as const : 'left-out' as const, ...task })), ...deferred],
     canAdvance,
     taskCount: tasks.length,
+    leftOut,
   }
 }
 

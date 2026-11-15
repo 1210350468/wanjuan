@@ -120,6 +120,12 @@
   flex-shrink: 0;
 }
 
+.stage-write-thread-note {
+  margin: 0;
+  font-size: var(--fs-12);
+  color: var(--ink-3);
+}
+
 .stage-write-error {
   margin: 0;
   font-size: var(--fs-12);

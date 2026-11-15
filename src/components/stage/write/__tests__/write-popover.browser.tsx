@@ -336,6 +336,7 @@ describe('写前的线索：延后与指定本章推进', () => {
       .filter(row => row.textContent?.includes('本次不进任务'))
       .map(row => row.querySelector('b')?.textContent)
     expect(leftOut).toEqual(['线索7', '线索8'])
+    await expect.element(popover.getByText('另有 2 条本次不进任务')).toBeVisible()
     await expect.element(threadRow('线索1')).toHaveTextContent('逾期 3 章')
 
     await act(async () => threadRow('线索8').getByRole('button', { name: '延后一章' }).click())

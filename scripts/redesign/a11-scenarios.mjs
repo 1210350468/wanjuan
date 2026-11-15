@@ -124,6 +124,8 @@ export const A11_SCENARIOS = {
     assert.equal(await popover.getByRole('listitem').filter({ hasText: '逾期 3 章' }).count(), 7, '7 条逾期全部列出')
     const leftOutTitles = await leftOut.locator('b').allTextContents()
     assert.deepEqual(leftOutTitles, ['旧线索7'], '只有第 7 条标本次不进任务')
+    await popover.getByText('另有 1 条本次不进任务', { exact: true }).waitFor({ state: 'visible' })
+    await shoot('a11-thread-left-out-popover-top')
     await leftOut.scrollIntoViewIfNeeded()
     await leftOut.getByRole('button', { name: '延后一章' }).waitFor({ state: 'visible' })
     await shoot('a11-thread-left-out-popover')
