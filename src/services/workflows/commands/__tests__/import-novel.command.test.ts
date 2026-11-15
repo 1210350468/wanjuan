@@ -13,6 +13,7 @@ import { importGenerationStopMessage } from '../../../../i18n/app-errors'
 import { contextLengthRejectingDependencies } from './context-length-runtime.fixture'
 import { isWorkflowCancellation } from '../../workflow-cancellation'
 import { GenerationHarnessError } from '../../../generation/generation-harness'
+import { closedNovelConfig, unclosedNovelConfig } from '../../__tests__/import-inference-syntax.fixture'
 
 class InferBlueprintsPerChapterCommand extends RuntimeInferBlueprintsPerChapterCommand {
   constructor() { super(workflowRuntimeDependencies) }
@@ -117,28 +118,30 @@ function validInference() {
 }
 
 function successfulInferenceIpc() {
-  return stubIpcInvoke((channel, request) => {
-    if (channel === 'kb:search') return []
-    if (channel === 'db:character-roster-read') return { status: 'ready', revision: 7, entries: [] }
-    if (channel === 'db:import-global-facts-commit') {
-      const candidate = request as {
-        operationId: string
-        core: object
-        characterEntries: unknown[]
-      }
-      return {
-        success: true,
-        receipt: {
-          operationId: candidate.operationId,
-          payloadHash: 'f'.repeat(64),
-          idempotent: false,
-          core: candidate.core,
-          roster: { snapshot: { status: 'ready', entries: candidate.characterEntries } },
-        },
-      }
+  return stubIpcInvoke(acceptGlobalFacts)
+}
+
+function acceptGlobalFacts(channel: string, request?: unknown) {
+  if (channel === 'kb:search') return []
+  if (channel === 'db:character-roster-read') return { status: 'ready', revision: 7, entries: [] }
+  if (channel === 'db:import-global-facts-commit') {
+    const candidate = request as {
+      operationId: string
+      core: object
+      characterEntries: unknown[]
     }
-    throw new Error(`unexpected IPC ${channel}`)
-  })
+    return {
+      success: true,
+      receipt: {
+        operationId: candidate.operationId,
+        payloadHash: 'f'.repeat(64),
+        idempotent: false,
+        core: candidate.core,
+        roster: { snapshot: { status: 'ready', entries: candidate.characterEntries } },
+      },
+    }
+  }
+  throw new Error(`unexpected IPC ${channel}`)
 }
 
 function stubIpcInvoke(handler: (channel: string, ...args: unknown[]) => unknown) {
@@ -1122,7 +1125,7 @@ describe('导入 slot 的输出没通过校验', () => {
       return handler(channel, ...args)
     })
     const receipt = { purpose: 'import-inference', finishReason: 'stop', budget: { requestedOutputTokens: 1 } }
-    const session = { complete: vi.fn(async (): Promise<unknown> => ({ status: 'completed', finishReason: 'stop', content, receipt })) }
+    const session = { complete: vi.fn<(task?: { purpose: string }) => Promise<unknown>>(async () => ({ status: 'completed', finishReason: 'stop', content, receipt })) }
     const runtime = { mainOwned: true, execute: (operation: (scope: { session: typeof session }) => Promise<unknown>) => operation({ session }) }
     const discarded = () => invoke.mock.calls.filter(([channel]) => channel === 'generation:discard-candidate').map(([, ...args]) => args.find(arg => typeof arg === 'string'))
     return { runtime, session, invoke, discarded, context: { ...createContext(), mainGenerationRunHandle: handle } }
@@ -1133,6 +1136,43 @@ describe('导入 slot 的输出没通过校验', () => {
     await expect(new RuntimeInferBlueprintsPerChapterCommand({ createRuntime: async () => runtime } as never)
       .execute({ step: {}, context, callbacks })).rejects.toThrow(/missing_item/)
     expect(discarded()).toEqual(['artifact-1', 'artifact-2'])
+  })
+
+  function replyInOrder(session: ReturnType<typeof mainOwnedImport>['session'], replies: string[]) {
+    const reply = session.complete.getMockImplementation()!
+    for (const content of replies) {
+      session.complete.mockImplementationOnce(async () => ({ ...(await reply() as object), content }))
+    }
+    return () => session.complete.mock.calls.map(([task]) => task?.purpose)
+  }
+
+  it('全局设定的语法修复被拒：自动重新推演一次，第二次合规就照常提交，作者看不到错误', async () => {
+    const { runtime, session, invoke, discarded, context } = mainOwnedImport('', acceptGlobalFacts)
+    const purposes = replyInOrder(session, [unclosedNovelConfig, closedNovelConfig, closedNovelConfig])
+
+    await new RuntimeInferGlobalSettingsCommand({ createRuntime: async () => runtime } as never)
+      .execute({ step: {}, context, callbacks })
+
+    expect(purposes()).toEqual(['import-inference', 'import-inference:structured-syntax-repair', 'import-inference'])
+    const commit = invoke.mock.calls.find(([channel]) => channel === 'db:import-global-facts-commit')
+    expect((commit?.[1] as { core: { genre: string } }).core.genre).toBe(JSON.parse(closedNovelConfig).novelConfig.genre)
+    expect(discarded()).toEqual([])
+  })
+
+  it('重新推演后修复仍被拒：报出新文案，丢弃这个运行的全部候选，不写入任何设定', async () => {
+    const { runtime, session, invoke, discarded, context } = mainOwnedImport('', acceptGlobalFacts)
+    const purposes = replyInOrder(session, [unclosedNovelConfig, closedNovelConfig, unclosedNovelConfig, closedNovelConfig])
+
+    await expect(new RuntimeInferGlobalSettingsCommand({ createRuntime: async () => runtime } as never)
+      .execute({ step: {}, context, callbacks }))
+      .rejects.toThrow('已导入的内容都已保存，只是 AI 推演结果连续两次格式有误，没有写入。在导入对话框里点「继续导入」重试。')
+
+    expect(purposes()).toEqual([
+      'import-inference', 'import-inference:structured-syntax-repair',
+      'import-inference', 'import-inference:structured-syntax-repair',
+    ])
+    expect(discarded()).toEqual(['artifact-1', 'artifact-2'])
+    expect(invoke.mock.calls.map(([channel]) => channel)).not.toContain('db:import-global-facts-commit')
   })
 
   it('全局设定输出解析不了：丢弃这个运行的全部候选', async () => {
