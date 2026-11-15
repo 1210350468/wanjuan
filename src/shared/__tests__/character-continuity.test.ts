@@ -171,3 +171,13 @@ describe('resolveStateEffectiveChapter', () => {
     expect(resolveStateEffectiveChapter(requested, range)).toBe(6)
   })
 })
+
+describe('latestNodesBefore 按人物筛选关系', () => {
+  it('另一方写的作者行和这方的定稿记录同值：只查这方时定稿记录还在', () => {
+    const authorLine: CharacterRelationNode = { ...relation('作者行', '师徒', 1), subjectId: '乙', subjectName: '乙', targetId: '甲', targetName: '甲' }
+    const derivedLine = relation('derived:甲乙', '师徒', 5, derived)
+
+    expect(latestNodesBefore([authorLine, derivedLine], 9, ['甲']).relations.flatMap(pair => pair.lines.map(line => [line.subjectId, line.value]))).toEqual([['甲', '师徒']])
+    expect(latestNodesBefore([authorLine, derivedLine], 9).relations.flatMap(pair => pair.lines.map(line => [line.subjectId, line.value]))).toEqual([['乙', '师徒']])
+  })
+})

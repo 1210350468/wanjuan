@@ -509,6 +509,16 @@ describe('定稿后自动记录人物关系变化', () => {
     expect(pending()).toEqual([])
   })
 
+  it('作者设定盟友，第 5 章定稿写成仇敌，第 7 章定稿回到盟友：时间线记下第 7 章的和好', () => {
+    openProject()
+    authorRelation('盟友')
+    commitModelOutput(finalizeNew(5, '第五章：林岚视沈砚为仇敌。'), { updates: [], relations: [relationChange('仇敌', '视沈砚为仇敌')] })
+    commitModelOutput(finalizeNew(7, '第七章：两人重新结为盟友。'), { updates: [], relations: [relationChange('盟友', '重新结为盟友')] })
+
+    expect(characterTimeline(readCharacterContinuityTimeline(db(), LIN).nodes).flatMap(group => group.changes.map(change => [group.chapter, change.source, change.value])))
+      .toEqual([[7, 'finalized', '盟友'], [5, 'finalized', '仇敌'], [1, 'author', '盟友']])
+  })
+
   it('同一份定稿重跑后关系回到作者设定：这一章旧的待确认项撤下，别的章不受影响', () => {
     openProject()
     authorRelation('师徒')
@@ -887,6 +897,14 @@ describe('待确认项和写稿提示跟着作者的决定走', () => {
     expect(await promptLines(10)).toEqual([AUTHOR_LINE])
   })
 
+  it('后续章重述同样的关系：提示里的章号和原文仍是关系变成这样的那一章', async () => {
+    openProject()
+    commitModelOutput(finalizeNew(3, '第三章：林岚与沈砚结为盟友。'), output(relationChange('盟友', '结为盟友')))
+    commitModelOutput(finalizeNew(7, '第七章：两人仍是盟友。'), output(relationChange('盟友', '仍是盟友')))
+
+    expect(await promptLines(8)).toEqual(['定稿记录·与沈砚的关系（第3章，原文：结为盟友）'])
+  })
+
   it('作者还没决定时，提示同时放作者设定和原文', async () => {
     openProject()
     authorRelation('师徒')
@@ -1060,6 +1078,34 @@ describe('作者对派生关系的决定，预检和建议说法一致', () => {
       openProject()
       commitModelOutput(finalizeNew(8, CHAPTER_EIGHT), output(relationChange('仇敌', BREAK_UP)))
       expect(await preflight(plan(12, '好友'))).toMatchObject([{ sourceChapter: 8, evidence: BREAK_UP }])
+    })
+  })
+
+  describe('后续章重述同样的关系', () => {
+    it('全书豁免之后后续章重述：豁免仍管用，提示不回来', async () => {
+      openProject()
+      commitModelOutput(finalizeNew(3, '第三章：林岚与沈砚结为盟友。'), output(relationChange('盟友', '结为盟友')))
+      const [finding, ...rest] = await preflight(plan(8, '仇敌'))
+      expect(rest).toEqual([])
+      ConsistencyExemptionRepository.save(finding.stableFactKey, '有意安排')
+      expect(await preflight(plan(8, '仇敌'))).toEqual([])
+
+      commitModelOutput(finalizeNew(7, '第七章：两人仍是盟友。'), output(relationChange('盟友', '仍是盟友')))
+      expect(await preflight(plan(8, '仇敌'))).toEqual([])
+    })
+
+    it('作者在两次定稿之间写了设定，后一章只是重述：提示的依据是作者设定', async () => {
+      openProject()
+      commitModelOutput(finalizeNew(3, '第三章：林岚视沈砚为仇敌。'), output(relationChange('仇敌', '视沈砚为仇敌')))
+      db().transaction(() => {
+        db().prepare("INSERT OR IGNORE INTO character_identity_approvals VALUES('seed-approval','hash','{}')").run()
+        insertCharacterRelationship(db(), { relationshipId: 'author-line', sourceId: LIN, sourceName: '林岚', targetId: SHEN, targetName: '沈砚', relation: '死敌', provenanceJson: '{"kind":"author"}' },
+          { operationId: 'seed-approval', action: 'author-edit' }, 5)
+        refreshCharacterIdentityProjection(db())
+      })()
+      commitModelOutput(finalizeNew(7, '第七章：两人仍是仇敌。'), output(relationChange('仇敌', '仍是仇敌')))
+
+      expect(await preflight(plan(8, '盟友'))).toMatchObject([{ authorSetting: true, sourceChapter: 5, evidence: '死敌' }])
     })
   })
 
