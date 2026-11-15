@@ -341,10 +341,11 @@ describe('写前的线索：延后与指定本章推进', () => {
     await expect.element(threadRow('线索7')).toHaveTextContent('逾期 3 章 · 本次不进任务')
     const statusColor = (title: string) => getComputedStyle(threadRow(title).element().querySelector('small')!).color
     expect(statusColor('线索7')).toBe(statusColor('线索1'))
-    expect(statusColor('线索1')).not.toBe(getComputedStyle(threadRow('线索1').element().querySelector('b')!.parentElement!).color)
 
     await act(async () => threadRow('线索8').getByRole('button', { name: '延后一章' }).click())
     expect(threadCalls('db:narrative-thread-assignment-set')[0]![1]).toMatchObject({ planId: 8, chapterNumber: 6, kind: 'resolve' })
+    await expect.element(threadRow('线索8')).toHaveTextContent('已延到第 6 章')
+    expect(statusColor('线索8')).not.toBe(statusColor('线索1'))
   })
 
   it('区间内的线索收在折叠区，设为本章推进后进任务，可撤销', async () => {
