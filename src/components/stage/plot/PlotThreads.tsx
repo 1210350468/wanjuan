@@ -2,6 +2,7 @@ import { useId, useState, type ReactNode } from 'react'
 import { Check, MoreHorizontal, Plus, Sparkles, TriangleAlert } from 'lucide-react'
 import type { NarrativeThreadEventType, NarrativeThreadView } from '../../../shared/narrative-thread'
 import { useLocaleStore } from '../../../stores/locale-store'
+import { useProjectStore } from '../../../stores/project-store'
 import { Button } from '../../ui/Button'
 import { EmptyState } from '../../ui/EmptyState'
 import { Menu } from '../../ui/Menu'
@@ -57,6 +58,12 @@ function threadDeferrals(thread: NarrativeThreadView, text: Text) {
   ))
 }
 
+function beyondPlan(thread: NarrativeThreadView, plannedChapters: number | undefined, text: Text) {
+  const open = thread.status !== 'resolved' && thread.status !== 'abandoned'
+  if (!open || !plannedChapters || thread.targetEndChapter <= plannedChapters) return null
+  return <span className="stage-thread-sub">{text(`回收章超出当前规划（共 ${plannedChapters} 章）`, `Paid off after the ${plannedChapters} planned ${pluralEn(plannedChapters, 'chapter')}`)}</span>
+}
+
 interface PlotThreadsProps {
   plot: PlotThreadsData
   onDelete: (thread: NarrativeThreadView) => void
@@ -68,6 +75,7 @@ interface PlotThreadsProps {
  */
 export default function PlotThreads({ plot, onDelete }: PlotThreadsProps) {
   const text = useLocaleStore(s => s.text)
+  const plannedChapters = useProjectStore(s => s.currentProject?.novelConfig.totalChapters)
   const ids = useId()
   const [formOpen, setFormOpen] = useState(false)
   const eventThread = plot.threads.find(thread => thread.id === plot.eventPlanId) ?? null
@@ -121,6 +129,7 @@ export default function PlotThreads({ plot, onDelete }: PlotThreadsProps) {
                   <b>{thread.title}</b>
                   {threadNote(thread, plot.dormantThreshold, text)}
                   {threadDeferrals(thread, text)}
+                  {beyondPlan(thread, plannedChapters, text)}
                 </div>
                 <Route thread={thread} text={text} />
                 <Menu
