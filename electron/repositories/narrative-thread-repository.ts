@@ -249,13 +249,15 @@ export class NarrativeThreadRepository {
       WHERE drafts.status = 'finalized'
       ORDER BY drafts.chapter_number ASC, reviews.review_index DESC
     `).all() as Array<Omit<ReviewedFinalDraft, 'goalReview'> & { reportBody: string }>
-    const latestByDraft = new Map<number, ReviewedFinalDraft>()
+    const seenDrafts = new Set<number>()
+    const reviewed: ReviewedFinalDraft[] = []
     for (const { reportBody, ...draft } of rows) {
-      if (latestByDraft.has(draft.draftId)) continue
+      if (seenDrafts.has(draft.draftId)) continue
+      seenDrafts.add(draft.draftId)
       const goalReview = savedGoalReview(reportBody)
-      if (goalReview) latestByDraft.set(draft.draftId, { ...draft, goalReview })
+      if (goalReview) reviewed.push({ ...draft, goalReview })
     }
-    return narrativeThreadReviewCandidates(this.list(db), [...latestByDraft.values()])
+    return narrativeThreadReviewCandidates(this.list(db), reviewed)
   }
 
   /** 写第 N 章参考的线索：逾期、到期、区间内的必选，区间未到的只在名字命中时选；逾期最久的排最前。 */
