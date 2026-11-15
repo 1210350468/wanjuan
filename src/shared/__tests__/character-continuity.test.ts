@@ -108,7 +108,7 @@ describe('latestNodesBefore', () => {
   it('同一对角色的两条基线关系都保留并标冲突', () => {
     const result = latestNodesBefore([relation('一', '结盟', 3, legacy, 0), relation('二', '死敌', 3, legacy, 0)], 4)
     expect(result.relations).toHaveLength(1)
-    expect(result.relations[0]).toMatchObject({ subjectId: '甲', targetId: '乙', conflict: true })
+    expect(result.relations[0]).toMatchObject({ conflict: true, lines: [{ subjectId: '甲', targetId: '乙' }, { subjectId: '甲', targetId: '乙' }] })
     expect(result.relations[0].lines.map(line => line.value).sort()).toEqual(['死敌', '结盟'].sort())
   })
 
@@ -169,5 +169,15 @@ describe('resolveStateEffectiveChapter', () => {
   })
   it.each([[undefined], [0], [-3], [1.5], [41], ['7'], [Number.NaN], [null]])('%s 不合法，退回下一章', requested => {
     expect(resolveStateEffectiveChapter(requested, range)).toBe(6)
+  })
+})
+
+describe('latestNodesBefore 按人物筛选关系', () => {
+  it('另一方写的作者行和这方的定稿记录同值：只查这方时定稿记录还在', () => {
+    const authorLine: CharacterRelationNode = { ...relation('作者行', '师徒', 1), subjectId: '乙', subjectName: '乙', targetId: '甲', targetName: '甲' }
+    const derivedLine = relation('derived:甲乙', '师徒', 5, derived)
+
+    expect(latestNodesBefore([authorLine, derivedLine], 9, ['甲']).relations.flatMap(pair => pair.lines.map(line => [line.subjectId, line.value]))).toEqual([['甲', '师徒']])
+    expect(latestNodesBefore([authorLine, derivedLine], 9).relations.flatMap(pair => pair.lines.map(line => [line.subjectId, line.value]))).toEqual([['乙', '师徒']])
   })
 })

@@ -32,10 +32,8 @@ export interface CharacterRelationNode extends ContinuityNodeBase {
 }
 export type ContinuityNode = CharacterStateNode | CharacterRelationNode
 
-/** 同一对角色在某一章仍然有效的全部关系。多于一条时 conflict 为真，交给读者判断，不替作者选。 */
+/** 同一对角色（不分方向）的有效关系。conflict 为真表示说法互相冲突，交给读者判断，不替作者选。 */
 export interface CharacterRelationPair {
-  subjectId: string
-  targetId: string
   lines: CharacterRelationNode[]
   conflict: boolean
 }
@@ -62,31 +60,74 @@ function newer(candidate: ContinuityNode, current: ContinuityNode): boolean {
 const seriesKey = (node: ContinuityNode) =>
   node.aspect === 'relation' ? `relation:${node.relationshipId}` : `state:${JSON.stringify([node.subjectId, node.aspect])}`
 
+const hasConflict = (lines: readonly CharacterRelationNode[]) => lines.some((left, index) => lines.slice(index + 1).some(right => left.value !== right.value
+  && (left.subjectId === right.subjectId || left.provenance.kind === 'derived' || right.provenance.kind === 'derived')))
+
+const isDerivedRelation = (node: ContinuityNode): node is CharacterRelationNode => node.aspect === 'relation' && node.provenance.kind === 'derived'
+const pairKey = (node: CharacterRelationNode) => JSON.stringify([node.subjectId, node.targetId].sort())
+const withoutAuthorRepeats = (lines: readonly CharacterRelationNode[]) =>
+  lines.filter(line => line.provenance.kind !== 'derived' || !lines.some(other => other.provenance.kind !== 'derived' && other.value === line.value))
+
+/** 定稿对一对人物的说法里，值相同的连续几章是一段，head 是最早那一章。作者拒绝过其中一章的说法，整段都算拒绝。 */
+export interface DerivedRelationRun {
+  head: CharacterRelationNode
+  observations: CharacterRelationNode[]
+  declined: boolean
+}
+
+/** 按 relationshipId 分组，段按章升序。同一章重跑过几次时只认最后写入的说法。 */
+export function derivedRelationRuns(nodes: readonly ContinuityNode[]): Map<string, DerivedRelationRun[]> {
+  const chapters = new Map<string, Map<number, CharacterRelationNode>>()
+  for (const node of nodes) {
+    if (!isDerivedRelation(node)) continue
+    const series = chapters.get(node.relationshipId) ?? new Map<number, CharacterRelationNode>()
+    const current = series.get(node.effectiveChapter)
+    if (!current || node.seq > current.seq) series.set(node.effectiveChapter, node)
+    chapters.set(node.relationshipId, series)
+  }
+  return new Map([...chapters].map(([key, series]) => {
+    const runs: DerivedRelationRun[] = []
+    for (const node of [...series.values()].sort((left, right) => left.effectiveChapter - right.effectiveChapter)) {
+      const run = runs.at(-1)
+      if (run?.head.value === node.value) {
+        run.observations.push(node)
+        run.declined ||= !!node.authorDeclined
+      } else runs.push({ head: node, observations: [node], declined: !!node.authorDeclined })
+    }
+    return [key, runs]
+  }))
+}
+
 /**
- * 写第 chapter 章时已经生效的最新节点。传 Infinity 得到当前值。
+ * 写第 chapter 章时已经生效的最新节点。传 Infinity 得到当前值。ids 只筛结果里的主语，判断冲突时两个方向的节点都算。
+ * 定稿关系返回所在那一段的段首，不是最新一章的节点。
  * nodes 应来自只含有效节点的读取（派生节点的稿仍是定稿，见 ADR-0024、ADR-0025）。
  */
 export function latestNodesBefore(nodes: readonly ContinuityNode[], chapter: number, ids?: readonly string[]): LatestContinuityNodes {
   const wanted = ids && new Set(ids)
   const latest = new Map<string, ContinuityNode>()
   for (const node of nodes) {
-    if (wanted && !wanted.has(node.subjectId) || firstVisibleChapter(node) > chapter) continue
+    if (isDerivedRelation(node) || firstVisibleChapter(node) > chapter) continue
     const key = seriesKey(node), current = latest.get(key)
     if (!current || newer(node, current)) latest.set(key, node)
   }
-  const states: CharacterStateNode[] = []
-  const pairs = new Map<string, CharacterRelationPair>()
-  for (const node of latest.values()) {
-    if (node.value === '') continue
-    if (node.aspect !== 'relation') { states.push(node); continue }
-    if (node.authorDeclined) continue
-    const key = JSON.stringify([node.subjectId, node.targetId])
-    const pair = pairs.get(key) ?? { subjectId: node.subjectId, targetId: node.targetId, lines: [], conflict: false }
-    pair.lines.push(node)
-    pair.conflict = new Set(pair.lines.map(line => line.value)).size > 1
-    pairs.set(key, pair)
+  const inForce = [...latest.values()]
+  for (const runs of derivedRelationRuns(nodes).values()) {
+    const run = runs.filter(candidate => firstVisibleChapter(candidate.head) <= chapter).at(-1)
+    if (run && !run.declined) inForce.push(run.head)
   }
-  return { states, relations: [...pairs.values()] }
+  const states: CharacterStateNode[] = []
+  const pairs = new Map<string, CharacterRelationNode[]>()
+  for (const node of inForce) {
+    if (node.value === '') continue
+    if (node.aspect !== 'relation') { if (!wanted || wanted.has(node.subjectId)) states.push(node); continue }
+    pairs.set(pairKey(node), [...pairs.get(pairKey(node)) ?? [], node])
+  }
+  const relations = [...pairs.values()].flatMap(all => {
+    const lines = withoutAuthorRepeats(wanted ? all.filter(line => wanted.has(line.subjectId)) : all)
+    return lines.length ? [{ lines, conflict: hasConflict(withoutAuthorRepeats(all)) }] : []
+  })
+  return { states, relations }
 }
 
 /** last 是下一章和蓝图最后一章里较大的那个。 */
@@ -138,6 +179,21 @@ function foldAdoptedRelations(changes: readonly CharacterTimelineChange[]): Char
     return { ...change, node: { ...node, quote: found.node.quote }, replaced: replaced.map(other => other.value) }
   })
   return folded.filter(change => !absorbed.has(change))
+}
+
+/**
+ * 时间线只列变化：一段定稿关系只留段首。第一段的值和这一章之前就生效的设定相同时是重述，也不留。
+ * nodes 要带上这对人物两个方向的节点，只有一边时会把隔着对方说法的两段并成一段。
+ */
+export function withoutRelationRestatements(nodes: readonly ContinuityNode[]): ContinuityNode[] {
+  const settings = nodes.filter(node => !isDerivedRelation(node))
+  const changes = new Set<ContinuityNode>()
+  for (const runs of derivedRelationRuns(nodes).values()) runs.forEach(({ head }, index) => {
+    const restated = index === 0 && latestNodesBefore(settings.filter(node => node.effectiveChapter < head.effectiveChapter), head.effectiveChapter).relations
+      .some(pair => pair.lines.some(line => pairKey(line) === pairKey(head) && line.value === head.value))
+    if (!restated) changes.add(head)
+  })
+  return nodes.filter(node => !isDerivedRelation(node) || changes.has(node))
 }
 
 /** 同章同字段的取舍规则与 latestNodesBefore 相同。 */
