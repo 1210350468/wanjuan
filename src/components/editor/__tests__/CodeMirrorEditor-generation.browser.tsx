@@ -475,6 +475,15 @@ describe('CodeMirror editor AI generation boundary', () => {
     await vi.waitFor(() => expect(deliveredRuns()).toContain('run-2'))
   })
 
+  it('重新生成失败时说出原因和办法，不只让作者重试', async () => {
+    await rerollFirstChange()
+    failureCode = 'GENERATION_CONTEXT_LENGTH_EXCEEDED'
+    await act(async () => listeners.get('llm:stream-done')?.({ requestId: pendingRequestId!, fullText: '', finishReason: 'length' } as never))
+    await expect.element(page.getByText(/提示词超出了模型能接受的长度/)).toBeVisible()
+    expect(page.getByText('重新生成失败，请重试').elements()).toHaveLength(0)
+    expect(deliveredRuns()).not.toContain('run-2')
+  })
+
   it('断网时气泡说连不上模型服务，不露出错误码', async () => {
     failureCode = 'NETWORK_ERROR'
     await act(async () => root.render(<CodeMirrorEditor content="原文段落" mode="prose" />))
