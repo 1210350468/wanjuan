@@ -216,6 +216,16 @@ describe('审稿判定已回收的线索变成待确认候选', () => {
     expect(NarrativeThreadRepository.listReviewCandidates()).toEqual([])
   })
 
+  it('最新一次审稿没有逐项核对时，不拿同一稿更早的审稿出候选', () => {
+    const thread = plan()
+    const draftId = write(5, CHAPTER)
+    saveReview(draftId, savedReport(draftId, thread, 'resolved', [QUOTE]))
+    saveReview(draftId, JSON.stringify({ summary: '重审', items: [{ category: '文笔', severity: 'pass', description: '好。' }] }))
+    finalize(draftId)
+
+    expect(NarrativeThreadRepository.listReviewCandidates()).toEqual([])
+  })
+
   it('作者确认过的审稿清单也能给出候选', () => {
     const thread = plan()
     const draftId = write(5, CHAPTER)

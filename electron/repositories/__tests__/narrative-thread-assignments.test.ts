@@ -112,7 +112,7 @@ describe('写前延后和指定本章推进', () => {
     expect(narrativeThreadSchedule(thread(id), 5)).toEqual({ kind: 'due' })
   })
 
-  it('7 条逾期加 1 条指定：指定的在 6 条之内，弹层列全部并给出未纳入条数', () => {
+  it('7 条逾期加 1 条指定：指定的在 6 条之内，弹层列全部，只把进任务的标为任务并给出未纳入条数', () => {
     const overdue = Array.from({ length: 7 }, (_, index) => plan(`逾期${index + 1}`, 1, 2).id)
     const assigned = plan('作者指定', 3, 12).id
     advance(assigned, 8)
@@ -125,6 +125,8 @@ describe('写前延后和指定本章推进', () => {
 
     const panel = chapterThreadPanel(threads, 8, new Map())
     expect(panel.rows.map(row => row.thread.id)).toEqual([assigned, ...overdue])
+    expect(panel.rows.filter(row => row.state === 'task').map(row => row.thread.id)).toEqual(tasks.map(task => task.planId))
+    expect(panel.rows.filter(row => row.state === 'left-out').map(row => row.thread.id)).toEqual(overdue.slice(5))
     expect(panel).toMatchObject({ taskCount: 6, leftOut: 2 })
   })
 

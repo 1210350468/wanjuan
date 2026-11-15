@@ -154,6 +154,21 @@ describe('线索延后的痕迹', () => {
     expect(lines).toEqual([])
     expect(document.body.textContent).not.toContain('延到第')
   })
+
+  it('延到全书规划章数之外：照常保留，标出超出当前规划', async () => {
+    threads = [{ ...thread(), targetEndChapter: 26, assignments: [{ chapterNumber: 26, kind: 'resolve', note: '写第 23 章时延后' }] }]
+    const { lines } = await deferrals()
+    expect(lines).toEqual(['延到第 26 章 · 写第 23 章时延后', '回收章超出当前规划（共 24 章）'])
+  })
+
+  it.each([
+    ['回收章正好是最后一章', { targetEndChapter: 24 }],
+    ['线索已解决', { targetEndChapter: 26, status: 'resolved' as const }],
+  ])('%s时不标超出规划', async (_name, patch) => {
+    threads = [{ ...thread(), ...patch }]
+    await deferrals()
+    expect(document.body.textContent).not.toContain('超出当前规划')
+  })
 })
 
 describe('剧情与伏笔', () => {

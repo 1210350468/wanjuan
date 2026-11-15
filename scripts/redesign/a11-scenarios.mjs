@@ -112,6 +112,32 @@ export const A11_SCENARIOS = {
     await shoot('a11-thread-defer-trace')
     return { contract5, letterLine, contract6 }
   } },
+  'a11-thread-left-out': { model: true, shell: 'stage', setup: seedWith([
+    ...Array.from({ length: 7 }, (_, index) => ({ title: `旧线索${index + 1}`, type: '伏笔', targetStartChapter: 1, targetEndChapter: 2, authorIntent: '尽快收束。' })),
+    { title: '远方的来信', type: '支线', targetStartChapter: 3, targetEndChapter: 14, authorIntent: '续写时交代来信人。' },
+  ]), run: async ({ page, shoot }) => {
+    const popover = page.getByRole('dialog', { name: '本次写作选项' })
+    await chapterView.open(page, 5)
+    await chapterView.view(page).getByRole('button', { name: '本章要处理 6 条线索' }).click()
+    const leftOut = popover.getByRole('listitem').filter({ hasText: '本次不进任务' })
+    await leftOut.first().waitFor({ state: 'visible', timeout: 15_000 })
+    assert.equal(await popover.getByRole('listitem').filter({ hasText: '逾期 3 章' }).count(), 7, '7 条逾期全部列出')
+    const leftOutTitles = await leftOut.locator('b').allTextContents()
+    assert.deepEqual(leftOutTitles, ['旧线索7'], '只有第 7 条标本次不进任务')
+    await popover.getByText('另有 1 条本次不进任务', { exact: true }).waitFor({ state: 'visible' })
+    await shoot('a11-thread-left-out-popover-top')
+    await leftOut.scrollIntoViewIfNeeded()
+    await leftOut.getByRole('button', { name: '延后一章' }).waitFor({ state: 'visible' })
+    await shoot('a11-thread-left-out-popover')
+    await page.keyboard.press('Escape')
+
+    await refs.open(page, 'plot')
+    await refs.plotView(page, '伏笔线索').click()
+    await page.getByText('回收章超出当前规划（共 12 章）', { exact: true }).waitFor({ state: 'visible', timeout: 15_000 })
+    assert.equal(await page.getByText('超出当前规划').count(), 1, '只有远方的来信超出规划')
+    await shoot('a11-thread-left-out-plot')
+    return { leftOut: leftOutTitles }
+  } },
   'a11-thread-defer-edit': { model: true, shell: 'stage', setup: seed, run: async ({ page, shoot }) => {
     const popover = page.getByRole('dialog', { name: '本次写作选项' })
     const hint = count => chapterView.view(page).getByRole('button', { name: `本章要处理 ${count} 条线索` })

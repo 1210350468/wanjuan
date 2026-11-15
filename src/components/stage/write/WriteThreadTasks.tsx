@@ -17,8 +17,9 @@ export default function WriteThreadTasks({ chapterNumber, threads }: WriteThread
 
   const statusOf = (row: ChapterThreadPanelRow) => {
     if (row.state === 'deferred') return text(`已延到第 ${row.deferredTo} 章`, `Moved to Ch. ${row.deferredTo}`)
-    if (row.schedule.kind === 'overdue') return text(`逾期 ${row.schedule.chaptersOverdue} 章`, `${row.schedule.chaptersOverdue} overdue`)
-    return row.schedule.kind === 'due' ? text('本章到期', 'Due now') : text('本章推进', 'This chapter')
+    const schedule = row.schedule.kind === 'overdue' ? text(`逾期 ${row.schedule.chaptersOverdue} 章`, `${row.schedule.chaptersOverdue} overdue`)
+      : row.schedule.kind === 'due' ? text('本章到期', 'Due now') : text('本章推进', 'This chapter')
+    return row.state === 'left-out' ? `${schedule} · ${text('本次不进任务', 'not in this run')}` : schedule
   }
 
   const actionsOf = (row: ChapterThreadPanelRow) => {
@@ -40,7 +41,7 @@ export default function WriteThreadTasks({ chapterNumber, threads }: WriteThread
             <li key={row.thread.id} className="stage-write-thread" data-state={row.state} data-saving={savingPlanId === row.thread.id || undefined}>
               <span className="stage-write-thread-name">
                 <b>{row.thread.title}</b>
-                <small data-overdue={(row.state === 'task' && row.schedule.kind === 'overdue') || undefined}>{statusOf(row)}</small>
+                <small data-overdue={(row.state !== 'deferred' && row.schedule.kind === 'overdue') || undefined}>{statusOf(row)}</small>
               </span>
               <span className="stage-write-thread-actions">{actionsOf(row)}</span>
             </li>

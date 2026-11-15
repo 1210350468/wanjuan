@@ -62,6 +62,13 @@ describe('rankPassages', () => {
     expect(ranked).toEqual({ items: ['丙', '丁', '甲', '庚', '戊'].map(text => ({ text, id: text })), ranking: { method: 'rerank', candidateCount: 7 } })
   })
 
+  it('keeps the top results by score when the service ignores top_n and scores every candidate', async () => {
+    stubFetch(() => json(results([[0, 0.5], [1, 0.05], [2, 0.9], [3, 0.7], [4, 0.1], [5, 0.01], [6, 0.2]])))
+    const ranked = await rankPassages('查询', passages, explicit, 5)
+
+    expect(ranked).toEqual({ items: ['丙', '丁', '甲', '庚', '戊'].map(text => ({ text, id: text })), ranking: { method: 'rerank', candidateCount: 7 } })
+  })
+
   it('reuses the SiliconFlow retrieval endpoint and key for the default rerank model', async () => {
     const fetchMock = stubFetch(() => json(results([[1, 0.9], [0, 0.1]])))
     await rankPassages('查询', passages.slice(0, 2), reuse, 5)
