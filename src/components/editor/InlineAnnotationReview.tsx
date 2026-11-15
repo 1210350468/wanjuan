@@ -70,7 +70,6 @@ export default function InlineAnnotationReview({ before, after, annotations, onC
     const clients = rerollClients.current
     return () => { for (const client of clients) void client.cancel().catch(() => {}) }
   }, [])
-  // 与统一修改同口径：结果摆上面板、设置页没盖住时才回执。
   const shownRerolls = useRef(new Set<ReturnType<typeof createEditorInlineGeneration>>())
   useEffect(() => {
     if (settingsOpen) return
