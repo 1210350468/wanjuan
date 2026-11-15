@@ -1405,4 +1405,17 @@ describe('没有作者关系时，同一对角色的定稿关系不分方向', (
     expect(inForce(4)).toEqual(['盟友'])
     expect(inForce(8)).toEqual(['仇敌'])
   })
+
+  it('被替换的定稿稿上的旧方向不参与判断：替换稿落在反向后，后面的章仍并进替换稿那条', () => {
+    openProject()
+    commitModelOutput(finalizeNew(3, ALLY), { updates: [], relations: [relationChange('盟友', '结为盟友', LIN, SHEN)] })
+    const replacement = replaceFinal(3, `第三章改：${FOE}`)
+    authorRelation('盟友', SHEN, LIN)
+    commitModelOutput(replacement, { updates: [], relations: [relationChange('仇敌', '视林岚为仇敌', LIN, SHEN)] })
+    db().transaction(() => deleteCharacterRelationship(db(), { relationshipId: 'reverse-line', sourceId: SHEN, sourceName: '沈砚', targetId: LIN, targetName: '林岚' }, 'seed-approval', 4))()
+
+    commitModelOutput(finalizeNew(7, '第七章：林岚与沈砚成了死敌。'), { updates: [], relations: [relationChange('死敌', '成了死敌', LIN, SHEN)] })
+
+    expect(inForce(8).filter(Boolean)).toEqual(['死敌'])
+  })
 })

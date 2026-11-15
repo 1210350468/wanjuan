@@ -430,8 +430,8 @@ function authorRelationsOfPair(db: BetterSqlite3.Database, sourceId: string, tar
 const unorderedPairKey = (left: string, right: string) => JSON.stringify([left, right].sort())
 
 function orientByRecordedDerivedSeries(db: BetterSqlite3.Database, sourceId: string, targetId: string) {
-  const hasDerivedSeries = (subject: string, target: string) => !!db.prepare(`SELECT 1 FROM character_continuity_events
-    WHERE subject_id=? AND target_id=? AND aspect='relation' AND json_extract(evidence_json,'$.relationshipId')=?`).get(subject, target, derivedRelationSeries(subject, target))
+  const hasDerivedSeries = (subject: string, target: string) => readCharacterContinuityNodes(db, subject)
+    .some(node => node.aspect === 'relation' && node.relationshipId === derivedRelationSeries(subject, target))
   return !hasDerivedSeries(sourceId, targetId) && hasDerivedSeries(targetId, sourceId) ? { sourceId: targetId, targetId: sourceId } : { sourceId, targetId }
 }
 
