@@ -7,6 +7,7 @@ import { routeModelId } from '../../services/model-routing'
 import { getActiveProjectSessionContext } from '../../shared/project-session-context'
 import { EDITOR_INLINE_INSTRUCTION_MAX_LENGTH, type EditorInlineAnnotation } from '../../shared/editor-inline-generation'
 import { useLocaleStore } from '../../stores/locale-store'
+import { useLayoutStore } from '../../stores/layout-store'
 import { Button } from '../ui/Button'
 
 type Piece = { kind: 'same'; text: string } | { kind: 'change'; index: number; from: number; to: number; before: string; after: string }
@@ -55,6 +56,7 @@ export default function InlineAnnotationReview({ before, after, annotations, onC
   onCommit: (result: string) => Promise<void>; onCancel: () => void
 }) {
   const text = useLocaleStore(s => s.text)
+  const settingsOpen = useLayoutStore(s => s.settingsOpen)
   const pieces = useMemo(() => splitChanges(before, after), [before, after])
   const [changes, setChanges] = useState<Change[]>(() => pieces.flatMap(piece => piece.kind === 'change'
     ? [{ value: piece.after, accepted: false, editing: false, busy: false, error: '' }] : []))
@@ -67,6 +69,13 @@ export default function InlineAnnotationReview({ before, after, annotations, onC
     const clients = rerollClients.current
     return () => { for (const client of clients) void client.cancel().catch(() => {}) }
   }, [])
+  // 与统一修改同口径：结果摆上面板、设置页没盖住时才回执。
+  const shownRerolls = useRef(new Set<ReturnType<typeof createEditorInlineGeneration>>())
+  useEffect(() => {
+    if (settingsOpen) return
+    for (const client of shownRerolls.current) client.delivered()
+    shownRerolls.current.clear()
+  }, [settingsOpen, changes])
   const update = (index: number, patch: Partial<Change>) => setChanges(current => current.map((item, i) => i === index ? { ...item, ...patch } : item))
   const commit = async (next: Change[]) => {
     if (commitGuard.current || next.some(item => !item.accepted || item.busy)) return
@@ -123,6 +132,7 @@ export default function InlineAnnotationReview({ before, after, annotations, onC
       const preceding = pieces[position - 1], following = pieces[position + 1]
       const overlap = candidate.length > 1 && ((following?.kind === 'same' && following.text.length > 0 && candidate.endsWith(following.text[0]!))
         || (preceding?.kind === 'same' && preceding.text.length > 0 && candidate.startsWith(preceding.text.at(-1)!)))
+      shownRerolls.current.add(client)
       update(piece.index, { value: candidate, busy: false, editing: false,
         error: overlap ? text('结果可能与相邻正文重复，请检查或编辑。', 'The result may repeat adjacent text; inspect or edit it.') : '' })
     } catch { update(piece.index, { busy: false, error: text('重新生成失败，请重试', 'Regeneration failed; try again') }) }
