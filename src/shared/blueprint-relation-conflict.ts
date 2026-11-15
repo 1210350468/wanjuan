@@ -32,10 +32,12 @@ const HINT_TURN = new RegExp(`${RELATION_TURN.source}|成为|变成|成了|转�
 /** 不含「原本、昔日、曾经、former」：它们修饰转折前的关系，不否定转折。 */
 const TURN_DENIED = /[不没无未非假伪似疑或]|表面|名义|可能|拒|失败|(?:谈判|和谈)破裂|\b(?:not|no|never|fake|false|pretend\w*|sham|seeming(?:ly)?|maybe|perhaps|refus\w*|fail\w*)\b/iu
 
-/** 先去掉转折词再查否定：冰释前嫌、重修旧好里的字不算否定。 */
+const FEIGNED = /假意|伪装|\bpretend\w*\b/iu
+
+/** 先去掉转折词再查否定：冰释前嫌、重修旧好里的字不算否定。装出来的转折在转折词表里，去掉之前先查。 */
 function hintAssertsTurn(relation: string): boolean {
   const rest = relation.replace(HINT_TURN, ' ')
-  return rest !== relation && !TURN_DENIED.test(rest)
+  return rest !== relation && !FEIGNED.test(relation) && !TURN_DENIED.test(rest)
 }
 
 /** 只认词表里明确的说法。两类都沾、带否定或不确定词的一律不判，宁可漏报，不要误报。 */

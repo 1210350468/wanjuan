@@ -88,6 +88,15 @@ describe('蓝图关系与时间线相反', () => {
     expect(check(plan, [relation('仇敌', 8)])).toHaveLength(1)
   })
 
+  it.each([
+    ['pretend to become friends', 'friends', 'enemies'],
+    ['假意成为朋友的仇敌', '朋友', '仇敌'],
+    ['伪装成朋友', '朋友', '仇敌'],
+  ])('一个方向写「%s」，和好是装的，不算转折，另一个方向的「%s」照常提示', (text, other, recorded) => {
+    const plan = blueprint(12, other, { relationshipHints: [{ from: '林晚', to: '沈舟', relation: text }, { from: '沈舟', to: '林晚', relation: other }] })
+    expect(check(plan, [relation(recorded, 8)])).toHaveLength(1)
+  })
+
   it('一个方向写「和解谈判破裂，双方仍是仇敌」：谈判破裂否定了和解，另一个方向的「朋友」照常提示', () => {
     const plan = blueprint(12, '朋友', { relationshipHints: [{ from: '林晚', to: '沈舟', relation: '和解谈判破裂，双方仍是仇敌' }, { from: '沈舟', to: '林晚', relation: '朋友' }] })
     expect(check(plan, [relation('仇敌', 8)])).toHaveLength(1)
