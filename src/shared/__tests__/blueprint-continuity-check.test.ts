@@ -74,7 +74,7 @@ describe('selectContinuityCheckScope', () => {
     expect(parseBlueprintContinuityCheck(cite(2), scope.chapters, scope.nodes)).toMatchObject({ findings: [{ chapterNumber: 2 }], droppedFindings: 0 })
     expect(parseBlueprintContinuityCheck(cite(3), scope.chapters, scope.nodes)).toMatchObject({ findings: [], droppedFindings: 1 })
     const task = buildBlueprintContinuityCheckTask({ writingLanguage: 'zh-CN', ...scope })
-    expect(JSON.parse(task.messages[1]!.content).timeline.every((item: object) => Object.keys(item).join() === 'id,character,aspect,value,appliesFrom')).toBe(true)
+    expect(JSON.parse(task.messages[1]!.content).timeline).toContainEqual({ id: injuryId, character: '林岚', aspect: 'physicalState', value: '重伤', appliesFrom: 1, noLongerAppliesFrom: 3 })
   })
 })
 
