@@ -215,6 +215,63 @@ export const EXT653_SCENARIOS = {
     return measured
   } },
 
+  /** 第 4 章 v1、v2 各有一条批注历史：历史仍按章列在一起，每条写明是草稿 v几，新的在前。 */
+  'ext653-history-versions': { model: false, shell: 'stage', setup: seedFourthChapterVersion, run: async ({ page, projectPath, shoot }) => {
+    await readProjectDb(projectPath, db => {
+      const insert = db.prepare('INSERT INTO annotation_history(draft_id,before_text,after_text,annotations_json) SELECT id, ?, ?, ? FROM drafts WHERE chapter_number = 4 AND version = ?')
+      insert.run(PARAGRAPHS[0], REVISED[0], JSON.stringify([{ id: 'v1', from: 0, to: 5, selectedText: PARAGRAPHS[0].slice(0, 5), instruction: '第一版的批注' }]), 1)
+      insert.run(PARAGRAPHS[1], REVISED[1], JSON.stringify([{ id: 'v2', from: 0, to: 5, selectedText: PARAGRAPHS[1].slice(0, 5), instruction: '第二版的批注' }]), 2)
+    }, { readOnly: false })
+    await chapterView.open(page, 4)
+    await chapterView.prose(page).getByText(PARAGRAPHS[2]).first().waitFor({ state: 'visible', timeout: 30_000 })
+    const history = page.locator('details.annotation-revision-history')
+    await history.locator('summary').first().click()
+    for (const entry of await history.locator('details').all()) await entry.locator('summary').click()
+    const measured = {
+      title: await history.locator('summary').first().innerText(),
+      entries: (await history.locator('details summary').allInnerTexts()).map(line => line.replace(/ · \d\d.*?·/u, ' · <时间> ·')),
+      notes: await history.locator('details .cm-annotation p').allInnerTexts(),
+    }
+    assert.equal(measured.title, '批注历史版本（2）')
+    assert.deepEqual(measured.entries, ['草稿 v2 · <时间> · 新增 1 处，删除 1 处', '草稿 v1 · <时间> · 新增 1 处，删除 1 处'])
+    assert.deepEqual(measured.notes, ['第二版的批注', '第一版的批注'])
+    await history.scrollIntoViewIfNeeded()
+    await shoot('ext653-5-history-versions')
+    return measured
+  } },
+
+  /** 逐处审阅批注修改时进沉浸写作（#294）：底栏「取消 / 接受全部」压在字数条上层，滚到哪里都点得到。 */
+  'ext653-focus-review': { model: true, shell: 'stage', setup: seedFourthChapterVersion, run: async ({ page, fake, shoot }) => {
+    fake.replyReview(prompt => prompt.includes(NOTES[0]) ? [REVISED[0], ...PARAGRAPHS.slice(1)].join('\n\n') : null)
+    await chapterView.open(page, 4)
+    await annotate(page, PARAGRAPHS[0], NOTES[0])
+    await page.getByRole('region', { name: '本章批注' }).getByRole('button', { name: '统一修改（1）' }).click()
+    const review = page.getByRole('region', { name: '批注修改对比' })
+    await review.waitFor({ state: 'visible', timeout: 60_000 })
+    await stage.focusToggle(page).click()
+    const bar = chapterView.view(page).locator('.stage-ch-focusbar')
+    await bar.waitFor({ state: 'visible' })
+    const probe = () => page.evaluate(() => {
+      const box = node => { const r = node.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom) } }
+      const footer = document.querySelector('.inline-annotation-footer'), focusbar = document.querySelector('.stage-ch-focusbar')
+      const hit = name => {
+        const button = [...footer.querySelectorAll('button')].find(item => item.textContent === name)
+        const r = button.getBoundingClientRect()
+        return button.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2))
+      }
+      return { footer: box(footer), focusbar: box(focusbar), cancelHit: hit('取消'), acceptHit: hit('接受全部') }
+    })
+    const scroller = page.locator('.stage-ch-scroll')
+    const measured = { top: await probe() }
+    await scroller.evaluate(node => { node.scrollTop = node.scrollHeight / 2 })
+    measured.middle = await probe()
+    await scroller.evaluate(node => { node.scrollTop = node.scrollHeight })
+    measured.end = await probe()
+    await shoot('ext653-6-focus-review')
+    for (const at of ['top', 'middle', 'end']) assert.ok(measured[at].cancelHit && measured[at].acceptHit, `${at}：取消与接受全部都点得到`)
+    return measured
+  } },
+
   /** 恢复候选（非章节的正文编辑器）里加一条批注：面板叫「批注」，停在正文旁边不盖字。 */
   'ext653-doc-annotation': { model: false, shell: 'stage', setup: seedWithCandidate, run: async ({ page, shoot }) => {
     const measured = {}
