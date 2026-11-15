@@ -58,6 +58,20 @@ describe('单章写作中断', () => {
     expect(canResumeDraft(entry, ['甲'])).toBe(false)
   })
 
+  it('草稿保存后又改过时，说明让作者去「正文」打开这一章，不提已删除的草稿箱（#663）', () => {
+    const changed = { composition: { artifactIds: ['甲'] }, draftSave: { kind: 'changed' } }
+    const entry = draft(changed)
+    expect(entry.note).toContain('「正文」打开第 4 章')
+    expect(entry.note).not.toContain('草稿箱')
+
+    const english = buildRecoveryEntries({ ...EMPTY_RECOVERY_SOURCES, drafts: [{
+      view: view('正文', { artifacts: [artifact('甲', true)] }) as never,
+      recovery: { handle, operation: 'chapter-draft', chapterNumber: 4, attemptedPurposes: ['chapter-draft'], ...changed } as never,
+    }] }, 'en-US')[0] as DraftEntry
+    expect(english.note).toContain('Open Chapter 4 in Manuscript')
+    expect(english.note).not.toMatch(/\bDrafts\b/u)
+  })
+
   it('只写完细纲时不用勾选，可重做一次细纲或沿原细纲继续', () => {
     const outline = { composition: null, attemptedPurposes: ['chapter-draft-short-outline'] }
     const retry = draft({ ...outline, draftShortOutline: { retry: { kind: 'available' } } }, [])
@@ -265,7 +279,7 @@ describe('列表', () => {
       editors: [{ view: view('选区', { ledger: { physicalRequests: 1 } }), modelId: '模型', sourceStatus: 'conflict',
         context: { selectedText: '选中', documentText: '全文' } } as never],
       reviews: [],
-      batches: [{ batchId: '批次', completedChapters: [1, 2], nextChapterNumber: 3, sourceCurrent: false } as never],
+      batches: [{ batchId: '批次', completedChapters: [1, 2], nextChapterNumber: 3, sourceCurrent: true } as never],
       drafts: [],
       candidates: [{ candidateId: '候选', chapterNumber: 2, chapterTitle: '北堤', visibleText: '旧文', sourceCurrent: false, replacesCandidateId: null } as never],
     }
@@ -275,7 +289,6 @@ describe('列表', () => {
       'Outline recovery draft', 'Editor selection suggestion', 'Batch drafts: 2 saved; next chapter 3', 'Original candidate · Chapter 2 北堤',
     ])
     expect(entries[1]).toMatchObject({ canContinue: false, conflictNote: 'Sources changed; the original suggestion can still be copied.' })
-    expect(entries[2]).toMatchObject({ canContinue: false })
     expect(entries[3]).toMatchObject({ canContinue: false, staleNote: expect.stringContaining('source chapter changed') })
   })
 })
@@ -398,5 +411,16 @@ describe('同一范围的几份规划恢复稿（#608）', () => {
     expect(idle).toMatchObject({ canDismiss: true, labels: { dismiss: '放弃…', dismissConfirm: '正式内容不受影响；放弃后这份恢复稿不再列出。', confirm: '放弃', keep: '保留' } })
     const [busy] = buildRecoveryEntries({ ...EMPTY_RECOVERY_SOURCES, planning: [blueprint('甲', 1, 2, at(7, 9), { planningContinuation: { state: 'in-flight', remainingRange: { from: 2, to: 2 } } })] }, 'zh-CN')
     expect(busy).toMatchObject({ canDismiss: false })
+  })
+})
+
+describe('批注统一修改的恢复卡', () => {
+  const annotations = Array.from({ length: 100 }, (_, index) => ({ id: `${index}`, from: index, to: index + 1, selectedText: '字', instruction: '意'.repeat(2000) }))
+  const entry = (locale: 'zh-CN' | 'en-US') => buildRecoveryEntries({ ...EMPTY_RECOVERY_SOURCES, editors: [{ view: view('批注'), modelId: '模型', sourceStatus: 'current',
+    context: { action: 'batch-instruct', annotations, selectedText: '全文', documentText: '全文' } } as never] }, locale)[0]!
+
+  it('标题不限于章节，说明只写条数，不把一百条批注全文铺在卡上', () => {
+    expect(entry('zh-CN')).toMatchObject({ title: '批注修改建议', instructionNote: '作者批注 100 条' })
+    expect(entry('en-US')).toMatchObject({ title: 'Annotation revision', instructionNote: '100 author annotations' })
   })
 })

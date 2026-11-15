@@ -274,6 +274,12 @@ Return exactly one JSON object with "schemaVersion":1 and "entries":[...]. Every
 - Protagonist profile: {{protagonist_profile}}
 - Project-wide writing guidance: {{global_guidance}}
 
+[Core story outline]
+{{topic}}
+
+[Adopted character map]
+{{character_dynamics}}
+
 [Deliverable]
 Build three connected dimensions, each with a concrete source of conflict:
 
@@ -292,7 +298,7 @@ Build three connected dimensions, each with a concrete source of conflict:
 [Requirements]
 1. Every setting must support the core appeal of {{genre}} and be usable in scenes.
 2. Make the advantage's interaction with the world rules specific and actionable.
-3. Preserve explicit author facts from the story premise and protagonist profile together with the project-wide guidance. Facts unrelated to world mechanics need not be repeated, but the world must not contradict them.
+3. Preserve explicit author facts from the core story outline, story premise, adopted character map, and protagonist profile together with the project-wide guidance. Facts unrelated to world mechanics need not be repeated, but the world must not contradict them.
 4. Return the world-building text only, with no code, analysis, or explanation.`,
     systemSuffix: `[Author guidance for this step — highest priority when present]
 {{step_guidance}}`,
@@ -518,18 +524,18 @@ Keep every item concise and grounded in the manuscript.`,
 {{existing_cards_json}}
 
 [Task]
-1. In updates, include only existing characters whose state materially changed in this chapter.
-2. In newCharacters, include only important newly introduced characters, excluding incidental figures with no continuing effect.
-3. currentState may contain location, powerLevel, physicalState, mentalState, keyItems, recentEvents, and updatedAtChapter. Set updatedAtChapter to {{chapter_number}}.
-4. Preserve every character name exactly as written in the manuscript or existing records.
+1. In updates, include only characters whose state materially changed in this chapter. A person with an existing record uses that record's exact characterId.
+2. Also put important newly introduced characters in updates, excluding incidental figures with no continuing effect. Give only name, exactly as written in the manuscript and without characterId, so they stay proposals for the author to confirm.
+3. currentState may contain location, powerLevel, physicalState, mentalState, keyItems, and recentEvents. recentEvents is required; list the other fields only when they differ from the existing record.
+4. Every update needs evidence.text: one sentence copied verbatim from this chapter that occurs there exactly once.
 
 recentEvents records this character's latest state at the end of the chapter, within 50 words. If a plan is corrected, withdrawn, or postponed, prioritize the last correction and current conditions over a prominent earlier event. Without a correction, retain the relevant event or still-pending plan. Do not describe a plan as executed or change another character's plan.
 
 [JSON output contract]
 Return exactly one JSON object:
-{"updates":[{"name":"exact existing name","currentState":{"location":"...","powerLevel":"...","physicalState":"...","mentalState":"...","keyItems":"...","recentEvents":"...","updatedAtChapter":{{chapter_number}}}}],"newCharacters":[{"name":"exact new name","role":"protagonist|antagonist|supporting|minor","currentState":{"location":"...","powerLevel":"...","physicalState":"...","mentalState":"...","keyItems":"...","recentEvents":"...","updatedAtChapter":{{chapter_number}}}}]}
+{"updates":[{"characterId":"exact characterId from the existing records","currentState":{"recentEvents":"...","location":"..."},"evidence":{"text":"one verbatim sentence from this chapter"}},{"name":"new character name","currentState":{"recentEvents":"..."},"evidence":{"text":"one verbatim sentence from this chapter"}}]}
 
-If nothing changed and no important character was introduced, return {"updates":[],"newCharacters":[]}. Output JSON only, with no Markdown or explanation.`,
+If nothing changed and no important character was introduced, return {"updates":[]}. Output JSON only, with no Markdown or explanation.`,
   },
   analyze_writing_style: {
     systemRole: 'You are a rigorous fiction-style analyst. Turn observable craft in a reference novel into a small set of concise, optional writing techniques without retelling its plot.',

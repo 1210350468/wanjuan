@@ -1,8 +1,8 @@
 import { parsePlanningTargetUnits, planningTargetInstruction, DEFAULT_PLANNING_ACTION_CHAPTERS } from '../../../shared/plot-outline-contract'
-import type { CharacterProposalChoices } from '../../character-proposal-choices'
+import { adoptedRelationships, type CharacterProposalChoices } from '../../character-proposal-choices'
 import { decodeCharacterIdentityManifest, decodeCharacterDetails, validateCharacterDetail, type CharacterIdentitySlot, type CharacterDetailOutput } from '../../../shared/character-proposal-parser'
 import type { CharacterProposalBatch } from '../../../shared/character-proposal'
-import { defaultCharacterProposalRelationships, defaultCharacterProposalSelections, formatCharacterProposalPreview } from '../character-proposal-preview'
+import { defaultCharacterProposalSelections, formatCharacterProposalPreview } from '../character-proposal-preview'
 import type { MainGenerationRunHandle } from '../../generation/generation-runtime'
 import type { ArchitecturePlanningIntent, GenerationRecoveryContext } from '../../../shared/generation-owner-contract'
 import { PLOT_OUTLINE_PROTOCOL, plotOutlinePurpose, plotOutlineRequestContract, plotOutlineSourceInvalidText, joinPlotOutlineEntries, renderPlotOutlineRange, type PlotOutlineProgress } from '../../../shared/plot-outline-contract'
@@ -502,14 +502,14 @@ function buildNovelConfigJSONContract(
 - plotStructure 必填，且值必须严格为以下英文枚举之一：three_act | heros_journey | save_the_cat | kishotenketsu | multi_thread | freeform。
 - narrativePOV 必填，且值必须严格为以下英文枚举之一：third_limited | first_person | third_omniscient | multi_pov。
 - totalChapters 与 wordsPerChapter 是作者权威设置，可以省略；totalChapters 若输出必须严格等于 ${totalChapters}；wordsPerChapter 若输出必须严格等于 ${wordsPerChapter}。
-- globalGuidance 必须是 4–8 条跨章节长期有效的简短规则，总计不得超过 ${GENERATED_GLOBAL_GUIDANCE_MAX_CHARS} 字符；禁止逐章列大纲或分配章节区间。
+- globalGuidance 必须是 4–8 条跨章节长期有效的简短规则，每条规则独占一行，在 JSON 字符串中用 \\n 表示换行，总计不得超过 ${GENERATED_GLOBAL_GUIDANCE_MAX_CHARS} 字符；禁止逐章列大纲或分配章节区间。
 - referenceWorks 可省略；若输出必须是字符串。
 - 只输出一个完整 JSON 对象。枚举只允许上述英文值，不得输出中文枚举、近义词、说明文字、Markdown、代码围栏或思考过程。`, `[Immutable novel-configuration JSON contract]
 - The following nine fields are required non-empty strings: genre, targetAudience, subGenre, coreOutline, worldSetting, goldenFinger, protagonistProfile, globalGuidance, writingStyle.
 - plotStructure is required and must be exactly one of: three_act | heros_journey | save_the_cat | kishotenketsu | multi_thread | freeform.
 - narrativePOV is required and must be exactly one of: third_limited | first_person | third_omniscient | multi_pov.
 - totalChapters and wordsPerChapter are authoritative author settings and may be omitted. If present, they must equal ${totalChapters} and ${wordsPerChapter} respectively.
-- globalGuidance must contain 4–8 short, stable cross-chapter rules within ${GENERATED_GLOBAL_GUIDANCE_MAX_CHARS} characters. Do not enumerate chapters or allocate chapter ranges.
+- globalGuidance must contain 4–8 short, stable cross-chapter rules, one rule per line, with line breaks encoded as \\n in the JSON string, within ${GENERATED_GLOBAL_GUIDANCE_MAX_CHARS} characters. Do not enumerate chapters or allocate chapter ranges.
 - referenceWorks may be omitted; if present, it must be a string.
 - Output one complete JSON object only. Do not emit aliases, explanatory prose, Markdown, code fences, or reasoning.`)
 }
@@ -1261,7 +1261,7 @@ export class AdoptGeneratedCharactersCommand extends BaseWorkflowCommand<string>
     const result = await ipc.invokeWithProjectSession(session, 'character-proposal:approve', {
       proposalBatchId: shown.proposalBatchId, expectedRevision: shown.revision,
       operationId: `character-adoption:${context.runId}`, selections: choices?.selections ?? defaultCharacterProposalSelections(shown),
-      relationships: choices?.relationships ?? defaultCharacterProposalRelationships(shown),
+      relationships: choices ? adoptedRelationships(shown, choices) : [],
     })
     context.data.characterProposalBatch = result.batch
     this.notifyRefresh(['characterCards'], session.projectPath, session)
@@ -1366,14 +1366,15 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
 
     const factsFingerprint = synopsisFactsFingerprint([
       premise_result,
+      JSON.stringify(core?.charactersArch || ''),
       JSON.stringify(config),
       stepGuidance,
       JSON.stringify(template),
     ])
     if (resumeRequested && partial.world_building_facts_fingerprint !== factsFingerprint) {
       throw new Error(text(
-        '故事前提、小说配置或世界观模板自候选保存后已变化，旧候选不能续到新上下文；候选仍可查看或复制。',
-        'The premise, novel configuration, or worldbuilding template changed after the candidate was saved, so the old candidate cannot be continued into the new context. The candidate remains available to view or copy.',
+        '故事前提、小说配置、角色图谱或世界观模板自候选保存后已变化，旧候选不能续到新上下文；候选仍可查看或复制。',
+        'The premise, novel configuration, character map, or worldbuilding template changed after the candidate was saved, so the old candidate cannot be continued into the new context. The candidate remains available to view or copy.',
       ))
     }
 
@@ -1383,6 +1384,8 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
 
     const promptBuilder = new ArchitecturePromptBuilder(template, writingLanguage)
       .withCoreSeed(premise_result)
+      .withTopic(config.coreOutline || '')
+      .withCharacterDynamics(core?.charactersArch || '')
       .withGenre(modelFacts.genre)
       .withCoreSetting(config.worldSetting || missingValue)
       .withGoldenFinger(config.goldenFinger || missingValue)
@@ -1493,6 +1496,7 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
     const latestFactsFingerprint = latestProject && latestTemplate
       ? synopsisFactsFingerprint([
           latestCore?.premise || '',
+          JSON.stringify(latestCore?.charactersArch || ''),
           JSON.stringify(latestProject.novelConfig),
           stepGuidance,
           JSON.stringify(latestTemplate),
@@ -1514,10 +1518,10 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
       )
       throw new WorldBuildingResumeAvailableError(text(
         sourceFactsChanged
-          ? '世界观生成期间故事前提、小说配置或模板已变化，本次结果已保留为候选且未写入正式世界观；可查看或复制候选。'
+          ? '世界观生成期间故事前提、小说配置、角色图谱或模板已变化，本次结果已保留为候选且未写入正式世界观；可查看或复制候选。'
           : '世界观生成期间正式内容已被修改，本次结果已保留为候选且未覆盖作者修改；可查看或复制候选。',
         sourceFactsChanged
-          ? 'The premise, novel configuration, or template changed while worldbuilding was being generated. This result was kept as a candidate and was not written to formal worldbuilding; you can view or copy it.'
+          ? 'The premise, novel configuration, character map, or template changed while worldbuilding was being generated. This result was kept as a candidate and was not written to formal worldbuilding; you can view or copy it.'
           : 'The formal worldbuilding changed while generation was running. This result was kept as a candidate and did not overwrite the author edit; you can view or copy it.',
       ))
     }
@@ -2183,10 +2187,17 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
       : new Error(text(
         `第 ${cursor.chapterNumber} 章已停止自动生成，原因 ${cursor.reason}。已接受前缀和全部候选已保留，正式大纲未被覆盖。`,
         `Automatic generation stopped at chapter ${cursor.chapterNumber}: ${cursor.reason}. The accepted prefix and all candidates remain saved; the formal outline was not overwritten.`))
+    const requestCallbacks = { ...callbacks, setProgress: () => {} }
+    const publishProgress = (outline: PlotOutlineProgress) => {
+      const total = outline.range.to - outline.range.from + 1
+      const accepted = outline.cursor.kind === 'complete' ? total : outline.cursor.chapterNumber - outline.range.from
+      callbacks.setProgress(Math.min(99, Math.round(accepted * 100 / total)))
+    }
     let outline = initial
     // 来源无效时没有可写进检查点的前缀，先给与恢复入口相同的说明；其余停止原因照常先写检查点。
     if (outline.cursor.kind === 'stopped' && outline.cursor.reason === 'source-invalid') throw stopped(outline.cursor)
     await saveNavigation(outline)
+    publishProgress(outline)
     while (outline.cursor.kind !== 'complete') {
       this.assertNotCancelled(context)
       assertArchitectureProjectSessionCurrent(session, context)
@@ -2202,7 +2213,7 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
           `Generating the outline for chapter ${cursor.chapterNumber}${cursor.attempt === 'compact' ? ' with its single rebuild from original facts' : ''}.`))
         try {
           await this.callLLMResult(`${originalPrompt}\n\n${plotOutlineRequestContract(outline, cursor.chapterNumber, cursor.attempt)}`,
-            `${promptBuilder.getSystemRole()}\n\n${planningTargetInstruction('outline', outline.targetUnits, language)}`, callbacks, { purpose: plotOutlinePurpose(cursor.chapterNumber, cursor.attempt), reasoningStage: 'planning', writingSkillStage: 'planning' }, context)
+            `${promptBuilder.getSystemRole()}\n\n${planningTargetInstruction('outline', outline.targetUnits, language)}`, requestCallbacks, { purpose: plotOutlinePurpose(cursor.chapterNumber, cursor.attempt), reasoningStage: 'planning', writingSkillStage: 'planning' }, context)
         } catch (error) {
           const changed = error instanceof Error ? PLOT_OUTLINE_SOURCE_CHANGED_PATTERN.exec(error.message) : null
           if (!changed) throw error
@@ -2223,6 +2234,7 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
       if (!current.plotOutline) throw new Error('GENERATION_PLOT_OUTLINE_SOURCE_INVALID')
       outline = current.plotOutline
       await saveNavigation(outline)
+      publishProgress(outline)
     }
     this.assertNotCancelled(context)
     assertArchitectureProjectSessionCurrent(session, context)

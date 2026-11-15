@@ -38,7 +38,6 @@ import {
   createProjectArchiveRoundtripFixture,
   insertAuthorImportReceipts,
 } from '../../../test/desktop/project-archive.fixture'
-import { WINDOWS_RUNNER_IO_STALL_TIMEOUT_MS } from '../../../test/helpers/windows-runner-io-stall'
 
 const require = createRequire(import.meta.url)
 const Database = require('better-sqlite3') as typeof import('better-sqlite3')
@@ -329,7 +328,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true })
 })
 
-describe('portable project export service', { timeout: 20_000 }, () => {
+describe('portable project export service', () => {
   it('preserves admitted predecessor, recheck goals and state-update raw values without admitting unknown fields', async () => {
     const material = { draftId: 10, chapterNumber: 1, chapterTitle: '', content: '前驱正文',
       identity: { projectId: 'project', sourceId: 'candidate:10', revision: 1, contentHash: hash('前驱正文'), provenance: 'generated' } }
@@ -564,7 +563,7 @@ describe('portable project export service', { timeout: 20_000 }, () => {
     expect(fs.existsSync(f.target)).toBe(false)
   })
 
-  it('exports the shared 20-chapter corpus with authority, assets and frozen runtime history', { timeout: WINDOWS_RUNNER_IO_STALL_TIMEOUT_MS }, async () => {
+  it('exports the shared 20-chapter corpus with authority, assets and frozen runtime history', async () => {
     const f = await createProjectArchiveRoundtripFixture()
     try {
       const sourceBefore = fs.readFileSync(f.sourceDatabasePath)
@@ -616,7 +615,7 @@ describe('portable project export service', { timeout: 20_000 }, () => {
     } finally { f.dispose() }
   })
 
-  it('exports and restores an author import that left several effect receipts (#607)', { timeout: WINDOWS_RUNNER_IO_STALL_TIMEOUT_MS }, async () => {
+  it('exports and restores an author import that left several effect receipts (#607)', async () => {
     const f = await createProjectArchiveRoundtripFixture()
     try {
       const namespace = `import:author-manuscript:${AUTHOR_IMPORT_RUN_ID}`
@@ -727,7 +726,7 @@ describe('portable project export service', { timeout: 20_000 }, () => {
       originProjectId: f.projectId,
       snapshotGeneration: 'generation-test-1',
       requiresRuntimeFreezeGuard: true,
-      sourceEvidence: { schemaVersion: 9, tableCount: 54, fieldCount: 514 },
+      sourceEvidence: { schemaVersion: 10, tableCount: 55, fieldCount: 520 },
     })
     expect(contextCalls).toEqual(['lease-current', 'lease-current', 'lease-current'])
     expect(fs.readFileSync(f.databasePath)).toEqual(before)
@@ -754,7 +753,7 @@ describe('portable project export service', { timeout: 20_000 }, () => {
     })
     const portable = new Database(path.join(unpacked.stagingPath, 'project.db'), { readonly: true })
     try {
-      expect(portable.pragma('user_version', { simple: true })).toBe(9)
+      expect(portable.pragma('user_version', { simple: true })).toBe(10)
       expect(portable.prepare('SELECT COUNT(*) FROM review_cycle_merges').pluck().get()).toBe(0)
       expect(portable.prepare('SELECT body FROM contents WHERE id=1').pluck().get()).toBe(seeded.body)
       expect(portable.prepare('SELECT relation FROM character_relationships').pluck().get()).toBe('盟友')
@@ -787,14 +786,14 @@ describe('portable project export service', { timeout: 20_000 }, () => {
     const before = fs.readFileSync(f.databasePath)
 
     const receipt = await exportPortableProject(input(f))
-    expect(receipt.sourceEvidence).toMatchObject({ schemaVersion: 9, tableCount: 54, fieldCount: 515 })
+    expect(receipt.sourceEvidence).toMatchObject({ schemaVersion: 10, tableCount: 55, fieldCount: 521 })
     const targetProjectRoot = path.join(f.base, 'restored-donor')
     await restorePortableProject({ archivePath: f.target, targetProjectRoot })
 
     const restoredStorage = path.join(targetProjectRoot, '.ai-novel')
     const restored = new Database(path.join(restoredStorage, 'project.db'), { readonly: true })
     try {
-      expect(restored.pragma('user_version', { simple: true })).toBe(9)
+      expect(restored.pragma('user_version', { simple: true })).toBe(10)
       expect(restored.prepare('SELECT avatar FROM characters').pluck().all()).toEqual(['', ''])
       expect(restored.prepare('SELECT body FROM contents WHERE id=1').pluck().get()).toBe(seeded.body)
       const avatarPath = restored.prepare('SELECT relative_path FROM character_avatar_assets').pluck().get() as string
@@ -1006,7 +1005,7 @@ describe('portable project export service', { timeout: 20_000 }, () => {
   })
 })
 
-describe('写稿时冻结的线索任务跟着便携副本走（#623 后续）', { timeout: 30_000 }, () => {
+describe('写稿时冻结的线索任务跟着便携副本走（#623 后续）', () => {
   const SECRET = 'sk-写稿凭据-绝不外带'
   const ENDPOINT = 'https://私有端点.example/v1'
   const MACHINE_PATH = 'C:\\Users\\writer\\密钥.txt'
@@ -1206,4 +1205,23 @@ describe('portable redaction registry', () => {
     } finally { db.close() }
     expect(collapsed.sort()).toEqual([])
   })
+})
+
+it('portable export and restore preserve author annotation history snapshots', async () => {
+  const f = fixture()
+  seedProject(f)
+  const source = new Database(f.databasePath)
+  try {
+    source.prepare('INSERT INTO annotation_history(draft_id,before_text,after_text,annotations_json) VALUES(?,?,?,?)')
+      .run(1, '春雨落下', '秋雨落下', JSON.stringify([{ selectedText: '春', instruction: '改成秋' }]))
+  } finally { source.close() }
+  await exportPortableProject(input(f))
+  const destination = path.join(f.base, 'annotation-restored')
+  await restorePortableProject({ archivePath: f.target, targetProjectRoot: destination })
+  const restored = new Database(path.join(destination, '.ai-novel', 'project.db'), { readonly: true })
+  try {
+    expect(restored.prepare('SELECT before_text,after_text,annotations_json FROM annotation_history').get()).toEqual({
+      before_text: '春雨落下', after_text: '秋雨落下', annotations_json: JSON.stringify([{ selectedText: '春', instruction: '改成秋' }]),
+    })
+  } finally { restored.close() }
 })
