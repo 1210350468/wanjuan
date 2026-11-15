@@ -629,7 +629,10 @@ function assertReviewContext(value: unknown): Record<string, unknown> {
 }
 
 function projectReviewBinding(value: unknown): Record<string, unknown> {
-  const binding = object(parseJson(value), [
+  const stored = parseJson(value)
+  const frozen = stored && typeof stored === 'object'
+    ? Object.fromEntries(Object.entries(stored).filter(([key]) => !key.startsWith('$'))) : stored
+  const binding = object(frozen, [
     'projectId', 'epoch', 'fingerprint', 'contextSnapshotId', 'sourceManifest', 'sourceRefs',
   ])
   const projected: Record<string, unknown> = {

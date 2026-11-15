@@ -444,6 +444,55 @@ describe('CodeMirror editor AI generation boundary', () => {
     expect(commit).toHaveBeenCalledWith('林岚走进北塔', '她走进北塔', expect.any(Array))
   })
 
+  const rerollFirstChange = async () => {
+    deferStream = true
+    const answer = invoke.getMockImplementation() as (channel: string, ...args: unknown[]) => Promise<unknown>
+    invoke.mockImplementation(async (channel: string, ...args: unknown[]) => channel === 'editor-inline:delivered' ? undefined : answer(channel, ...args))
+    await act(async () => root.render(<CodeMirrorEditor content="林岚走进北塔" mode="prose" onCommitAnnotations={vi.fn(async () => {})} />))
+    await selectLine('林岚走进北塔')
+    await act(async () => page.getByRole('button', { name: '添加批注' }).click())
+    await act(async () => page.getByRole('textbox', { name: '批注意见' }).fill('改成第一人称'))
+    await act(async () => page.getByRole('button', { name: '添加批注' }).click())
+    await act(async () => page.getByRole('button', { name: '统一修改（1）' }).click())
+    await act(async () => listeners.get('llm:stream-done')?.({ requestId: pendingRequestId!, fullText: '我走进北塔', finishReason: 'stop' } as never))
+    await act(async () => page.getByRole('button', { name: '查看修改 1' }).click())
+    await act(async () => page.getByRole('button', { name: '重新生成' }).click())
+    await vi.waitFor(() => expect(invoke.mock.calls.filter(([channel]) => channel === 'editor-inline:begin')).toHaveLength(2))
+  }
+  const deliveredRuns = () => invoke.mock.calls.filter(([channel]) => channel === 'editor-inline:delivered')
+    .map(([, request]) => (request as { handle: { runId: string } }).handle.runId)
+
+  it('重新生成的结果显示出来后回执，这次运行不留在恢复列表里；设置页盖住时等关掉再回执', async () => {
+    await rerollFirstChange()
+    await act(async () => useLayoutStore.setState({ settingsOpen: true }))
+    await act(async () => listeners.get('llm:stream-done')?.({ requestId: pendingRequestId!, fullText: '我', finishReason: 'stop' } as never))
+    await expect.element(page.getByRole('button', { name: '重新生成' })).toBeEnabled()
+    await expect.element(page.getByRole('button', { name: '查看修改 1' })).toHaveTextContent('我')
+    expect(deliveredRuns()).not.toContain('run-2')
+
+    await act(async () => useLayoutStore.setState({ settingsOpen: false }))
+
+    await vi.waitFor(() => expect(deliveredRuns()).toContain('run-2'))
+  })
+
+  it('重新生成失败时说出原因和办法，不只让作者重试', async () => {
+    await rerollFirstChange()
+    failureCode = 'GENERATION_CONTEXT_LENGTH_EXCEEDED'
+    await act(async () => listeners.get('llm:stream-done')?.({ requestId: pendingRequestId!, fullText: '', finishReason: 'length' } as never))
+    await expect.element(page.getByText(/提示词超出了模型能接受的长度/)).toBeVisible()
+    expect(page.getByText('重新生成失败，请重试').elements()).toHaveLength(0)
+    expect(deliveredRuns()).not.toContain('run-2')
+  })
+
+  it('断网或回复中途断开时气泡说明原因，不露出错误码', async () => {
+    failureCode = 'NETWORK_ERROR'
+    await act(async () => root.render(<CodeMirrorEditor content="原文段落" mode="prose" />))
+    await act(async () => page.getByText('原文段落').click({ clickCount: 3 }))
+    await act(async () => page.getByRole('button', { name: '润色' }).click())
+    await expect.element(page.getByText('没连上模型服务，或回复中途断了。请检查网络或代理后重试。')).toBeVisible()
+    expect(page.getByText(/NETWORK_ERROR/).elements()).toHaveLength(0)
+  })
+
   it('keeps a batch result copy-only when the author edits the chapter during generation', async () => {
     deferStream = true
     const commit = vi.fn(async () => {})
