@@ -61,6 +61,34 @@ describe('蓝图关系与时间线相反', () => {
     expect(check(blueprint(12, text), [BROKEN])).toEqual([])
   })
 
+  it.each(['成为盟友', '和沈舟成了好友'])('蓝图关系「%s」写的是变成新关系，也算转折，不提示', (text) => {
+    expect(check(blueprint(12, text), [BROKEN])).toEqual([])
+  })
+
+  it('蓝图别处写「成为」不算关系转折，照常提示', () => {
+    expect(check(blueprint(12, '亲密同伴', { purpose: '林晚成为掌门' }), [BROKEN])).toHaveLength(1)
+  })
+
+  it.each(['拒绝和解的仇敌', '和解失败但仍是仇敌'])('转折被否定（「%s」）不算转折，和亲密的已有关系相反时提示', (text) => {
+    expect(check(blueprint(12, text), [relation('挚友', 8)])).toHaveLength(1)
+  })
+
+  it('一个方向写「从未和解的仇敌」，另一个方向的「仇敌」照常提示', () => {
+    const plan = blueprint(12, '仇敌', { relationshipHints: [{ from: '林晚', to: '沈舟', relation: '从未和解的仇敌' }, { from: '沈舟', to: '林晚', relation: '仇敌' }] })
+    expect(check(plan, [relation('挚友', 8)])).toHaveLength(1)
+  })
+
+  const english = (text: string) => blueprint(12, text, { characters: ['Alice', 'Bob'], relationshipHints: [{ from: 'Alice', to: 'Bob', relation: text }] })
+  const englishNode = (value: string) => relation(value, 8, { subjectName: 'Alice', targetName: 'Bob' })
+
+  it.each([['enemies who refuse to reconcile', 'friends'], ['friends who mend clothes', 'enemies']])('英文「%s」不算转折，和已有的「%s」相反时提示', (text, recorded) => {
+    expect(check(english(text), [englishNode(recorded)])).toHaveLength(1)
+  })
+
+  it.each(['friends who mended fences', 'became allies'])('英文「%s」写了转折，不提示', (text) => {
+    expect(check(english(text), [englishNode('enemies')])).toEqual([])
+  })
+
   it('一个方向的提示写了转折，另一个方向的提示也不再报', () => {
     const plan = blueprint(12, '和解后的同伴', { relationshipHints: [{ from: '林晚', to: '沈舟', relation: '和解后的同伴' }, { from: '沈舟', to: '林晚', relation: '挚友' }] })
     expect(check(plan, [BROKEN])).toEqual([])

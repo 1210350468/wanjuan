@@ -25,7 +25,17 @@ const POLARITY_TERMS: ReadonlyArray<readonly [RelationPolarity, RegExp]> = [
 const UNCERTAIN = /[不没无未非假伪曾昔前旧原似疑虚或]|表面|名义|暗中|可能|破裂|解除|结束|\b(?:not|no|never|former(?:ly)?|ex|once|fake|false|pretend(?:s|ed|ing)?|sham|seeming(?:ly)?|maybe|perhaps)\b/iu
 
 /** 蓝图自己写了关系转折，相反就是作者要的安排，整章不报。 */
-const RELATION_TURN = /和解|解开误会|误会解开|解除误会|重归于好|言归于好|冰释前嫌|尽释前嫌|破镜重圆|握手言和|化敌为友|化干戈|重修旧好|回心转意|反水|倒戈|决裂|反目|背叛|翻脸|假意|伪装|卧底|\b(?:reconcil\w*|mak(?:e|es|ing) amends|mend\w*|forgiv\w*|forgave|defect\w*|turncoat|betray\w*|undercover|double agent|pretend\w*)\b/iu
+const RELATION_TURN = /和解|解开误会|误会解开|解除误会|重归于好|言归于好|冰释前嫌|尽释前嫌|破镜重圆|握手言和|化敌为友|化干戈|重修旧好|回心转意|反水|倒戈|决裂|反目|背叛|翻脸|假意|伪装|卧底|\b(?:reconcil\w*|mak(?:e|es|ing) amends|mend(?:s|ed|ing)? (?:fences|ties|bridges|things)|forgiv\w*|forgave|defect\w*|turncoat|betray\w*|undercover|double agent|pretend\w*)\b/iu
+
+/** 「成为、变成」在蓝图其他字段里太常见，只在关系提示里算转折。 */
+const HINT_TURN = new RegExp(`${RELATION_TURN.source}|成为|变成|成了|转为|\\b(?:becom(?:e|es|ing)|became|turn(?:s|ed|ing)? into)\\b`, 'giu')
+const TURN_DENIED = new RegExp(`${UNCERTAIN.source}|拒|失败|\\b(?:refus\\w*|fail\\w*)\\b`, 'iu')
+
+/** 先去掉转折词再查否定：冰释前嫌、重修旧好里的字不算否定。 */
+function hintAssertsTurn(relation: string): boolean {
+  const rest = relation.replace(HINT_TURN, ' ')
+  return rest !== relation && !TURN_DENIED.test(rest)
+}
 
 /** 只认词表里明确的说法。两类都沾、带否定或不确定词的一律不判，宁可漏报，不要误报。 */
 export function relationPolarity(text: string): RelationPolarity | null {
@@ -75,7 +85,7 @@ export function findRelationReversals(blueprint: BlueprintForPreflight, continui
   const findings = new Map<string, ConsistencyFinding>()
   const hints = relationshipFacts(blueprint.relationshipHints)
   const pairOf = (hint: { from: string; to: string }) => JSON.stringify([hint.from, hint.to].map(characterRosterIdentityKey).sort())
-  const turned = new Set(hints.filter(hint => RELATION_TURN.test(hint.relation)).map(pairOf))
+  const turned = new Set(hints.filter(hint => hintAssertsTurn(hint.relation)).map(pairOf))
   for (const hint of hints) {
     const planned = relationPolarity(hint.relation)
     if (!planned || turned.has(pairOf(hint))) continue
