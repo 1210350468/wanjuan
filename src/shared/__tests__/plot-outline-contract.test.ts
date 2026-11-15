@@ -154,7 +154,7 @@ describe('chapter Markdown outline contract', () => {
     expect([first, second].every((entry, index) => validPlotOutlineEntry(entry, index + 1))).toBe(false)
   })
   const MASTER_EXTRA_CHAPTER_LINE = /^[\t ]*(?:#{1,6}[\t ]+|(?:[-*+][\t ]+)?(?:第[^\r\n]*章|Chapters?\b))/imu
-  const ORDINAL_TIMES_PROSE = ['第一次见面时，她正在修改一篇文章。', '- 第一次见面时，她正在修改一篇文章。', '第一次读完这篇文章。', '第一次读第二章，她发现了秘密。', '第一次读完那篇文章，她哭了。']
+  const ORDINAL_TIMES_PROSE = ['第一次见面时，她正在修改一篇文章。', '- 第一次见面时，她正在修改一篇文章。', '第一次读完这篇文章。', '第一次读第二章，她发现了秘密。', '第一次读完那篇文章，她哭了。', '第 8 次读完这篇文章。', '第8 次读第二章，她发现了秘密。', '- 第 8次见面时，她正在修改一篇文章。']
   const MASTER_ACCEPTED_PROSE = ['她第一次读第八和第九章。', '他翻开第三章，', 'She reread chapter three, then slept.', 'In chapter 3, she wept.']
   const MASTER_REJECTED_LINES = [
     '第7章：重复章', '## 第8章：下一章', '- 第8章：下一章', '第8章：下一章', '第8章 追逐',
