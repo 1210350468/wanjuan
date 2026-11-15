@@ -20,7 +20,7 @@ async function reopenRunSheet(context) {
 }
 
 export const I686D_SCENARIOS = {
-  /** 第 3 章写作失败、第 4 章审稿没拿到报告、第 4 章选区润色被拦下，重启后「可恢复」三张卡；接连关掉审稿卡和第 3 章卡，列表只剩选区卡，两次并成一条可撤销的提示；再重启也不回来。 */
+  /** 第 3 章写作失败、第 4 章审稿没拿到报告、第 4 章选区润色被拦下，重启后「可恢复」三张卡；接连关掉审稿卡和第 3 章卡，列表只剩选区卡，两次并成一条提示，撤销两张都放回；再关一次，重启也不回来。 */
   'i686d-abandon': { model: true, shell: 'stage', setup: context => seedStageSample(context, { landOnChapter3: false, beforeReload: async ({ page, invoke, path: projectPath, session }) => {
     for (const draft of await invoke(page, 'db:draft-list', 3, projectPath, session)) {
       assert.equal((await invoke(page, 'db:draft-delete', draft.id, projectPath, session)).success, true)
@@ -56,11 +56,14 @@ export const I686D_SCENARIOS = {
     await context.shoot('i686d-cards')
 
     const restarted = context.page
-    for (const [title, left] of [['第4章审稿候选', 2], ['第3章候选', 1]]) {
-      await runSheet.sheet(restarted).locator('.run-recovery > .run-card').filter({ has: restarted.getByRole('heading', { name: title }) })
-        .getByRole('button', { name: '不再恢复' }).click()
-      await restarted.waitForFunction(count => document.querySelectorAll('.run-recovery > .run-card').length === count, left)
+    const abandonTwo = async () => {
+      for (const [title, left] of [['第4章审稿候选', 2], ['第3章候选', 1]]) {
+        await runSheet.sheet(restarted).locator('.run-recovery > .run-card').filter({ has: restarted.getByRole('heading', { name: title }) })
+          .getByRole('button', { name: '不再恢复' }).click()
+        await restarted.waitForFunction(count => document.querySelectorAll('.run-recovery > .run-card').length === count, left)
+      }
     }
+    await abandonTwo()
     const toast = restarted.locator('.pi-toast:not([data-exiting])').filter({ hasText: '已不再恢复 2 张卡片' })
     await toast.waitFor({ state: 'visible' })
     await restarted.mouse.move(0, 0)
@@ -71,9 +74,15 @@ export const I686D_SCENARIOS = {
     assert.ok(await toast.getByRole('button', { name: '撤销' }).isVisible(), '提示条可撤销')
     await context.shoot('i686d-abandoned')
 
+    await toast.getByRole('button', { name: '撤销' }).click()
+    await restarted.waitForFunction(() => document.querySelectorAll('.run-recovery > .run-card').length === 3)
+    const undone = await allCards(restarted)
+    assert.deepEqual(titles(undone), CARDS, '撤销后两张都放回')
+    await abandonTwo()
+
     const afterRestart = await reopenRunSheet(context)
     assert.deepEqual(titles(afterRestart), ['编辑器选区建议'], '重启后点过「不再恢复」的两张不回来')
     await context.shoot('i686d-after-restart')
-    return { listed, abandoned, toastText, afterRestart }
+    return { listed, abandoned, toastText, undone, afterRestart }
   } },
 }
