@@ -7724,11 +7724,14 @@ test('freezes the better-sqlite3 binary the target runtime actually loaded, also
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
 
-test('探针收据认冻结基线驱动写的旧接缝名，也认现驱动的新名，别的名和非 dry-run 都拒', () => {
-  const receipt = executionSeam => ({ mode: 'dry-run', provenance: { sourceSha: 'a'.repeat(40) }, executionSeam })
-  assert.equal(probeReceiptMatches(receipt('generation-runtime-with-in-memory-adapter-lease'), 'a'.repeat(40)), true)
-  assert.equal(probeReceiptMatches(receipt('generation-harness-with-in-memory-adapter-lease'), 'a'.repeat(40)), true)
-  assert.equal(probeReceiptMatches(receipt('something-else'), 'a'.repeat(40)), false)
-  assert.equal(probeReceiptMatches(receipt('generation-harness-with-in-memory-adapter-lease'), 'b'.repeat(40)), false)
-  assert.equal(probeReceiptMatches({ ...receipt('generation-harness-with-in-memory-adapter-lease'), mode: 'live' }, 'a'.repeat(40)), false)
+test('探针收据按臂认接缝名：基线臂是冻结驱动写的 runtime，候选臂是现驱动写的 harness，别的组合和非 dry-run 都拒', () => {
+  const codeSha = 'a'.repeat(40)
+  const receipt = executionSeam => ({ mode: 'dry-run', provenance: { sourceSha: codeSha }, executionSeam })
+  const runtime = receipt('generation-runtime-with-in-memory-adapter-lease'), harness = receipt('generation-harness-with-in-memory-adapter-lease')
+  assert.equal(probeReceiptMatches(runtime, { arm: 'baseline', codeSha }), true)
+  assert.equal(probeReceiptMatches(harness, { arm: 'candidate', codeSha }), true)
+  assert.equal(probeReceiptMatches(runtime, { arm: 'candidate', codeSha }), false)
+  assert.equal(probeReceiptMatches(harness, { arm: 'baseline', codeSha }), false)
+  assert.equal(probeReceiptMatches(harness, { arm: 'candidate', codeSha: 'b'.repeat(40) }), false)
+  assert.equal(probeReceiptMatches({ ...harness, mode: 'live' }, { arm: 'candidate', codeSha }), false)
 })
