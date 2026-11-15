@@ -488,7 +488,7 @@ describe('GeneratePlotArchitectureCommand 批次状态机', () => {
     const command = makeCommand({ resumeSynopsis: true })
 
     await expect(command.execute({ step: {}, context, callbacks }))
-      .rejects.toThrow('源事实')
+      .rejects.toThrow('在中断后变了，不能接着生成')
     expect(useFakeModelStream.getState().generateStream).not.toHaveBeenCalled()
   })
 
@@ -521,7 +521,7 @@ describe('GeneratePlotArchitectureCommand 批次状态机', () => {
       ? makeCommand({ resumeSynopsis: true })
       : makeCommand({ synopsisRange: requestedRange })
     await expect(command.execute({ step: {}, context, callbacks }))
-      .rejects.toThrow('缺少完整输入绑定')
+      .rejects.toThrow('缺少生成时的输入记录')
 
     expect(generateStream).not.toHaveBeenCalled()
     expect(harness.partialWrites).toHaveLength(0)
@@ -655,7 +655,7 @@ describe('GeneratePlotArchitectureCommand 批次状态机', () => {
     const harness = harnessWith({ synopsis_result: prefixBody, synopsis_covered_to: 20, synopsis_range: { from: 1, to: 20 }, synopsis_facts_fingerprint: '旧源指纹', synopsis_db_hash: dbHashOf(dbOutline), synopsis_step_guidance: '' }, dbOutline)
     const generation = mainOwnedResponses(harness, '不会发送')
 
-    await expect(makeCommand({ synopsisRange: { from: 21, to: 100 } }, true).execute({ step: {}, context, callbacks })).rejects.toThrow('项目源事实自上次生成后已变化')
+    await expect(makeCommand({ synopsisRange: { from: 21, to: 100 } }, true).execute({ step: {}, context, callbacks })).rejects.toThrow('在上次生成后变了，已有大纲不能接着写')
 
     expect(generation.execute).not.toHaveBeenCalled()
     expect(harness.synopsisCommits).toHaveLength(0)

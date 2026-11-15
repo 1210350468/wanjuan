@@ -1165,7 +1165,7 @@ describe('导入 slot 的输出没通过校验', () => {
 
     await expect(new RuntimeInferGlobalSettingsCommand({ createRuntime: async () => runtime } as never)
       .execute({ step: {}, context, callbacks }))
-      .rejects.toThrow('已导入的内容都已保存，只是 AI 推演结果连续两次格式有误，没有写入。在导入对话框里点「继续导入」重试。')
+      .rejects.toThrow('已导入的内容都已保存，只是 AI 推演结果两次格式都不对，没有写入。在导入对话框里点「继续导入」重试。')
 
     expect(purposes()).toEqual([
       'import-inference', 'import-inference:structured-syntax-repair',

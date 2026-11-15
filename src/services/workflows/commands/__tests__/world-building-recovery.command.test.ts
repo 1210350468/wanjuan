@@ -249,7 +249,7 @@ describe('GenerateWorldBuildingCommand 截断恢复', () => {
       createWorkflowRuntimeDependencies(),
       { resumeWorldBuilding: true, resumeHandle: { projectId: projectSession.projectId, epoch: projectSession.leaseId, rootActionId: '合成恢复根', runId: '合成恢复运行' } },
     ).execute({ step: {}, context: { ...context(), data: {} }, callbacks: callbacks() }))
-      .rejects.toThrow('旧候选不能续到新上下文')
+      .rejects.toThrow('旧候选不能接着生成')
 
     expect(resumeCalls).not.toHaveBeenCalled()
     expect(recoverableWorldBuildingCandidate(partialFile)).toBe(savedCandidate)
@@ -390,7 +390,7 @@ describe('GenerateWorldBuildingCommand 截断恢复', () => {
 
     await expect(new GenerateWorldBuildingCommand(snapshot, createWorkflowRuntimeDependencies())
       .execute({ step: {}, context: context(), callbacks: callbacks() }))
-      .rejects.toThrow('故事前提、小说配置、角色图谱或模板已变化')
+      .rejects.toThrow('故事前提、小说配置、角色图谱或模板变了')
 
     expect(formalWorldbuilding).toBe(original)
     expect(formalWrites).toHaveLength(0)
@@ -417,7 +417,7 @@ describe('GenerateWorldBuildingCommand 截断恢复', () => {
       createWorkflowRuntimeDependencies(),
       { resumeWorldBuilding: true, resumeHandle: { projectId: projectSession.projectId, epoch: projectSession.leaseId, rootActionId: '合成恢复根', runId: '合成恢复运行' } },
     ).execute({ step: {}, context: { ...context(), data: {} }, callbacks: callbacks() }))
-      .rejects.toThrow('旧候选不能续到新上下文')
+      .rejects.toThrow('旧候选不能接着生成')
 
     expect(resumeCalls).not.toHaveBeenCalled()
     expect(recoverableWorldBuildingCandidate(partialFile)).toBe(savedCandidate)

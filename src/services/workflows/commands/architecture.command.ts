@@ -1373,8 +1373,8 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
     ])
     if (resumeRequested && partial.world_building_facts_fingerprint !== factsFingerprint) {
       throw new Error(text(
-        '故事前提、小说配置、角色图谱或世界观模板自候选保存后已变化，旧候选不能续到新上下文；候选仍可查看或复制。',
-        'The premise, novel configuration, character map, or worldbuilding template changed after the candidate was saved, so the old candidate cannot be continued into the new context. The candidate remains available to view or copy.',
+        '故事前提、小说配置、角色图谱或世界观模板在候选保存后变了，旧候选不能接着生成，仍可查看或复制。',
+        'The premise, novel configuration, character map, or worldbuilding template changed after the candidate was saved, so it cannot be continued. You can still view or copy it.',
       ))
     }
 
@@ -1518,10 +1518,10 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
       )
       throw new WorldBuildingResumeAvailableError(text(
         sourceFactsChanged
-          ? '世界观生成期间故事前提、小说配置、角色图谱或模板已变化，本次结果已保留为候选且未写入正式世界观；可查看或复制候选。'
+          ? '生成期间故事前提、小说配置、角色图谱或模板变了，本次结果已保留为候选，没写入正式世界观，可查看或复制。'
           : '世界观生成期间正式内容已被修改，本次结果已保留为候选且未覆盖作者修改；可查看或复制候选。',
         sourceFactsChanged
-          ? 'The premise, novel configuration, character map, or template changed while worldbuilding was being generated. This result was kept as a candidate and was not written to formal worldbuilding; you can view or copy it.'
+          ? 'The premise, novel configuration, character map, or template changed during generation. This result was kept as a candidate and not written to worldbuilding; you can view or copy it.'
           : 'The formal worldbuilding changed while generation was running. This result was kept as a candidate and did not overwrite the author edit; you can view or copy it.',
       ))
     }
@@ -1735,8 +1735,8 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
       to = partial.synopsis_range.to
       if (partial.synopsis_step_guidance === undefined) {
         throw new Error(text(
-          '旧情节大纲检查点缺少完整输入绑定，无法证明其来源事实与当前一致，不能自动续写。检查点与数据库正文均已保留；请从第 1 章重新生成。',
-          'This legacy plot-outline checkpoint lacks complete input binding, so its source facts cannot be proven to match the current project and it cannot be continued automatically. The checkpoint and database prose remain preserved; regenerate from chapter 1.',
+          '这份旧版情节大纲缺少生成时的输入记录，不能接着生成。已有内容都已保留，请从第 1 章重新生成。',
+          'This older plot outline lacks its generation inputs, so it cannot be continued. Everything is kept; regenerate from chapter 1.',
         ))
       }
       if (this.requireGenerationExecution().mainOwned && typeof (context.data.stepGuidance as Record<string, unknown> | undefined)?.synopsis === 'string'
@@ -1750,8 +1750,8 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
       )
       if (checkpointFingerprint !== expectedCheckpointFingerprint) {
         throw new Error(text(
-          '项目源事实（故事前提/角色/世界观/总章数等）自上次中断后已变化，旧检查点不能续到新上下文。请从「AI 生成故事架构」重新生成情节大纲。',
-          'The source facts (premise / characters / worldbuilding / chapter count, etc.) changed after the interruption, so the old checkpoint cannot be continued into the new context. Regenerate the plot outline from “Generate story architecture”.',
+          '故事前提、角色、世界观或总章数等在中断后变了，不能接着生成。请从「AI 生成故事架构」重新生成情节大纲。',
+          'The premise, characters, worldbuilding, or chapter count changed after the interruption, so it cannot be continued. Regenerate the plot outline from “Generate story architecture”.',
         ))
       }
       if (this.requireGenerationExecution().mainOwned) {
@@ -1836,8 +1836,8 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
         }
         if (partial.synopsis_step_guidance === undefined) {
           throw new Error(text(
-            '旧情节大纲检查点缺少完整输入绑定，无法证明其来源事实与当前一致，不能自动续批。检查点与数据库正文均已保留；请从第 1 章重新生成。',
-            'This legacy plot-outline checkpoint lacks complete input binding, so its source facts cannot be proven to match the current project and it cannot be extended automatically. The checkpoint and database prose remain preserved; regenerate from chapter 1.',
+            '这份旧版情节大纲缺少生成时的输入记录，不能接着生成。已有内容都已保留，请从第 1 章重新生成。',
+            'This older plot outline lacks its generation inputs, so it cannot be continued. Everything is kept; regenerate from chapter 1.',
           ))
         }
         const checkpointStepGuidance = partial.synopsis_step_guidance
@@ -1849,8 +1849,8 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
         )
         if (checkpointFingerprint !== expectedCheckpointFingerprint) {
           throw new Error(text(
-            '项目源事实自上次生成后已变化，既有大纲不能与新的源事实拼接。请从「AI 生成故事架构」从第 1 章重新生成。',
-            'The source facts changed since the previous generation, so the existing outline cannot be joined with the new facts. Regenerate from chapter 1 in “Generate story architecture”.',
+            '故事前提、角色、世界观或总章数等在上次生成后变了，已有大纲不能接着写。请从「AI 生成故事架构」从第 1 章重新生成。',
+            'The premise, characters, worldbuilding, or chapter count changed since the last generation, so the existing outline cannot be extended. Regenerate from chapter 1 in “Generate story architecture”.',
           ))
         }
         seedText = assertCheckpointDbMirrorCurrent(
@@ -1985,8 +1985,8 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
         `The completed part (about ${partialBody.length} ${pluralEn(partialBody.length, 'character')}) was saved. Click “Continue plot outline” to resume from the break point.`,
       ))
       throw new PlotOutlineResumeAvailableError(text(
-        `情节大纲生成在完成前中断：${displayedErrorMessage(context.uiLocale, cause)}。已完成部分（约 ${partialBody.length} 字）已自动保存为不完整状态，没有白费。\n点击「继续生成情节大纲」可续写本批（第 ${from}–${to} 章）；如本批范围仍偏大，可先在「AI 生成架构」缩小每批章节数后重试。`,
-        `Plot-outline generation stopped before completing this batch: ${displayedErrorMessage(context.uiLocale, cause)}. The finished part (about ${partialBody.length} ${pluralEn(partialBody.length, 'character')}) was saved automatically.\nClick “Continue plot outline” to finish batch chapters ${from}-${to}; if the batch is still too large, choose a smaller per-batch range in “Generate story architecture” and retry.`,
+        `情节大纲没生成完就中断了：${displayedErrorMessage(context.uiLocale, cause)}。已完成的约 ${partialBody.length} 字已保存。\n点「继续生成情节大纲」接着写第 ${from}–${to} 章；本批太大就先在「AI 生成架构」调小每批章数。`,
+        `Plot-outline generation stopped early: ${displayedErrorMessage(context.uiLocale, cause)}. The finished part (about ${partialBody.length} ${pluralEn(partialBody.length, 'character')}) was saved.\nClick “Continue plot outline” to finish chapters ${from}-${to}; if the batch is too large, first choose a smaller per-batch range in “Generate story architecture”.`,
       ))
     }
 
@@ -2248,8 +2248,8 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
       const { from, to } = outline.range
       const chapters = from === to ? text(`第 ${from} 章`, `chapter ${from}`) : text(`第 ${from}–${to} 章`, `chapters ${from}–${to}`)
       throw new PlotOutlineSourceChangedError(text(
-        `本批${chapters}大纲已生成完，但保存前模型设置、作品设定、提示词模板或写作 Skill 被修改，正式保存被拒绝。`,
-        `The outline for ${chapters} finished, but the model settings, book settings, a prompt template or a writing skill changed before it was saved, so saving was refused. `)
+        `本批${chapters}大纲已生成完，但保存前模型设置、作品设定、模板或写作 Skill 改过，正式保存被拒绝。`,
+        `The outline for ${chapters} finished, but the model settings, book settings, a template, or a writing skill changed before saving, so saving was refused. `)
         + keptInRecoveryDraft('这批大纲', 'The batch is') + restartFrom(from), { cause: error })
     }
     await saveNavigation(outline, true)

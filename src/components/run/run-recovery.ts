@@ -227,15 +227,15 @@ export function outlineSourceChangedNote(recovery: Pick<GenerationRecoveryContex
   if (!outlineSourceChangedBlocked(recovery)) return null
   const t = lang(locale), outline = recovery.plotOutline
   if (recovery.plotOutlineRecovery?.inFormalOutline) {
-    return t('这批大纲已经生成完毕，但模型设置、作品设定、提示词模板或写作 Skill 已经变了，恢复稿不能覆盖正式内容，只能查看或复制。',
-      'This outline batch finished, but the model settings, book settings, a prompt template or a writing skill have changed, so this recovery draft cannot replace saved content. You can view or copy it.')
+    return t('这批大纲已经生成完毕，但模型设置、作品设定、模板或写作 Skill 变了，恢复稿只能查看或复制。',
+      'This outline batch finished, but the model settings, book settings, a template, or a writing skill changed, so the recovery draft can only be viewed or copied.')
   }
   const from = outline?.range.from
   return from
-    ? t(`模型设置、作品设定、提示词模板或写作 Skill 已经变了，恢复稿不能覆盖正式内容，只能查看或复制。请从第 ${from} 章重新生成情节大纲。`,
-      `The model settings, book settings, a prompt template or a writing skill changed, so this recovery draft cannot replace saved content. View or copy it, then generate the plot outline again from chapter ${from}.`)
-    : t('模型设置、作品设定、提示词模板或写作 Skill 已经变了，恢复稿不能覆盖正式内容，只能查看或复制。请重新生成情节大纲。',
-      'The model settings, book settings, a prompt template or a writing skill changed, so this recovery draft cannot replace saved content. View or copy it, then generate the plot outline again.')
+    ? t(`模型设置、作品设定、模板或写作 Skill 变了，恢复稿只能查看或复制。请从第 ${from} 章重新生成情节大纲。`,
+      `The model settings, book settings, a template, or a writing skill changed, so the recovery draft can only be viewed or copied. Generate the plot outline again from chapter ${from}.`)
+    : t('模型设置、作品设定、模板或写作 Skill 变了，恢复稿只能查看或复制。请重新生成情节大纲。',
+      'The model settings, book settings, a template, or a writing skill changed, so the recovery draft can only be viewed or copied. Generate the plot outline again.')
 }
 
 function planningEntry(recovery: GenerationRecoveryContext, locale: Locale, earlier: PlanningEntry[] = []): PlanningEntry {
