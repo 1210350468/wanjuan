@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import type { BeginGenerationRequest, ExecuteGenerationRequest, BeginGenerationBatchRequest, GenerationDraftCommitRequest, GenerationRecoveryContext, MaterialAdmission, MaterialDecisionReceipt, VisibleCompositionAlgorithm, GenerationOwnerChannels, GenerationRecoveryList, ShortOutlineRetry, PlanningContinuation, PlanningDraftStanding } from '../../src/shared/generation-owner-contract'
 import { planningRecoverable } from '../../src/shared/planning-recovery'
+import { editorCanContinue, reviewCanResume } from '../../src/shared/recovery-actions'
 import { isDraftVisibleTextVersion } from '../../src/shared/draft-visible-text'
 import { generationOutputContract, tightenMaterialBudget, type GenerationAuthorInput } from '../../src/shared/generation-owner-contract'
 import type { MainGenerationExecuteReceipt, MainGenerationRunHandle, MainGenerationRunSummary, MainGenerationRunView, MainGenerationSnapshot } from '../../src/services/generation/generation-runtime'
@@ -1088,7 +1089,7 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
     run => viewOf(run).candidates?.at(-1))
   /**
    * 运行侧页「可恢复」区的数据。只读操作类型可能恢复的运行；一个运行读不出不挡其余运行，只标 partial。
-   * 单章写稿保存过就不再需要恢复，正文后来改没改过都一样；只有这次打开里还留着没落盘的正文时仍列出，那段文字只能从这里复制。
+   * 只列作者还能从这里拿回或接着做的运行。这次打开里还留着没落盘文字的一律列出，那段文字只能从这里复制。
    * 规划恢复稿是否列出按 planningRecoverable 判定，与蓝图页横幅、架构页大纲提示同一条。
    */
   const listRecovery = (): GenerationRecoveryList => {
@@ -1103,8 +1104,18 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
         const recovery = readContext(handle)
         if (planningRecoverable(recovery)) list.planning.push(recovery)
       },
-      review: (handle: MainGenerationRunHandle) => { list.reviews.push({ view: viewOf(requireRun(handle)), recovery: readReviewRevisionRecovery(handle) }) },
-      editor: (handle: MainGenerationRunHandle) => { list.editors.push(readEditorInlineRecovery(handle)) },
+      review: (handle: MainGenerationRunHandle) => {
+        const recovery = readReviewRevisionRecovery(handle), tailed = tailedRuns.has(handle.runId)
+        if (recovery.saved && !tailed) return
+        const view = viewOf(requireRun(handle))
+        if (tailed || reviewCanResume(view, recovery) || (view.candidates ?? view.artifacts).some(hasText)) list.reviews.push({ view, recovery })
+      },
+      editor: (handle: MainGenerationRunHandle) => {
+        const recovery = readEditorInlineRecovery(handle), outputs = recovery.view.candidates ?? recovery.view.artifacts
+        const settled = recovery.view.status === 'cancelled' || !repository.editorInlineAwaitingDelivery(handle.runId)
+          && outputs.some(item => item.status === 'completed' && item.compositionEligible === true)
+        if (tailedRuns.has(handle.runId) || !settled && (editorCanContinue(recovery) || outputs.some(hasText))) list.editors.push(recovery)
+      },
       draft: (handle: MainGenerationRunHandle) => {
         const saved = draftEffects.readRecovery(handle.runId).kind !== 'absent'
         if (saved && !tailedRuns.has(handle.runId)) return
@@ -1136,7 +1147,7 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
     for (const run of batchRoots) {
       try {
         const batch = draftEffects.readBatchHistory(run.handle.runId, deps.projectId, commits)
-        if (batch.nextChapterNumber !== null) list.batches.push(batch)
+        if (batch.sourceCurrent && batch.nextChapterNumber !== null) list.batches.push(batch)
       } catch { list.partial = true }
     }
     return list
@@ -1156,7 +1167,7 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
   }
   const finalizationRecovery = (run: DurableGenerationRun): FinalizationGenerationRecovery => {
     assertCurrent()
-    const context = readFinalizationGenerationContext(run), effect = finalizations.readEffect(run)
+    const context = readFinalizationGenerationContext(run), effect = finalizations.effectInForce(run)
     let current = false
     try { current = repository.budget(run.rootActionId).root.status !== 'cancelled' && compareGenerationSourceBindings(run.binding, deps.rebuildBinding(run.binding, currentModelReceipt(run.binding))) } catch { /* History remains readable without current source/model admission. */ }
     const attempts = runAttempts(run.runId), last = attempts.at(-1)
@@ -1180,7 +1191,7 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
   }
   /** 作者点重试时能否另开运行：本运行没有写入结果、没有在途请求，最后的候选也不能直接提交。能提交的候选沿用它，不重新计费。 */
   const finalizationRetriesWithNewRun = (run: DurableGenerationRun): boolean => {
-    if (finalizations.readEffect(run) || repository.budget(run.rootActionId).attempts.some(attempt => ['reserved', 'dispatch-marked'].includes(attempt.status))) return false
+    if (finalizations.effectInForce(run) || repository.budget(run.rootActionId).attempts.some(attempt => ['reserved', 'dispatch-marked'].includes(attempt.status))) return false
     const candidate = viewOf(run).candidates?.at(-1)
     if (candidate?.status !== 'completed' || !candidate.compositionEligible) return true
     const context = readFinalizationGenerationContext(run)
@@ -1408,7 +1419,7 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
       const target = authorRetry && parentRootActionId ? repository.budget(parentRootActionId) : undefined
       const blockedCode = target && (target.blockedCode ?? (rootBudgetExhausted(target.policy, target.attempts, target.activeElapsedMs) ? 'ROOT_BUDGET_EXHAUSTED' : null))
       if (blockedCode) throw new Error(blockedCode)
-      if (sibling && !finalizations.readEffect(sibling)) throw new Error('GENERATION_FINALIZATION_PREDECESSOR_REQUIRED')
+      if (slot.stepKey === 'character_cards' && sibling && !finalizations.effectInForce(sibling)) throw new Error('GENERATION_FINALIZATION_PREDECESSOR_REQUIRED')
       const prepared = finalizedCharacters.readContext(slot.source.draftId)
       if (!isDeepStrictEqual(prepared.context.source, slot.source)) throw new Error('GENERATION_FINALIZATION_SOURCE_CHANGED')
       const characterStep = slot.stepKey === 'character_cards'
@@ -1589,7 +1600,11 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
       }
       if (deps.database.prepare('SELECT COUNT(*) FROM generation_attempts WHERE run_id=?').pluck().get(run.runId) !== 0) throw new Error('GENERATION_EDITOR_ATTEMPT_CONFLICT')
       const current = viewOf(run).nonReplayable ? await resume(handleOf(run)) : viewOf(run)
+      repository.markEditorInlineAwaitingDelivery(run.runId)
       return execute({ handle: current.handle, invocationNonce, task }, false, false, true)
+    },
+    acknowledgeEditorInline: (handle: MainGenerationRunHandle) => {
+      repository.recordEditorInlineDelivery(requireEditorInlineRun(handle).runId)
     },
     readImportGeneration: (slot: ImportGenerationSlot, runId?: string) => {
       assertCurrent()
