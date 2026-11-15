@@ -27,6 +27,7 @@ import { useProjectStore } from '../../../stores/project-store'
 import { openChapterFile } from '../../panels/sidebar/sidebar-file-openers'
 import { captureProjectSession, isProjectSessionCurrent, isProjectSessionPath } from '../../project-session-gate'
 import { toast } from '../../ui/Toast'
+import { pluralEn } from '../../../shared/plural-en'
 import { errorCodeOf, knownAppErrorMessage } from '../../../i18n/app-errors'
 import { providerContextFailureText } from '../../../services/generation/prompt-budget-failure'
 
@@ -65,7 +66,7 @@ export function plotTreeErrorMessage(
     const maximum = PLOT_TREE_SOURCE_LIMITS.blueprints
     return text(
       `旧剧情树没有改动。剧情树最多读 ${maximum} 章，这部作品的蓝图或定稿超过了。`,
-      `The previous plot tree is unchanged. A plot tree reads at most ${maximum} chapters, and this book has more blueprints or finalized chapters.`,
+      `The previous plot tree is unchanged. A plot tree reads at most ${maximum} ${pluralEn(maximum, 'chapter')}, and this book has more blueprints or finalized chapters.`,
     )
   }
   if (code === 'SOURCE_INPUT_TOO_LARGE') {
