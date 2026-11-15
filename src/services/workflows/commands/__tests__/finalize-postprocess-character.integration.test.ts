@@ -1092,7 +1092,7 @@ it('#708 角色状态请求发出后断开：步骤说明不说没有发出请�
  const error = status.steps.character_cards.error!
  expect(describeFinalizationStepError(error, zh => zh)).not.toContain('没有发出')
  expect(describeFinalizationStepError(error, (_zh, en) => en)).not.toMatch(/no new model request/i)
- expect(describeFinalizationStepError(error, zh => zh)).toMatch(/没有完成.*请点「重试」/u)
+ expect(describeFinalizationStepError(error, zh => zh)).toMatch(/没有拿到模型的结果.*请点「重试」/u)
 })
 
 it('#420 模型正常结束但返回空文本：步骤记结果不可用（不说没发请求），自动重试不再计费，作者重试发一次新请求后成功', async () => {
