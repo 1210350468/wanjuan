@@ -479,8 +479,6 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
       for (const input of batch.authorInputs) {
         if (!isDeepStrictEqual(input, selection.authorInputs?.find(item => item.id === input.id))) throw new Error('GENERATION_BATCH_AUTHOR_INPUT_CHANGED')
       }
-      // 批次的新文字写在子运行上，根上记的字数比不出来；接着写这一批就算不再放弃。
-      if (repository.recoveryAbandonment(batch.rootHandle.runId)) repository.clearRecoveryAbandonment(batch.rootHandle.runId)
     }
     const continuation = selection.continueDirectoryOperationId === undefined ? undefined
       : repository.readDirectoryProgress(selection.continueDirectoryOperationId)
@@ -617,6 +615,9 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
     if ((!materialDecision && ['review-chapter', 'refine-draft', 'refine-from-review'].includes(materialOperation))
       || !materialDecision && materialOperation === 'chapter-draft' && run.binding.sourceManifest.preparationId)
       throw new Error('GENERATION_MATERIAL_DECISION_REQUIRED')
+    // 批次的新文字写在子运行上，根上记的字数比不出来；新开或续上的下一章开写就算不再放弃。
+    const batchId = run.binding.sourceManifest.batchId as string | undefined
+    if (batchId && repository.recoveryAbandonment(batchId)) repository.clearRecoveryAbandonment(batchId)
     let reconciliationInjected = false
     if (materialDecision) {
       const prior = runAttempts(run.runId).filter(attempt => attempt.status !== 'cancelled-before-dispatch')
