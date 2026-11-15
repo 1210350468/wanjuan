@@ -430,20 +430,26 @@ function relationCandidateKey(source: FinalizedSourceIdentity, change: Pick<Fina
   return `fcs-relation:${sha256(JSON.stringify([source.draftId, source.finalizationId, source.contentHash, unorderedPairKey(change.sourceId, change.targetId), sha256(change.relation)]))}`
 }
 
+interface RelationStatement { change: FinalizedRelationChange; matchesAuthor: boolean; authorLinesAtExtraction: string[] | undefined }
+
+function oneStatementPerPair(changes: readonly FinalizedRelationChange[], authorRelations: FinalizedCharacterContext['authorRelations']): RelationStatement[] {
+  const statements = new Map<string, RelationStatement>()
+  for (const change of changes) {
+    const pair = unorderedPairKey(change.sourceId, change.targetId)
+    const authorAtExtraction = authorRelations?.filter(line => unorderedPairKey(line.sourceId, line.targetId) === pair)
+    const matchesAuthor = !!authorAtExtraction?.some(line => line.relation === change.relation)
+    const earlierDisagreesWithAuthor = statements.get(pair)?.matchesAuthor === false
+    if (matchesAuthor && earlierDisagreesWithAuthor) continue
+    statements.set(pair, { change, matchesAuthor, authorLinesAtExtraction: authorAtExtraction?.map(line => JSON.stringify([line.sourceId, line.targetId, line.relation])).sort() })
+  }
+  return [...statements.values()]
+}
+
 function commitDerivedRelations(db: BetterSqlite3.Database, context: FinalizedCharacterContext, changes: readonly FinalizedRelationChange[]): void {
   const { source } = context
   const name = (id: string) => context.characters.find(character => character.characterId === id)!.displayNameSnapshot
-  const statements = new Map<string, { change: FinalizedRelationChange; matchesAuthor: boolean; authorLinesAtExtraction: string[] | undefined }>()
-  for (const change of changes) {
-    const pair = unorderedPairKey(change.sourceId, change.targetId)
-    const authorAtExtraction = context.authorRelations?.filter(line => unorderedPairKey(line.sourceId, line.targetId) === pair)
-    const matchesAuthor = !!authorAtExtraction?.some(line => line.relation === change.relation)
-    // 一次抽取对一对人物只认一条说法，节点和建议都出自它。两个方向都报了时取后报的，但重述作者设定的不顶掉和设定不同的那条。
-    if (matchesAuthor && statements.get(pair)?.matchesAuthor === false) continue
-    statements.set(pair, { change, matchesAuthor, authorLinesAtExtraction: authorAtExtraction?.map(line => JSON.stringify([line.sourceId, line.targetId, line.relation])).sort() })
-  }
   const candidates: FinalizedRelationCandidate[] = []
-  for (const { change, matchesAuthor, authorLinesAtExtraction } of statements.values()) {
+  for (const { change, matchesAuthor, authorLinesAtExtraction } of oneStatementPerPair(changes, context.authorRelations)) {
     const series = derivedRelationSeries(change.sourceId, change.targetId)
     const seriesNodes = readCharacterContinuityNodes(db, [change.sourceId, change.targetId]).filter(node => node.aspect === 'relation' && node.relationshipId === series)
     const ownLatest = seriesNodes.filter(node => node.provenance.kind === 'derived' && node.provenance.source.finalizationId === source.finalizationId)
