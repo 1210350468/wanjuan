@@ -8,7 +8,7 @@ type StepRetry = 'prompt' | 'described' | 'never' | { after: string; rerunIfSucc
 /** 从回收站恢复的章：知识库文档在删除时已清掉，kb_import 记这个码等重导（ADR-0025）。 */
 export const CHAPTER_RESTORED_REPROJECTION_PENDING = 'CHAPTER_RESTORED_REPROJECTION_PENDING'
 
-/** 后处理没跑到这一步就停了（取消或应用退出）。没有这个码，行和「马上要跑」长得一样，会被当成还在跑。 */
+/** 后处理没跑到这一步就停了（取消或应用退出）。 */
 export const POST_PROCESS_INTERRUPTED = 'POST_PROCESS_INTERRUPTED'
 
 /** 定稿后处理步骤的错误码。步骤记录里存错误码本身，界面展示时再按当前界面语言换成作者可读说明。 */

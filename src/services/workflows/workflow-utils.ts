@@ -198,7 +198,7 @@ export function getChapterFinalizeScope(chapterNumber: number): string {
   return `chapter_${chapterNumber}_finalize`
 }
 
-/** 取消后没跑到的步骤记为中断，界面和「检查后续蓝图」才不会一直等它。项目已关时写不进去，下次打开项目时补记。 */
+/** 项目已关时写不进去，由 fenceProjectSession 在下次打开项目时补记。 */
 async function markUnstartedStepsInterrupted(projectSession: ProjectSessionContext, runId: string, projectPath: string): Promise<void> {
   try {
     const steps = await invokeForProjectSession(projectSession, 'db:post-process-get-steps', runId, projectPath)

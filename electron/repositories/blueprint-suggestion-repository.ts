@@ -14,7 +14,6 @@ export function patchedFields(chapter: ContinuityCheckChapter, patch: BlueprintP
   return Object.fromEntries(BLUEPRINT_PATCH_FIELDS.filter(field => patch[field] !== undefined).map(field => [field, chapter[field]]))
 }
 
-/** 依据的节点要在这章仍生效：生成建议后作者改了人物设定，旧建议会把蓝图改得和新设定矛盾。 */
 function evidenceInForce(db: Database.Database, blueprint: Parameters<typeof continuityCheckChapter>[0], eventIds: readonly string[]): boolean {
   const inForce = new Set(selectContinuityCheckScope([blueprint], SummaryRepository.readContinuityNodesForPreflight(db), Infinity).nodes.map(node => node.eventId))
   return eventIds.every(id => inForce.has(id))

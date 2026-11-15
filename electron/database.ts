@@ -112,7 +112,7 @@ export function fenceProjectSession(db: BetterSqlite3.Database): void {
         updated_at = datetime('now')
     WHERE status = 'running' AND (execution_owner <> '' OR lease_expires_at <> 0)
   `)
-  // 后处理在渲染端跑，打开项目时上一次会话的跑批都已停了；没跑到的步骤记为中断，不再当作还在跑。
+  // 后处理在渲染端跑，打开项目时不会有还在跑的跑批。
   db.prepare(`UPDATE post_process_steps SET error_msg = ?
     WHERE ok = 0 AND COALESCE(attempt_count, 0) = 0 AND COALESCE(error_msg, '') = ''
       AND COALESCE(last_attempt_at, '') = '' AND COALESCE(completed_at, '') = ''`).run(POST_PROCESS_INTERRUPTED)

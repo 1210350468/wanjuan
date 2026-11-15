@@ -72,7 +72,7 @@ export function ReplacementImpactPreview({ impact }: { impact: ReplacementImpact
 }
 
 /**
- * 检查后续蓝图要等后处理把新章的人物状态记进时间线：定稿工作流还占着这一章、或步骤还没跑到时不能查；失败、中断或没有记录时也能查，只是依据可能不全。
+ * 检查后续蓝图要等后处理把新章的人物状态记进时间线；失败、中断或没有记录时也能查，只是依据可能不全。
  * 「知道了」只收起替换提示，按钮和没处理的建议卡留着。
  */
 function OwnImpactNotice({ impact, projectKey, acknowledged, onAcknowledge }: { impact: ReplacementImpact; projectKey: string; acknowledged: boolean; onAcknowledge: () => void }) {
