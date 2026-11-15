@@ -41,7 +41,7 @@ export default function WriteThreadTasks({ chapterNumber, threads }: WriteThread
             <li key={row.thread.id} className="stage-write-thread" data-state={row.state} data-saving={savingPlanId === row.thread.id || undefined}>
               <span className="stage-write-thread-name">
                 <b>{row.thread.title}</b>
-                <small data-overdue={(row.state === 'task' && row.schedule.kind === 'overdue') || undefined}>{statusOf(row)}</small>
+                <small data-overdue={(row.state !== 'deferred' && row.schedule.kind === 'overdue') || undefined}>{statusOf(row)}</small>
               </span>
               <span className="stage-write-thread-actions">{actionsOf(row)}</span>
             </li>

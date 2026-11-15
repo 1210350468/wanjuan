@@ -338,6 +338,10 @@ describe('写前的线索：延后与指定本章推进', () => {
     expect(leftOut).toEqual(['线索7', '线索8'])
     await expect.element(popover.getByText('另有 2 条本次不进任务')).toBeVisible()
     await expect.element(threadRow('线索1')).toHaveTextContent('逾期 3 章')
+    await expect.element(threadRow('线索7')).toHaveTextContent('逾期 3 章 · 本次不进任务')
+    const statusColor = (title: string) => getComputedStyle(threadRow(title).element().querySelector('small')!).color
+    expect(statusColor('线索7')).toBe(statusColor('线索1'))
+    expect(statusColor('线索1')).not.toBe(getComputedStyle(threadRow('线索1').element().querySelector('b')!.parentElement!).color)
 
     await act(async () => threadRow('线索8').getByRole('button', { name: '延后一章' }).click())
     expect(threadCalls('db:narrative-thread-assignment-set')[0]![1]).toMatchObject({ planId: 8, chapterNumber: 6, kind: 'resolve' })
