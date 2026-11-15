@@ -120,7 +120,7 @@ export function findRelationReversals(blueprint: BlueprintForPreflight, continui
 
 export const pendingRelationFactKey = (candidateKey: string) => `relation-pending:${candidateKey}`
 
-/** 作者一直没决定时每章的说法都会留一条建议，这里每对人物只提示本章之前最新的一条。pending 按章升序。 */
+/** 作者一直没决定时每换一种说法就留一条建议，这里每对人物只提示本章之前最新的一条。pending 按章升序。 */
 export function findUndecidedRelations(blueprint: BlueprintForPreflight, pending: readonly PendingFinalizedRelationCandidate[]): ConsistencyFinding[] {
   const cast = new Set(blueprint.characters.map(characterRosterIdentityKey))
   const latest = new Map<string, PendingFinalizedRelationCandidate>()

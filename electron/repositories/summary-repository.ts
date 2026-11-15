@@ -32,7 +32,7 @@ import {
   type CharacterStateFieldProvenance,
 } from '../../src/shared/character-roster'
 import { decideDerivedPatch, type CharacterFieldSnapshot, type DerivedSourceOrder } from '../../src/shared/character-identity'
-import { latestNodesBefore, type ContinuityNode } from '../../src/shared/character-continuity'
+import { derivedRelationRuns, type ContinuityNode, type DerivedRelationRun } from '../../src/shared/character-continuity'
 import { parseFinalizedCharacterStateResponse } from '../../src/shared/finalized-continuity'
 import { hasCharacterIdentitySchema } from './character-repository'
 import { commitCharacterIdentities, refreshCharacterIdentityProjection, refreshCharacterStateProjection } from './character-roster-repository'
@@ -437,19 +437,16 @@ function commitDerivedRelations(db: BetterSqlite3.Database, context: FinalizedCh
   for (const change of changes) {
     const series = derivedRelationSeries(change.sourceId, change.targetId)
     const seriesNodes = readCharacterContinuityNodes(db, [change.sourceId, change.targetId]).filter(node => node.aspect === 'relation' && node.relationshipId === series)
-    const [previous] = latestNodesBefore(seriesNodes, source.chapterNumber + 1).relations.flatMap(pair => pair.lines)
-    const unchanged = previous?.value === change.relation
     const ownLatest = seriesNodes.filter(node => node.provenance.kind === 'derived' && node.provenance.source.finalizationId === source.finalizationId)
       .sort((left, right) => left.seq - right.seq).at(-1)
-    const rerun = ownLatest?.value === change.relation
     const authorAtExtraction = context.authorRelations?.filter(line => unorderedPairKey(line.sourceId, line.targetId) === unorderedPairKey(change.sourceId, change.targetId))
     const authorLinesAtExtraction = authorAtExtraction?.map(line => JSON.stringify([line.sourceId, line.targetId, line.relation])).sort()
     const matchesAuthor = !!authorAtExtraction?.some(line => line.relation === change.relation)
     const names = { sourceName: name(change.sourceId), targetName: name(change.targetId) }
-    if (matchesAuthor && !previous) continue
-    // 重述也留节点，之后再定稿更早的章时这一章的说法仍挡在后面；算不算变化由读取端判断。
-    if (!rerun) appendDerivedRelationNode(db, { ...change, ...names, source, quote: change.evidence })
-    if (unchanged && !rerun) continue
+    // 这对人物还没有定稿记录时，重述作者设定不留节点：它没有建议可裁定，作者之后手改设定，它会一直和新设定并存。
+    if (matchesAuthor && !seriesNodes.some(node => node.effectiveChapter <= source.chapterNumber)) continue
+    // 其余重述都留节点，之后再定稿更早的章时这一章的说法仍挡在后面；算不算变化、出不出建议由读取端按段判断。
+    if (ownLatest?.value !== change.relation) appendDerivedRelationNode(db, { ...change, ...names, source, quote: change.evidence })
     if (authorLinesAtExtraction?.length && !matchesAuthor) candidates.push({ candidateKey: relationCandidateKey(source, change), source: structuredClone(source), sourceId: change.sourceId, targetId: change.targetId,
       ...names, value: change.relation, evidence: change.evidence, authorLinesAtCreation: authorLinesAtExtraction })
   }
@@ -479,23 +476,40 @@ function candidateReceipts(db: BetterSqlite3.Database): StoredCharacterStateDeci
 
 function markDeclinedRelations(db: BetterSqlite3.Database, nodes: ContinuityNode[]): ContinuityNode[] {
   const declinedKeys = new Set(candidateReceipts(db).filter(receipt => receipt.decision === 'decline').map(receipt => receipt.candidateKey))
-  const declined = new Set<string>()
-  const lastOfSeries = new Map<string, ContinuityNode>()
-  for (const node of [...nodes].sort((left, right) => left.effectiveChapter - right.effectiveChapter || left.seq - right.seq)) {
-    if (node.aspect !== 'relation' || node.provenance.kind !== 'derived') continue
-    const previous = lastOfSeries.get(node.relationshipId)
-    if (declinedKeys.has(relationCandidateKey(node.provenance.source, { sourceId: node.subjectId, targetId: node.targetId, relation: node.value }))
-      || previous && declined.has(previous.eventId) && previous.value === node.value) declined.add(node.eventId)
-    lastOfSeries.set(node.relationshipId, node)
-  }
-  return nodes.map(node => declined.has(node.eventId) ? { ...node, authorDeclined: true as const } : node)
+  return nodes.map(node => node.aspect === 'relation' && node.provenance.kind === 'derived'
+    && declinedKeys.has(relationCandidateKey(node.provenance.source, { sourceId: node.subjectId, targetId: node.targetId, relation: node.value }))
+    ? { ...node, authorDeclined: true as const } : node)
 }
 
 function relationDecisionPayloadHash(request: FinalizedRelationDecisionRequest): string {
   return sha256(JSON.stringify([request.draftId, request.candidateKey, request.expectedAuthorRelations, request.operationId, request.decision]))
 }
 
-function pendingRelationCandidate(db: BetterSqlite3.Database, candidate: FinalizedRelationCandidate): PendingFinalizedRelationCandidate | null {
+/** 一段说法只出最早那张还有效的建议；作者拒绝过的段不再出。按章升序。 */
+function pendingRelationCandidates(db: BetterSqlite3.Database): PendingFinalizedRelationCandidate[] {
+  const rows = db.prepare("SELECT draft_id AS draftId FROM summary_snapshots WHERE character_state_candidates<>'[]' ORDER BY chapter_number,draft_id")
+    .all() as Array<{ draftId: number }>
+  const standing = rows.flatMap(({ draftId }) => {
+    try {
+      const row = readCurrentCharacterStateCandidateRow(db, draftId)
+      return parseCharacterStateCandidateStore(row.candidates).relationPending.flatMap(candidate => standingRelationCandidate(db, candidate) ?? [])
+    } catch {
+      return []
+    }
+  })
+  const runs = derivedRelationRuns(markDeclinedRelations(db, readCharacterContinuityNodes(db)))
+  const shown = new Set<DerivedRelationRun>()
+  return standing.filter(candidate => {
+    const run = runs.get(derivedRelationSeries(candidate.sourceId, candidate.targetId))?.find(item => item.observations.some(node =>
+      node.provenance.kind === 'derived' && node.provenance.source.finalizationId === candidate.source.finalizationId))
+    if (!run) return true
+    if (run.declined || shown.has(run)) return false
+    shown.add(run)
+    return true
+  })
+}
+
+function standingRelationCandidate(db: BetterSqlite3.Database, candidate: FinalizedRelationCandidate): PendingFinalizedRelationCandidate | null {
   const pair = authorRelationsOfPair(db, candidate.sourceId, candidate.targetId)
   if (!pair.rows.length || pair.all.includes(candidate.value)) return null
   if (candidate.authorLinesAtCreation && !onlyEarlierAdoptionsWroteSinceSnapshot(db, candidate, pair.lines)) return null
@@ -668,17 +682,7 @@ export class SummaryRepository {
   }
 
   static listPendingFinalizedRelationCandidates(database = getProjectDb()): PendingFinalizedRelationCandidate[] {
-    if (!database) return []
-    const rows = database.prepare("SELECT draft_id AS draftId FROM summary_snapshots WHERE character_state_candidates<>'[]' ORDER BY chapter_number,draft_id")
-      .all() as Array<{ draftId: number }>
-    return rows.flatMap(({ draftId }) => {
-      try {
-        const row = readCurrentCharacterStateCandidateRow(database, draftId)
-        return parseCharacterStateCandidateStore(row.candidates).relationPending.flatMap(candidate => pendingRelationCandidate(database, candidate) ?? [])
-      } catch {
-        return []
-      }
-    })
+    return database ? pendingRelationCandidates(database) : []
   }
 
   static readContinuityNodesForWriting(characterIds: readonly string[], db: BetterSqlite3.Database): ContinuityNode[] {
@@ -703,7 +707,7 @@ export class SummaryRepository {
       const row = readCurrentCharacterStateCandidateRow(db, request.draftId)
       const store = parseCharacterStateCandidateStore(row.candidates)
       const candidate = store.relationPending.find(item => item.candidateKey === request.candidateKey)
-      const current = candidate && pendingRelationCandidate(db, candidate)
+      const current = pendingRelationCandidates(db).find(item => item.candidateKey === request.candidateKey)
       if (!candidate || !current) throw new Error('FINALIZED_CHARACTER_STATE_CANDIDATE_NOT_FOUND')
       if (!isDeepStrictEqual(current.authorRelations, request.expectedAuthorRelations)) throw new Error('FINALIZED_CHARACTER_STATE_FIELD_CONFLICT')
       const adoption = request.decision === 'accept' ? adoptRelationCandidate(db, candidate, request.operationId, scope) : {}
