@@ -163,14 +163,13 @@ export function chapterThreadTasks(threads: readonly NarrativeThreadView[], chap
 }
 
 export type ChapterThreadPanelRow =
-  | ({ state: 'task' } & PendingThreadTask)
+  | ({ state: 'task' | 'left-out' } & PendingThreadTask)
   | { state: 'deferred'; thread: NarrativeThreadView; deferredTo: number }
 
 export interface ChapterThreadPanel {
   rows: ChapterThreadPanelRow[]
   canAdvance: NarrativeThreadView[]
   taskCount: number
-  leftOut: number
 }
 
 /**
@@ -179,7 +178,8 @@ export interface ChapterThreadPanel {
  */
 export function chapterThreadPanel(threads: readonly NarrativeThreadView[], chapterNumber: number,
   movedHere: ReadonlyMap<number, { to: number }>): ChapterThreadPanel {
-  const { tasks, leftOut } = chapterThreadTasks(threads, chapterNumber)
+  const { tasks } = chapterThreadTasks(threads, chapterNumber)
+  const taskIds = new Set(tasks.map(task => task.planId))
   const deferred: ChapterThreadPanelRow[] = []
   const canAdvance: NarrativeThreadView[] = []
   for (const thread of threads) {
@@ -188,10 +188,10 @@ export function chapterThreadPanel(threads: readonly NarrativeThreadView[], chap
     else canAdvance.push(thread)
   }
   return {
-    rows: [...pendingThreadTasks(threads, chapterNumber).map(task => ({ state: 'task' as const, ...task })), ...deferred],
+    rows: [...pendingThreadTasks(threads, chapterNumber)
+      .map(task => ({ state: taskIds.has(task.thread.id) ? 'task' as const : 'left-out' as const, ...task })), ...deferred],
     canAdvance,
     taskCount: tasks.length,
-    leftOut,
   }
 }
 

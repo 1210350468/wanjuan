@@ -327,12 +327,19 @@ describe('写前的线索：延后与指定本章推进', () => {
     expect(popover.getByRole('button', { name: '撤销' }).query()).toBeNull()
   })
 
-  it('超过 6 条时全部列出，写明另有几条本次不进任务，小字只数进任务的', async () => {
+  it('超过 6 条时全部列出，只有进任务的标任务，其余标本次不进任务并能延后，小字只数进任务的', async () => {
     threadViews = Array.from({ length: 8 }, (_, index) => threadView(index + 1, `线索${index + 1}`, 1, 2))
     await renderPopover()
     await act(async () => hint(6).click())
     await vi.waitFor(() => expect(document.querySelectorAll('.stage-write-thread')).toHaveLength(8))
-    await expect.element(popover.getByText('另有 2 条本次不进任务')).toBeVisible()
+    const leftOut = [...document.querySelectorAll('.stage-write-thread')]
+      .filter(row => row.textContent?.includes('本次不进任务'))
+      .map(row => row.querySelector('b')?.textContent)
+    expect(leftOut).toEqual(['线索7', '线索8'])
+    await expect.element(threadRow('线索1')).toHaveTextContent('逾期 3 章')
+
+    await act(async () => threadRow('线索8').getByRole('button', { name: '延后一章' }).click())
+    expect(threadCalls('db:narrative-thread-assignment-set')[0]![1]).toMatchObject({ planId: 8, chapterNumber: 6, kind: 'resolve' })
   })
 
   it('区间内的线索收在折叠区，设为本章推进后进任务，可撤销', async () => {

@@ -17,8 +17,9 @@ export default function WriteThreadTasks({ chapterNumber, threads }: WriteThread
 
   const statusOf = (row: ChapterThreadPanelRow) => {
     if (row.state === 'deferred') return text(`已延到第 ${row.deferredTo} 章`, `Moved to Ch. ${row.deferredTo}`)
-    if (row.schedule.kind === 'overdue') return text(`逾期 ${row.schedule.chaptersOverdue} 章`, `${row.schedule.chaptersOverdue} overdue`)
-    return row.schedule.kind === 'due' ? text('本章到期', 'Due now') : text('本章推进', 'This chapter')
+    const schedule = row.schedule.kind === 'overdue' ? text(`逾期 ${row.schedule.chaptersOverdue} 章`, `${row.schedule.chaptersOverdue} overdue`)
+      : row.schedule.kind === 'due' ? text('本章到期', 'Due now') : text('本章推进', 'This chapter')
+    return row.state === 'left-out' ? `${schedule} · ${text('本次不进任务', 'not in this run')}` : schedule
   }
 
   const actionsOf = (row: ChapterThreadPanelRow) => {
@@ -47,7 +48,6 @@ export default function WriteThreadTasks({ chapterNumber, threads }: WriteThread
           ))}
         </ul>
       )}
-      {panel.leftOut > 0 && <p className="stage-write-thread-note">{text(`另有 ${panel.leftOut} 条本次不进任务`, `${panel.leftOut} more stay out of this run`)}</p>}
       {failure && <p className="stage-write-error" role="alert">{failure}</p>}
       {panel.canAdvance.length > 0 && (
         <details className="stage-write-more">
