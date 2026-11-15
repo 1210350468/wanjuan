@@ -104,6 +104,18 @@ describe('后台阶段通知', () => {
     expect(win.focus).toHaveBeenCalledOnce()
   })
 
+  it('macOS 关掉窗口又重建后，点旧通知把新窗口带回前台', async () => {
+    const closed = new FakeWindow()
+    await notify(closed)
+    closed.isDestroyed.mockReturnValue(true)
+    const reopened = new FakeWindow()
+    reopened.minimized = true
+    mocks.windows = [reopened]
+    mocks.notifications[0].listeners.get('click')?.()
+    expect(reopened.restore).toHaveBeenCalledOnce()
+    expect(reopened.focus).toHaveBeenCalledOnce()
+  })
+
   it('Windows 横幅超时收进操作中心后，再点通知仍把窗口带回前台', async () => {
     const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
     Object.defineProperty(process, 'platform', { value: 'win32' })
