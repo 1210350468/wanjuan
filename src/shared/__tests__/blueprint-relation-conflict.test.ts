@@ -57,6 +57,15 @@ describe('蓝图关系与时间线相反', () => {
     expect(check(blueprint(12, '亲密同伴', { [field]: '两人解开误会，重归于好' }), [BROKEN])).toEqual([])
   })
 
+  it.each(['和解后的同伴', '化敌为友的盟友', '重归于好的知己'])('蓝图关系「%s」本身写了转折时不提示', (text) => {
+    expect(check(blueprint(12, text), [BROKEN])).toEqual([])
+  })
+
+  it('一个方向的提示写了转折，另一个方向的提示也不再报', () => {
+    const plan = blueprint(12, '和解后的同伴', { relationshipHints: [{ from: '林晚', to: '沈舟', relation: '和解后的同伴' }, { from: '沈舟', to: '林晚', relation: '挚友' }] })
+    expect(check(plan, [BROKEN])).toEqual([])
+  })
+
   it.each(['不再是亲密同伴', '普通同门', '假装亲密'])('蓝图关系「%s」认不出或带否定词时不提示', (text) => {
     expect(check(blueprint(12, text), [BROKEN])).toEqual([])
   })

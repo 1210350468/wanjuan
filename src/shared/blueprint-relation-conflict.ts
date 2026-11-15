@@ -73,9 +73,12 @@ export function findRelationReversals(blueprint: BlueprintForPreflight, continui
   const planText = [blueprint.purpose, blueprint.keyEvents, blueprint.suspenseHook, blueprint.notes, blueprint.userGuidance].join('\n')
   if (RELATION_TURN.test(planText)) return []
   const findings = new Map<string, ConsistencyFinding>()
-  for (const hint of relationshipFacts(blueprint.relationshipHints)) {
+  const hints = relationshipFacts(blueprint.relationshipHints)
+  const pairOf = (hint: { from: string; to: string }) => JSON.stringify([hint.from, hint.to].map(characterRosterIdentityKey).sort())
+  const turned = new Set(hints.filter(hint => RELATION_TURN.test(hint.relation)).map(pairOf))
+  for (const hint of hints) {
     const planned = relationPolarity(hint.relation)
-    if (!planned) continue
+    if (!planned || turned.has(pairOf(hint))) continue
     const names = new Set([hint.from, hint.to].map(characterRosterIdentityKey))
     const lines = continuity.relations.flatMap(pair => pair.lines)
       .filter(line => names.size === 2 && names.has(characterRosterIdentityKey(line.subjectName)) && names.has(characterRosterIdentityKey(line.targetName)))
