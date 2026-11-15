@@ -683,7 +683,7 @@ function ArchFileViewerSession({
 
       {recovery && <div className="px-3 py-2 text-xs space-y-2" aria-label={text('大纲恢复', 'Outline recovery')}>
         {recoveryTab?.planningSaveSnapshot?.status === 'saved' && <p>{text('本次恢复已保存，后续修改仅供复制。', 'This recovery is saved. Further edits can only be copied.')}</p>}
-        <p>{text('这是可编辑的恢复稿。保存只写入本地，不会调用模型。请用“## 第1章：标题”这样的章标题，保留连续完整章节。', 'Edit this recovery draft. Saving is local and does not call a model. Keep complete consecutive chapters with headings such as “## Chapter 1: Title”.')}</p>
+        <p>{text('这是可编辑的恢复稿，保存只写入本地，不调用模型。章标题用“## 第1章：标题”，保留连续完整的章节。', 'Edit this recovery draft; saving is local and calls no model. Use headings such as “## Chapter 1: Title” and keep complete consecutive chapters.')}</p>
         <label>{text('保存到第几章', 'Last complete chapter')} <input type="number" min={recovery.plotOutline?.range.from} max={recovery.plotOutline?.range.to} value={authorEnd} onChange={event => {
           const value = event.target.value
           authorEndRef.current = value; setAuthorEnd(value)

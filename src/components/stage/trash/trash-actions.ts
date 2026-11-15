@@ -42,7 +42,7 @@ export function restoredMessage(result: Restored, text: Text): string {
       return lines.join('\n')
     }
     case 'restored-as-history':
-      return text(`第 ${n} 章已经重写过，回收站里的版本作为旧版本放回了。想换回它，在「版本历史」里选中它，点「回退到此版本…」。`,
+      return text(`第 ${n} 章已重写过，回收站里的版本放回成了旧版本。要换回它，到「版本历史」选中它，点「回退到此版本…」。`,
         `Chapter ${n} was rewritten, so the version from the trash is back as an older version. To switch to it, select it in Version history and choose “Revert to this version…”.`)
     case 'reopened-as-draft':
       return result.created

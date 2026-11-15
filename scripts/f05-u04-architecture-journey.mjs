@@ -525,7 +525,7 @@ async function main() {
     await showRunHistory(page)
     const latestRun = historyRows(page).first()
     if (await latestRun.locator('.run-history-row').getAttribute('aria-expanded') !== 'true') await latestRun.locator('.run-history-row').click()
-    await latestRun.getByText('世界观生成期间故事前提、小说配置或模板已变化，本次结果已保留为候选且未写入正式世界观', { exact: false }).first()
+    await latestRun.getByText('本次结果已保留为候选，没写入正式世界观', { exact: false }).first()
       .waitFor({ state: 'visible' })
     pass('U04.A08-source-change', 'U04.A08', 'Changing premise while the worldbuilding run was streaming rejected the stale formal write and retained a candidate',
       { changedSource: 'coreOutline', formalUnchanged: true })

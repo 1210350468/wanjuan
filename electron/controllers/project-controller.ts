@@ -387,8 +387,8 @@ export function registerProjectController(options: ProjectControllerOptions = {}
         'First save and close the legacy app and any program that is syncing or editing this project.',
       ),
       detail: text(
-        '导入期间不要重新打开或修改旧项目。应用将创建独立的新项目副本；旧项目保留，此后两份项目的修改不会自动同步。',
-        'Do not reopen or change the legacy project during the import. The app creates an independent new copy; the legacy project is kept, and later changes to either copy do not sync.',
+        '导入期间不要打开或修改旧项目。导入会建一份独立的新副本，旧项目保留，之后两份的修改不会同步。',
+        'Do not open or change the legacy project during the import. The import creates an independent new copy; the legacy project is kept, and later changes to either do not sync.',
       ),
     })
     if (confirmation.response !== 1) return { state: 'cancelled' as const }

@@ -282,7 +282,7 @@ describe('retrieval model connection test', () => {
 
   it.each([
     ['en-US', 'returned an unusable result', /\p{Script=Han}|EMBEDDING_|Error:/u],
-    ['zh-CN', '检索模型返回的结果不合格', /EMBEDDING_|Error:/u],
+    ['zh-CN', '检索模型返回的结果不对', /EMBEDDING_|Error:/u],
   ])('explains an unusable embedding response in %s', async (locale, expected, forbidden) => {
     mocks.locale = locale
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 })))

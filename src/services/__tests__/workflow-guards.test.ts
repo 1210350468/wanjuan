@@ -100,7 +100,7 @@ describe('directory workflow guard', () => {
     {
       label: 'story premise',
       core: null,
-      expected: 'The story premise has not been generated',
+      expected: 'There is no story premise yet',
     },
     {
       label: 'character roster',

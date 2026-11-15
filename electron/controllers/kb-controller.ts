@@ -115,7 +115,7 @@ const REFERENCE_IMPORT_FAILURES: Readonly<Record<string, readonly [zhCN: string,
   PROJECT_NOT_OPEN: ['请先打开项目。', 'Open a project first.'],
   KNOWLEDGE_BASE_TEXT_EMPTY: ['资料内容是空的，没有可导入的文字。', 'The material is empty; there is no text to import.'],
   EMBEDDING_RESPONSE_INVALID: [
-    '检索模型返回的结果不合格（条数、维度或数值不对），本次没有写入。请检查检索模型的 Base URL，或换一个检索模型。',
+    '检索模型返回的结果不对（条数、维度或数值），没有写入。请检查检索模型的 Base URL，或换一个检索模型。',
     'The retrieval model returned an unusable result (wrong count, size, or values), so nothing was written. Check the retrieval model’s Base URL or choose another retrieval model.',
   ],
   EMBEDDING_SPACE_REINDEX_REQUIRED: [
@@ -126,8 +126,8 @@ const REFERENCE_IMPORT_FAILURES: Readonly<Record<string, readonly [zhCN: string,
   EMBEDDING_SPACE_UNREGISTERED_DATA: INDEX_DAMAGED,
   EMBEDDING_SPACE_BUSY: ['检索索引正在建立，请稍后再试。', 'The search index is being built. Try again in a moment.'],
   KNOWLEDGE_BASE_VOLUME_UNSUPPORTED: [
-    '资料没有收进知识库：作品文件夹所在的磁盘不支持知识库要用的文件操作，常见于 exFAT、FAT32 格式的移动硬盘和 U 盘。请退出书童，把整个作品文件夹移到 NTFS 格式的磁盘（Mac 上用 APFS 格式），打开新位置的作品后再导入。',
-    "The material was not added to the knowledge base: the drive holding this book's folder does not support a file operation the knowledge base needs. This is common on external drives and USB sticks formatted as exFAT or FAT32. Quit Pagekin, move the whole book folder to an NTFS drive (APFS on a Mac), open the book from its new location, then import again.",
+    '资料没有收进知识库：作品所在位置不支持知识库要用的硬链接（常见于 exFAT、FAT32 磁盘）。请退出书童，把作品文件夹移到本地 NTFS 磁盘（Mac 用 APFS），从新位置打开后再导入。',
+    "The material was not added to the knowledge base: this location does not support the hard links the knowledge base needs (common on exFAT and FAT32 drives). Quit Pagekin, move the book folder to a local NTFS drive (APFS on a Mac), open it from there, then import again.",
   ],
 }
 

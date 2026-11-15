@@ -1339,7 +1339,7 @@ describe('project close lifecycle', () => {
     })).resolves.toBe(false)
 
     expect(mocks.alertError).toHaveBeenCalledWith(
-      expect.stringContaining('请将整个项目文件夹移动到更靠近磁盘根目录的位置'),
+      expect.stringContaining('请把项目文件夹移到靠近磁盘根目录的位置'),
       expect.objectContaining({ title: '创建项目失败' }),
     )
   })

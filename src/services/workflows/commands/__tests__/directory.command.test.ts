@@ -1107,8 +1107,8 @@ describe('GenerateDirectoryCommand', () => {
   })
 
   it.each([
-    ['zh-CN', '已保存第 1–2 章完整蓝图。第 3–5 章的请求超出了模型能接受的长度，服务商拒绝了，这几章没有生成。'],
-    ['en-US', 'Saved complete blueprints for chapters 1–2. The request for chapters 3–5 was longer than the model accepts, so the provider rejected it and those chapters were not generated.'],
+    ['zh-CN', '已保存第 1–2 章完整蓝图。第 3–5 章的请求超出了模型能接受的长度，这几章没有生成。'],
+    ['en-US', 'Saved complete blueprints for chapters 1–2. The request for chapters 3–5 was longer than the model accepts, so those chapters were not generated.'],
   ] as const)('says which chapters were saved and which were not generated when a later split is rejected as too long (%s)', async (uiLocale, expected) => {
     stubIpcInvoke(successfulCommitHandler())
     let attempt = 0

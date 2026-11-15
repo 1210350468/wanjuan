@@ -88,11 +88,11 @@ const OCCUPIED_REASON: Record<Occupier, (title: string, verbZh: string, verbEn: 
     `The batch “${title}” is paused but still holds this chapter. Cancel the batch to ${verbEn} now; drafts already written are kept.`,
   ],
   'batch-shared': (title, verbZh, verbEn) => [
-    `批量创作「${title}」正在占用角色状态和章节要点，暂时不能${verbZh}这一章。等它结束或取消它就能${verbZh}，草稿不会丢。`,
+    `批量创作「${title}」占着角色状态和章节要点，暂时不能${verbZh}这一章。等它结束或取消它就能${verbZh}，草稿不会丢。`,
     `The batch “${title}” is using the character states and chapter notes, so you can’t ${verbEn} this chapter yet. Wait for it to finish or cancel it; drafts are kept.`,
   ],
   'paused-batch-shared': (title, verbZh, verbEn) => [
-    `批量创作「${title}」已暂停，但仍占用角色状态和章节要点，暂时不能${verbZh}这一章。取消它就能${verbZh}，草稿不会丢。`,
+    `批量创作「${title}」已暂停，但仍占着角色状态和章节要点，暂时不能${verbZh}这一章。取消它就能${verbZh}，草稿不会丢。`,
     `The batch “${title}” is paused but still holds the character states and chapter notes, so you can’t ${verbEn} this chapter yet. Cancel it to ${verbEn}; drafts are kept.`,
   ],
 }

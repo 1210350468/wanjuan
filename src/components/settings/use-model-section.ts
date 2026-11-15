@@ -21,7 +21,7 @@ async function confirmSaveWhileGenerating(modelId: string, defaultModelId: strin
   const names = using.map(run => `「${run.title}」`).join('、')
   const namesEn = using.map(run => `“${run.title}”`).join(', ')
   return confirm(text(
-    `当前有生成在用这个模型（${names}），保存后这次生成会在下一章停下，已生成的内容会保留。等它结束再保存就不受影响。`,
+    `当前有生成在用这个模型（${names}），保存后这次生成会在下一章停下，已生成的会保留。等它结束再保存就没事。`,
     `A generation is using this model (${namesEn}). If you save now, it stops before its next chapter; what it has generated is kept. Saving after it finishes avoids this.`,
   ), {
     title: text('这个模型正在生成', 'This model is generating'),

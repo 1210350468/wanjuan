@@ -1080,6 +1080,6 @@ describe('ImportRunOrchestrator failure copy follows the import run locale', () 
       .executeStage('run-1', 'global', 'test-runner', { cancelled: false }, callbacks)
       .catch((error: Error) => error)
 
-    expect((failure as Error).message).toBe('这次导入已由别的窗口接手，或长时间没有响应后已暂停，这个窗口不能再写入。请在导入对话框里继续这次导入。')
+    expect((failure as Error).message).toBe('这次导入已由别的窗口接手，或长时间没有响应已暂停，这个窗口不能再写入。请在导入对话框里继续。')
   })
 })

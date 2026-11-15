@@ -34,7 +34,7 @@ function InstallBlockedDialogs({ guard }: { guard: InstallGuard }) {
         onOpenChange={open => { if (!open) dismiss('workflow') }}
         title={text('创作任务尚未结束，暂不能更新', 'Creative tasks are not finished yet')}
         description={text(
-          `当前有 ${activeRunCount} 个创作任务仍在运行、暂停、等待继续或正在收尾，结果可能尚未完整写入作品。请先完成或取消这些任务，再重启更新。`,
+          `还有 ${activeRunCount} 个创作任务没结束，结果可能还没写完整。请先完成或取消它们，再重启更新。`,
           `${activeRunCount} creative task${activeRunCount === 1 ? ' is' : 's are'} still running, paused, waiting, or being finalized. Finish or cancel them before restarting to update.`,
         )}
         footer={<Button variant="primary" onClick={() => dismiss('workflow')}>{text('知道了，返回处理任务', 'Got it, return to tasks')}</Button>}

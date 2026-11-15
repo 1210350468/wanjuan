@@ -1113,7 +1113,7 @@ describe('蓝图阶段', () => {
     await act(async () => dialog.getByLabelText('蓝图起始章').fill('5'))
     await act(async () => dialog.getByLabelText('蓝图结束章').fill('7'))
     await act(async () => dialog.getByRole('button', { name: '开始生成' }).click())
-    await expect.element(dialog.getByRole('alert')).toHaveTextContent('「故事前提」尚未生成')
+    await expect.element(dialog.getByRole('alert')).toHaveTextContent('还没有「故事前提」')
     await expect.element(dialog.getByLabelText('蓝图起始章')).toHaveValue(5)
     await expect.element(dialog.getByLabelText('蓝图结束章')).toHaveValue(7)
   })

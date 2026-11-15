@@ -627,7 +627,7 @@ describe('写作此章弹层', () => {
   it('前置条件不满足时弹层打开并写明原因，不启动', async () => {
     await render(<WriteChapterPopover chapterNumber={7} blueprint={blueprintWritePrefill(BLUEPRINT)} label="写第 7 章" />)
     await act(async () => page.getByRole('button', { name: '写第 7 章' }).click())
-    await expect.element(page.getByRole('dialog', { name: '本次写作选项' }).getByRole('alert')).toHaveTextContent('第 7 章现在还不能写：AI 要接着前一章的定稿往下写。现在可以写第 5 章')
+    await expect.element(page.getByRole('dialog', { name: '本次写作选项' }).getByRole('alert')).toHaveTextContent('第 7 章现在还不能写。现在可以写第 5 章')
     expect(startWorkflow).not.toHaveBeenCalled()
   })
 
@@ -643,7 +643,7 @@ describe('写作此章弹层', () => {
 
     await act(async () => page.getByRole('button', { name: '写第 3 章' }).click())
     await expect.element(page.getByRole('dialog', { name: '本次写作选项' }).getByRole('alert'))
-      .toHaveTextContent('第 3 章现在还不能写：AI 要接着前一章的定稿往下写。现在可以写第 2、5 章，请从其中一章的蓝图进入。')
+      .toHaveTextContent('第 3 章现在还不能写。现在可以写第 2、5 章，从蓝图进入。')
     expect(startWorkflow).not.toHaveBeenCalled()
     await act(async () => page.getByRole('button', { name: '写第 2 章' }).click())
     await vi.waitFor(() => expect(startWorkflow).toHaveBeenCalledOnce())
@@ -662,7 +662,7 @@ describe('写作此章弹层', () => {
 
     await act(async () => page.getByRole('button', { name: '写第 4 章' }).click())
     await expect.element(page.getByRole('dialog', { name: '本次写作选项' }).getByRole('alert'))
-      .toHaveTextContent('第 4 章现在还不能写：AI 要接着前一章的定稿往下写。现在可以写第 3、13 章')
+      .toHaveTextContent('第 4 章现在还不能写。现在可以写第 3、13 章')
     expect(startWorkflow).not.toHaveBeenCalled()
     await act(async () => page.getByRole('button', { name: '重写第 3 章' }).click())
     await vi.waitFor(() => expect(startWorkflow).toHaveBeenCalledOnce())
@@ -687,7 +687,7 @@ describe('写作此章弹层', () => {
     await act(async () => popover.getByText('更多').click())
     await act(async () => popover.getByLabelText(/知识库检索关键词/).fill('列车时刻表'))
     await act(async () => page.getByRole('button', { name: '写第 7 章' }).click())
-    await expect.element(popover.getByRole('alert')).toHaveTextContent('第 7 章现在还不能写：AI 要接着前一章的定稿往下写。现在可以写第 5 章')
+    await expect.element(popover.getByRole('alert')).toHaveTextContent('第 7 章现在还不能写。现在可以写第 5 章')
     await expect.element(popover.getByLabelText(/作者微操指导/)).toHaveValue('被挡下前写的指导')
     await expect.element(popover.getByLabelText(/本次模型/)).toHaveValue('glm')
     await expect.element(popover.getByLabelText(/知识库检索关键词/)).toHaveValue('列车时刻表')

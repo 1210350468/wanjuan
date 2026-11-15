@@ -10,9 +10,9 @@ describe('localized application errors', () => {
     expect(appErrorMessage('en-US', { errorCode: 'PROJECT_NOT_OPEN' }))
       .toBe('Open a project first.')
     expect(appErrorMessage('zh-CN', { errorCode: 'PROJECT_ROOT_REQUIRED' }))
-      .toContain('请选择项目根目录')
+      .toContain('project.json 的小说文件夹')
     expect(appErrorMessage('en-US', { errorCode: 'PROJECT_ROOT_REQUIRED' }))
-      .toContain('Select the project root folder')
+      .toContain('Select the novel folder')
     expect(appErrorMessage('zh-CN', new Error('SOURCE_CHANGED_SINCE_PROBE')))
       .toContain('打开期间作品文件被其他程序改动')
   })
@@ -171,7 +171,7 @@ describe('cast, blueprint and draft errors from the main process (#474 B2)', () 
     // 可写 db 通道返回 { error: String(error) }。
     ['Error: DRAFT_FINALIZED_READ_ONLY', 'This chapter is finalized', '这一章已经定稿'],
     ['Error: CHARACTER_ROSTER_REVISION_STALE', 'The cast changed in the meantime', '角色名单在这期间被改动了'],
-    ['Error: CHARACTER_ROSTER_RELATIONSHIP_TARGET_UNKNOWN', 'must point to a character in the cast', '对象也必须是名单里已有的角色'],
+    ['Error: CHARACTER_ROSTER_RELATIONSHIP_TARGET_UNKNOWN', 'must be another character in the cast', '对象须是名单里的其他角色'],
     ["Error invoking remote method 'db:blueprint-character-sync-complete': Error: BLUEPRINT_CHARACTER_SYNC_ROSTER_NOT_READY", 'The cast needs repair first', '角色名单需要先修复'],
   ])('explains %s in the interface language without the code', (raw, english, chinese) => {
     expect(displayedErrorMessage('en-US', new Error(raw))).toContain(english)
@@ -185,7 +185,7 @@ describe('knowledge base and search index errors from the main process (#474 B3)
   it.each([
     // kb 通道的结果值：{ success: false, error: 码 }。
     ['KNOWLEDGE_BASE_COPY_CHANGED', 'Reopen the material', '请重新打开这份资料'],
-    ['EMBEDDING_RESPONSE_INVALID', 'returned an unusable result', '返回的结果不合格'],
+    ['EMBEDDING_RESPONSE_INVALID', 'returned an unusable result', '返回的结果不对'],
     // 检索与读取原样抛出：Electron 包上通道名与 "Error: "。
     ["Error invoking remote method 'kb:search': Error: EMBEDDING_SPACE_REGISTRY_INVALID", 'search index records of this book are damaged', '检索索引记录已损坏'],
     // vector-store 的 catch 曾用 String(error) 交出 "Error: 码"。

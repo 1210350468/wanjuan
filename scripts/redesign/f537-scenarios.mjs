@@ -173,7 +173,7 @@ async function stopAuthorInference(context) {
   await page.waitForTimeout(400)
   await shoot('f537-author-stop-card')
   assert.match(stepError, /这次导入的请求次数或运行时长已到上限，这一批没有发送/u, stepError)
-  assert.match(stepError, /原稿正文已经导入并保存，只是 AI 反推的设定、文风或蓝图没有做完。已导入的正文不受影响，可以在设定页和蓝图页手动补齐/u, stepError)
+  assert.match(stepError, /原稿正文已经导入并保存，只是 AI 反推的设定、文风或蓝图没有做完，可以在设定页和蓝图页手动补齐/u, stepError)
   assert.doesNotMatch(stepError, /重新开始/u, '作者原稿不指向重新开始')
   assert.doesNotMatch(stepError, /[A-Z]{3,}_[A-Z]/u, '运行卡片的说明不露错误码')
   return { stepError }

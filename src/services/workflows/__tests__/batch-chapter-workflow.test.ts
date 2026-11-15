@@ -474,8 +474,8 @@ describe('batch chapter workflow completion mode', () => {
   })
 
   it.each([
-    ['zh-CN', '定稿已提交、实体稿待发布：正文文件夹里这一章的文件已存在且内容不同（可能在应用外改过），已拒绝覆盖。请移走或改名这个文件后重试发布。'],
-    ['en-US', "Finalization was committed, but manuscript publication is still pending. The chapter's file in the manuscript folder already exists with different content (it may have been edited outside the app), so it was not overwritten. Move or rename that file, then retry publishing."],
+    ['zh-CN', '定稿已提交、实体稿待发布：正文文件夹里已有这一章的文件且内容不同（可能在应用外改过），没有覆盖。请移走或改名这个文件后重试发布。'],
+    ['en-US', "Finalization was committed, but manuscript publication is still pending. The manuscript folder already has a different file for this chapter (it may have been edited outside the app), so it was not overwritten. Move or rename that file, then retry publishing."],
   ] as const)('重试发布仍失败时按界面语言说明主进程的错误码（%s，#474）', async (locale, error) => {
     const root = { projectId: 'test-project', epoch: '原会话', rootActionId: '原预算根', runId: '原批次' }
     doubles.batch = { batchId: '原批次', modelId: '原模型', rootHandle: root, mode: 'auto_finalize', range: { startChapter: 1, endChapter: 1 },

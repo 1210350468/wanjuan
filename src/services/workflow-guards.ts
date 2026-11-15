@@ -130,8 +130,8 @@ export async function guardDirectoryGeneration(
       ok: false,
       message: localize(
         shown(),
-        '「故事前提」尚未生成，它是章节蓝图的基础。\n\n请先在「故事架构」中点击「AI 生成架构」，生成故事前提后再来生成章节蓝图。',
-        'The story premise has not been generated, and chapter blueprints depend on it.\n\nGenerate the story premise in Story Architecture before generating chapter blueprints.',
+        '还没有「故事前提」，章节蓝图要靠它。\n\n请先在「故事架构」点「AI 生成架构」生成故事前提。',
+        'There is no story premise yet, and chapter blueprints depend on it.\n\nGenerate it in Story Architecture first.',
       ),
       action: 'open-world-building',
     }
@@ -144,8 +144,8 @@ export async function guardDirectoryGeneration(
       ok: false,
       message: localize(
         shown(),
-        '角色卡不存在（数据库中没有角色记录）。\n\n请先在架构里生成角色名单（会同时建立角色卡），或手动添加角色。',
-        'No character cards exist (the database has no character records).\n\nGenerate the cast in the architecture (this creates the cards), or add characters manually.',
+        '角色卡不存在。\n\n请先在架构里生成角色名单，或手动添加角色。',
+        'No character cards exist.\n\nGenerate the cast in the architecture, or add characters manually.',
       ),
     }
   }
@@ -196,8 +196,8 @@ export async function guardChapterWriting(
       ok: false,
       message: localize(
         shown(),
-        '尚未生成章节蓝图（数据库为空）。\n\n请先在「章节蓝图」中点击「AI 生成蓝图」，让 AI 规划每章内容后，再回来写稿。',
-        'No chapter blueprints have been generated (the database is empty).\n\nGenerate chapter blueprints first, then return to draft the chapter.',
+        '还没有章节蓝图。\n\n请先在「章节蓝图」点「AI 生成蓝图」，再回来写稿。',
+        'No chapter blueprints have been generated.\n\nGenerate chapter blueprints first, then return to draft the chapter.',
       ),
       action: 'open-blueprint',
     }
@@ -210,8 +210,8 @@ export async function guardChapterWriting(
       ok: false,
       message: localize(
         shown(),
-        '角色卡不存在（数据库中没有角色记录）。\n\nAI 写稿需要角色状态作为上下文，请先在架构里生成角色名单，或手动添加角色。',
-        'No character cards exist (the database has no character records).\n\nAI drafting needs character state as context. Generate the cast in the architecture, or add characters manually.',
+        '角色卡不存在，AI 写稿要用角色状态。\n\n请先在架构里生成角色名单，或手动添加角色。',
+        'No character cards exist, and AI drafting needs character state.\n\nGenerate the cast in the architecture, or add characters manually.',
       ),
     }
   }
@@ -225,7 +225,7 @@ export async function guardChapterWriting(
         ok: false,
         message: localize(
           shown(),
-          `第 ${prevChapter} 章尚未定稿，AI 读不到它的结尾和要点。\n\n请在「正文」打开第 ${prevChapter} 章，定稿后再写这一章。`,
+          `第 ${prevChapter} 章尚未定稿，AI 读不到它的结尾和要点。\n\n请在「正文」打开第 ${prevChapter} 章定稿，再写这一章。`,
           `Chapter ${prevChapter} isn't finalized, so AI can't read its ending and notes.\n\nOpen Chapter ${prevChapter} in Manuscript and finalize it, then write this chapter.`,
         ),
       }
@@ -240,7 +240,7 @@ export async function guardChapterWriting(
         ok: false,
         message: localize(
           shown(),
-          `第 ${prevChapter} 章已定稿，但定稿后处理未完成：\n${failedLabels.map(f => `• ${f}`).join('\n')}\n\n请在「正文」打开第 ${prevChapter} 章，到「定稿后处理」处理失败的步骤。`,
+          `第 ${prevChapter} 章定稿后处理未完成：\n${failedLabels.map(f => `• ${f}`).join('\n')}\n\n请在「正文」打开第 ${prevChapter} 章，处理「定稿后处理」里失败的步骤。`,
           `Chapter ${prevChapter} is finalized, but some steps after finalization failed:\n${failedLabels.map(f => `• ${f}`).join('\n')}\n\nOpen Chapter ${prevChapter} in Manuscript and fix the failed steps under After finalization.`,
         ),
       }
@@ -279,8 +279,8 @@ export async function guardCharacterRegeneration(
       ok: false,
       message: localize(
         useLocaleStore.getState().locale,
-        '已有章节蓝图，角色卡不可重新生成。\n\n蓝图生成已依赖角色数据，重新生成角色卡会导致现有蓝图和已写章节全部失效。\n如需修改角色，请手动编辑现有角色卡。',
-        'Character cards cannot be regenerated while chapter blueprints exist.\n\nThe blueprints already depend on character data. Regenerating the cards would invalidate existing blueprints and drafted chapters. Edit the existing character cards manually instead.',
+        '已有章节蓝图，不能重新生成角色卡，否则现有蓝图和已写章节都会失效。\n\n要改角色，请直接编辑角色卡。',
+        'Character cards cannot be regenerated while chapter blueprints exist, because that would invalidate existing blueprints and drafted chapters.\n\nEdit the character cards directly instead.',
       ),
     }
   }

@@ -440,8 +440,8 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
           const remaining = `${prefixEnd + 1}–${endChapter}`
           throw new DirectoryPartialCommitError(receipt, { startChapter: prefixEnd + 1, endChapter }, batchResult.failure, batchResult.failure.terminal
             ? workflowUiText(context,
-              `已保存第 ${startChapter}–${prefixEnd} 章完整蓝图。第 ${remaining} 章的请求超出了模型能接受的长度，服务商拒绝了，这几章没有生成。请换用上下文更长的模型、调低最大输出 Tokens，或精简要求后再生成这几章。原运行的候选与失败原因已保留。`,
-              `Saved complete blueprints for chapters ${startChapter}–${prefixEnd}. The request for chapters ${remaining} was longer than the model accepts, so the provider rejected it and those chapters were not generated. Switch to a model with a longer context, lower Max output tokens, or shorten the request, then generate those chapters again. The original run retains its candidates and failure reason.`)
+              `已保存第 ${startChapter}–${prefixEnd} 章完整蓝图。第 ${remaining} 章的请求超出了模型能接受的长度，这几章没有生成。请换用上下文更长的模型、调低最大输出 Tokens 或精简要求，再生成这几章。`,
+              `Saved complete blueprints for chapters ${startChapter}–${prefixEnd}. The request for chapters ${remaining} was longer than the model accepts, so those chapters were not generated. Switch to a model with a longer context, lower Max output tokens, or shorten the request, then generate them again.`)
             : workflowUiText(context,
               `已保存第 ${startChapter}–${prefixEnd} 章完整蓝图；第 ${remaining} 章未完成。原运行的候选与失败原因已保留。`,
               `Saved complete blueprints for chapters ${startChapter}–${prefixEnd}; chapters ${remaining} remain incomplete. The original run retains its candidates and failure reason.`))

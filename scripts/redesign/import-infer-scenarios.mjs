@@ -239,7 +239,7 @@ export const IMPORT_INFER_SCENARIOS = {
     const diagnostic = await logLine.innerText()
     assert.match(diagnostic, /周探长→白先生（暗中收钱）/u, '日志写明丢了哪条关系')
     assert.match(diagnostic, /不是你的设置/u, '日志说明这是内部限制')
-    assert.match(diagnostic, /「角色名单」里手动补上/u, '日志给出接下来能做的事')
+    assert.match(diagnostic, /「角色名单」手动补上/u, '日志给出接下来能做的事')
     await settle(page)
     await shoot('import-infer-dangling-log')
 

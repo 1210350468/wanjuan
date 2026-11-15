@@ -237,8 +237,8 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
       const dropped = droppedRelationships.map(item => `${item.source}→${item.target}（${item.relation}）`).join('、')
       const droppedEn = droppedRelationships.map(item => `${item.source}→${item.target} (${item.relation})`).join(', ')
       callbacks.log(text(
-        `已丢弃 ${droppedRelationships.length} 条关系，关系对象没有角色卡：${dropped}。这是导入推演的内部限制（最多 ${MAX_IMPORT_INFERENCE_CHARACTER_CARDS} 张角色卡，只补卡一次），不是你的设置。导入完成后可以在「角色名单」里手动补上这些角色和关系。`,
-        `Dropped ${droppedRelationships.length} relationship(s) whose target has no character card: ${droppedEn}. This is an internal import-inference limit (at most ${MAX_IMPORT_INFERENCE_CHARACTER_CARDS} character cards and one card-recovery request), not one of your settings. After the import, you can add these characters and relationships on the Cast page.`,
+        `已丢弃 ${droppedRelationships.length} 条关系（对象没有角色卡）：${dropped}。这是导入推演的上限（最多 ${MAX_IMPORT_INFERENCE_CHARACTER_CARDS} 张角色卡），不是你的设置；导入后可在「角色名单」手动补上。`,
+        `Dropped ${droppedRelationships.length} relationship(s) whose target has no character card: ${droppedEn}. This is an import-inference limit (at most ${MAX_IMPORT_INFERENCE_CHARACTER_CARDS} character cards), not one of your settings; you can add them on the Cast page after the import.`,
       ))
     }
     return result
@@ -485,8 +485,8 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     if (rawResult === undefined) {
       await this.discardRejectedImportOutput(callbacks)
       throw new Error(text(
-        '已导入的内容都已保存，只是 AI 推演结果连续两次格式有误，没有写入。在导入对话框里点「继续导入」重试。',
-        'Everything already imported is saved, but the AI inference came back malformed twice and was not written. Choose Continue import in the import dialog to try again.',
+        '已导入的内容都已保存，只是 AI 推演结果两次格式都不对，没有写入。在导入对话框里点「继续导入」重试。',
+        'Everything imported is saved, but the AI inference was malformed twice and was not written. Choose Continue import in the import dialog to try again.',
       ))
     }
     this.assertNotCancelled(context)
@@ -627,7 +627,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     if (commitReceipt.mode === 'fill-empty') {
       const suggestionCount = commitReceipt.suggestions?.length ?? 0
       callbacks.log(text(
-        `空白的设定与架构已补齐，已有内容没有改动；${suggestionCount} 条与现有内容不同的反推结果放进了建议，导入完成后可以在这张运行卡片里采用。角色以提议形式保存，等你采用。`,
+        `空白的设定与架构已补齐，已有内容没改；${suggestionCount} 条与现有内容不同的反推结果放进了建议，导入后在这张卡片里采用。角色存为提议，等你采用。`,
         `Empty settings and architecture were filled; existing content was left unchanged. ${suggestionCount} inferred ${suggestionCount === 1 ? 'value differs' : 'values differ'} from what you wrote and ${suggestionCount === 1 ? 'is kept as a suggestion' : 'are kept as suggestions'} you can adopt on this run card once the import finishes. Characters are saved as proposals for you to adopt.`,
       ))
     } else if (commitReceipt.characterProposal) {
