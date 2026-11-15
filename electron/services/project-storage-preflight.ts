@@ -40,8 +40,8 @@ export class ProjectStoragePreflightError extends Error {
   ) {
     super(
       storage === 'project'
-        ? `项目路径过深，无法安全打开项目数据库。请将整个项目文件夹移动到更靠近磁盘根目录的位置（例如 D:\\Novels），并将完整项目路径控制在 ${maxProjectRootLength} 个字符以内。`
-        : `项目路径过深，知识库暂不可用，但项目内容仍可打开和导出。请将整个项目文件夹移动到更靠近磁盘根目录的位置（例如 D:\\Novels），并将完整项目路径控制在 ${maxProjectRootLength} 个字符以内。`,
+        ? `项目路径过深，打不开项目数据库。请把项目文件夹移到靠近磁盘根目录处（例如 D:\\Novels），路径不超过 ${maxProjectRootLength} 个字符。`
+        : `项目路径过深，知识库不可用，项目内容仍可打开和导出。请把项目文件夹移到靠近磁盘根目录处（例如 D:\\Novels），路径不超过 ${maxProjectRootLength} 个字符。`,
     )
     this.name = 'ProjectStoragePreflightError'
   }

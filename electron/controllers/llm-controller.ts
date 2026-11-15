@@ -130,8 +130,8 @@ function connectionTestFailure(failure: unknown): string {
   if (detail?.code === 'EMBEDDING_OLLAMA_NATIVE_URL') {
     return mainText(
       app.getLocale(),
-      `这是 Ollama 原生的 /api 地址，本应用使用 OpenAI 兼容接口。请把 Base URL 改为 ${String(detail.suggestedBaseUrl)}。`,
-      `This is Ollama’s native /api address, but the app uses the OpenAI-compatible API. Change the Base URL to ${String(detail.suggestedBaseUrl)}.`,
+      `这是 Ollama 原生的 /api 地址。请把 Base URL 改为 ${String(detail.suggestedBaseUrl)}。`,
+      `This is Ollama’s native /api address. Change the Base URL to ${String(detail.suggestedBaseUrl)}.`,
     )
   }
   return knownAppErrorMessage(getMainLocale(app.getLocale()), failure) ?? String(failure)
@@ -352,8 +352,8 @@ export function registerLLMController() {
           return {
             success: false,
             error: mainText(app.getLocale(),
-              'Anthropic 协议没有嵌入端点，无法测试向量连接。请改用 OpenAI 兼容或 Gemini 协议的向量模型。',
-              'The Anthropic protocol has no embedding endpoint, so an embedding connection test is impossible. Use an OpenAI-compatible or Gemini embedding model instead.'),
+              'Anthropic 协议没有向量接口，测不了向量连接。请改用 OpenAI 兼容或 Gemini 协议的向量模型。',
+              'The Anthropic protocol has no embedding endpoint, so the embedding connection cannot be tested. Use an OpenAI-compatible or Gemini embedding model.'),
           }
         }
         const { generateEmbeddings } = await import('../embedding')

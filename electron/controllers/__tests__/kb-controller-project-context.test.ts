@@ -503,7 +503,7 @@ describe('knowledge-base controller project context guard', () => {
 describe('reference import failures', () => {
   it.each([
     ['en-US', 'EMBEDDING_RESPONSE_INVALID', 'returned an unusable result'],
-    ['zh-CN', 'EMBEDDING_RESPONSE_INVALID', '返回的结果不合格'],
+    ['zh-CN', 'EMBEDDING_RESPONSE_INVALID', '返回的结果不对'],
     ['en-US', 'KNOWLEDGE_BASE_TEXT_EMPTY', 'The material is empty'],
     ['zh-CN', 'EMBEDDING_SPACE_REINDEX_REQUIRED', '检查并重建索引'],
   ])('explains %s %s in the run language', async (locale, code, expected) => {

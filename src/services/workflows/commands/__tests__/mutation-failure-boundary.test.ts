@@ -374,7 +374,7 @@ describe('workflow mutation failure boundaries', () => {
       step: {},
       context: context(),
       callbacks: callbacks(),
-    })).rejects.toThrow('定稿已提交、实体稿待发布：正文文件夹里这一章的文件已存在且内容不同')
+    })).rejects.toThrow('定稿已提交、实体稿待发布：正文文件夹里已有这一章的文件且内容不同')
     expect(finalizationClient.commitFinalizationSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({ content: '编辑器冻结正文', contentRevision: 8 }),
     )
