@@ -484,12 +484,12 @@ describe('CodeMirror editor AI generation boundary', () => {
     expect(deliveredRuns()).not.toContain('run-2')
   })
 
-  it('断网时气泡说连不上模型服务，不露出错误码', async () => {
+  it('断网或回复中途断开时气泡说明原因，不露出错误码', async () => {
     failureCode = 'NETWORK_ERROR'
     await act(async () => root.render(<CodeMirrorEditor content="原文段落" mode="prose" />))
     await act(async () => page.getByText('原文段落').click({ clickCount: 3 }))
     await act(async () => page.getByRole('button', { name: '润色' }).click())
-    await expect.element(page.getByText(/连不上模型服务/)).toBeVisible()
+    await expect.element(page.getByText('没连上模型服务，或回复中途断了。请检查网络或代理后重试。')).toBeVisible()
     expect(page.getByText(/NETWORK_ERROR/).elements()).toHaveLength(0)
   })
 
