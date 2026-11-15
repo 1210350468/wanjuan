@@ -440,7 +440,9 @@ function commitDerivedRelations(db: BetterSqlite3.Database, context: FinalizedCh
       .filter(node => node.aspect === 'relation' && node.relationshipId === series)
     const [previous] = latestNodesBefore(seriesNodes, source.chapterNumber + 1).relations.flatMap(pair => pair.lines)
     const unchanged = previous?.value === change.relation
-    const rerun = unchanged && previous.provenance.kind === 'derived' && previous.provenance.source.finalizationId === source.finalizationId
+    const ownLatest = seriesNodes.filter(node => node.provenance.kind === 'derived' && node.provenance.source.finalizationId === source.finalizationId)
+      .sort((left, right) => left.seq - right.seq).at(-1)
+    const rerun = ownLatest?.value === change.relation
     const authorAtExtraction = context.authorRelations?.filter(line => unorderedPairKey(line.sourceId, line.targetId) === unorderedPairKey(change.sourceId, change.targetId))
     const authorLinesAtExtraction = authorAtExtraction?.map(line => JSON.stringify([line.sourceId, line.targetId, line.relation])).sort()
     const matchesAuthor = !!authorAtExtraction?.some(line => line.relation === change.relation)

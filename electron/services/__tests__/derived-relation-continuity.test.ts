@@ -619,6 +619,18 @@ describe('定稿后自动记录人物关系变化', () => {
     expect(pending()).toEqual([])
   })
 
+  it('后续章重述同样的关系之后同一份定稿重跑：不重复记节点', () => {
+    openProject()
+    commitModelOutput(finalizeNew(3, '第三章：林岚与沈砚结为盟友。'), { updates: [], relations: [relationChange('盟友', '结为盟友')] })
+    const seven = finalizeNew(7, '第七章：两人仍是盟友。')
+    const restated = { updates: [], relations: [relationChange('盟友', '仍是盟友')] }
+    commitModelOutput(seven, restated)
+    const before = eventCount()
+
+    commitModelOutput(seven, restated)
+    expect(eventCount()).toBe(before)
+  })
+
   it('写第 N 章时看不到第 N 章的派生关系，写第 N+1 章时看得到', () => {
     openProject()
     const draftId = finalizeNew(8, CHAPTER_EIGHT)
@@ -895,6 +907,16 @@ describe('待确认项和写稿提示跟着作者的决定走', () => {
     commitModelOutput(finalizeNew(9, `第九章：${quote}，一言不发。`), output(relationChange('恩断义绝', quote)))
 
     expect(await promptLines(10)).toEqual([AUTHOR_LINE])
+  })
+
+  it('定稿重述作者设定之后作者手改了设定：下一章的提示只有新设定，没有待作者裁定，也没有建议', async () => {
+    openProject()
+    authorRelation('师徒')
+    commitModelOutput(finalizeNew(8, CHAPTER_EIGHT), output(relationChange('师徒', BREAK_UP)))
+    reviseAuthorRelation('同门')
+
+    expect(await promptLines(9)).toEqual(['作者设定（自第9章起）与沈砚的关系：同门'])
+    expect(pending()).toEqual([])
   })
 
   it('后续章重述同样的关系：提示里的章号和原文仍是关系变成这样的那一章', async () => {
