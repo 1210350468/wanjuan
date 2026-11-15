@@ -1458,6 +1458,15 @@ describe('AI 检查（蓝图正文对照时间线）', () => {
     expect(document.body.textContent).not.toContain('没发现和时间线矛盾的地方')
   })
 
+  it('一部分结论被丢掉：照常列出矛盾的章，并说明另有几条没有显示', async () => {
+    const shown = checked([finding(3, '第 3 章同样写成同伴。')])
+    read = { ...shown, result: { ...shown.result, droppedFindings: 1 } }
+    await renderPage(2)
+    await check()
+    await expect.element(page.getByText('AI 检查到第 3 章，这些章和时间线矛盾。')).toBeVisible()
+    await expect.element(page.getByText('另有 1 条结论的依据不成立，没有显示。')).toBeVisible()
+  })
+
   it('结果读不出来：说明蓝图没动，不显示结论', async () => {
     read = { attemptCount: 1 }
     await renderPage(2)

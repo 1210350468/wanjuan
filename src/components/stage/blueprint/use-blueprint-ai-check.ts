@@ -211,7 +211,8 @@ export function useBlueprintAiCheck(projectKey: string, blueprints: readonly Cha
   return {
     status, hasTimeline, busy, findings, chapterFindings, exempt, undo,
     checkedThroughChapter: report?.result.checkedThroughChapter ?? null,
-    droppedWhenQuiet: quiet ? report.result.droppedFindings : null,
+    quiet,
+    droppedFindings: report && !stale ? report.result.droppedFindings : 0,
     exempted: (chapterNumber: number | undefined) => exempted && exempted.finding.chapterNumber === chapterNumber && isProjectSessionCurrent(exempted.session) ? exempted : null,
     clearExempted: useCallback(() => setExempted(null), []),
     run,
