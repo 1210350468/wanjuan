@@ -10,6 +10,7 @@ import { buildGenerationSourceBinding, rebuildGenerationSourceBinding } from '..
 import { generationOutputContract } from '../../../src/shared/generation-owner-contract'
 import { getProjectDb } from '../../database'
 import { FinalizationRepository } from '../../repositories/finalization-repository'
+import { deleteCharacterRelationship } from '../../repositories/character-continuity-repository'
 import { textHash } from '../../repositories/generation-run-repository'
 import type { ModelProfile } from '../../../src/shared/ipc-channels'
 import type { GenerationRunServiceDependencies } from '../generation-run-service'
@@ -153,6 +154,24 @@ it('建议生成后作者改过这章蓝图：不写入，这条作废', async (
   expect(f.decide(card!.suggestionId, 'accept')).toEqual({ status: 'stale' })
   expect(f.keyEvents()).toBe('作者自己改的')
   expect(f.list()!.suggestions[0]!.status).toBe('stale')
+})
+
+it('建议生成后作者从这章起删了依据的关系：不写入，这条作废', async () => {
+  const f = fixture()
+  await f.check()
+  const [card] = f.list()!.suggestions
+  f.db.transaction(() => deleteCharacterRelationship(f.db, { relationshipId: '关系1', sourceId: '甲', sourceName: '林岚', targetId: '乙', targetName: '沈舟' }, '操作2', 2))()
+  expect(f.decide(card!.suggestionId, 'accept')).toEqual({ status: 'stale' })
+  expect(f.keyEvents()).toBe(ORIGINAL)
+})
+
+it('作者在依据生效之后的章才改关系：依据在这章仍生效，照常接受', async () => {
+  const f = fixture()
+  await f.check()
+  const [card] = f.list()!.suggestions
+  f.db.transaction(() => deleteCharacterRelationship(f.db, { relationshipId: '关系1', sourceId: '甲', sourceName: '林岚', targetId: '乙', targetName: '沈舟' }, '操作2', 3))()
+  expect(f.decide(card!.suggestionId, 'accept')).toEqual({ status: 'accepted' })
+  expect(f.keyEvents()).toBe(FIXED)
 })
 
 it('不用：蓝图不变；再检查一次是新的一条，不把不用的那条改回待处理', async () => {
