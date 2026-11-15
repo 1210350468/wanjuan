@@ -5,7 +5,7 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, it } from 'vitest'
-import { changedFiles, fetchRoute, filesContaining, fileStamps, guardFetch, realModelProfiles, redactSecret, removeModelConfigs, removePath,
+import { changedFiles, fetchRoute, filesContaining, fileStamps, guardFetch, REAL_MODEL_ENV, realModelProfiles, redactSecret, removeModelConfigs, removePath,
   summarizeModelRequests }
   from '../real-model.mjs'
 
@@ -49,6 +49,20 @@ it('两个档案都指向硅基流动，Key 只出现在 apiKey 字段', () => {
     assert.equal(JSON.stringify({ ...profile, apiKey: '' }).includes('sk-test-secret'), false)
   }
   assert.deepEqual([profiles.generation.purposes, profiles.embedding.purposes], [['generation'], ['embedding']])
+})
+
+it('生成模型默认 DeepSeek V4.1 Flash，设了环境变量就用它指定的模型，检索模型不变', () => {
+  const previous = process.env[REAL_MODEL_ENV]
+  try {
+    delete process.env[REAL_MODEL_ENV]
+    assert.equal(realModelProfiles('sk-test-secret').generation.modelName, 'deepseek-ai/DeepSeek-V4.1-Flash')
+    process.env[REAL_MODEL_ENV] = ' Qwen/Qwen3-8B '
+    const profiles = realModelProfiles('sk-test-secret')
+    assert.deepEqual([profiles.generation.modelName, profiles.embedding.modelName], ['Qwen/Qwen3-8B', 'BAAI/bge-m3'])
+  } finally {
+    if (previous === undefined) delete process.env[REAL_MODEL_ENV]
+    else process.env[REAL_MODEL_ENV] = previous
+  }
 })
 
 it('逐字节找出含密钥的文件，空密钥直接报错', () => {

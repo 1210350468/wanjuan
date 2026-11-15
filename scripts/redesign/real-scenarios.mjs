@@ -252,8 +252,8 @@ async function postProcessRecord(context, chapterNumber) {
 }
 
 /** 重启后重新进入作品：重新装会话记录，从书房或落点打开，等流程脊出现。 */
-async function restartAndOpen(context) {
-  await context.restart()
+async function restartAndOpen(context, { killed = false } = {}) {
+  await context.restart({ killed })
   await trackOpenedSession(context.app)
   await stage.openAfterRestart(context.page, BOOK)
   await stage.chapterList(context.page).or(stage.stageButton(context.page, '正文')).first().waitFor({ state: 'visible', timeout: 60_000 })
@@ -367,16 +367,16 @@ export const REAL_SCENARIOS = {
     await shoot('real-gap-ch4-written')
 
     await blueprint.open(page)
-    const gap = page.locator('.pi-notice').filter({ hasText: '第 2 章的正文已删除' })
+    const gap = page.locator('.pi-notice').filter({ hasText: '第 2 章已删除，正文在回收站里' })
     await gap.waitFor({ state: 'visible' })
     await blueprint.planItem(page, 2).click()
     await blueprint.titleInput(page).fill(`${stageChapterTitle(2)}（重写）`)
-    await gap.getByText('先保存第 2 章蓝图，再写这一章。').waitFor({ state: 'visible' })
+    await gap.getByText('后面的章节照常可写。点「恢复」放回这一章。', { exact: true }).waitFor({ state: 'visible' })
     measured.unsavedNotice = await gap.innerText()
-    assert.equal(await gap.getByRole('button', { name: '写第 2 章', exact: true }).count(), 0, '蓝图未保存时缺口提示里没有写作入口')
+    assert.equal(await gap.getByRole('button', { name: '重写第 2 章', exact: true }).count(), 0, '蓝图未保存时缺口提示里没有写作入口')
     await shoot('real-gap-unsaved-blueprint')
     await blueprint.card(page).getByRole('button', { name: '保存此章' }).click()
-    const writeGap = gap.getByRole('button', { name: '写第 2 章', exact: true })
+    const writeGap = gap.getByRole('button', { name: '重写第 2 章', exact: true })
     await writeGap.waitFor({ state: 'visible' })
     measured.savedNotice = await gap.innerText()
     // 缺口章的写作入口把作者带到第 2 章的单章视图，由那里的写作按钮接手。
@@ -392,14 +392,14 @@ export const REAL_SCENARIOS = {
     await shoot('real-gap-ch2-rewritten')
     measured.chapter2Finalize = await finalizeAndPostProcess(page, 2)
     await blueprint.open(page)
-    measured.gapNoticeAfterFinalize = await page.locator('.pi-notice').filter({ hasText: '第 2 章的正文已删除' }).count()
+    measured.gapNoticeAfterFinalize = await page.locator('.pi-notice').filter({ hasText: '第 2 章已删除' }).count()
     assert.equal(measured.gapNoticeAfterFinalize, 0, '第 2 章重写定稿后缺口提示消失')
     await openChapter(page, 2)
     await chapterView.postProcess(page).waitFor({ state: 'visible' })
     return { ...measured, confirmations }
   } },
 
-  /** #582：批量写第 3、4 章，第 3 章写完后暂停（暂停中点定稿立即提示还不能定稿）；取消后批次可续，作者定稿第 3 章后批次列为来源已变化、不能继续，第 3 章可以重新打开；再重启仍不能继续。 */
+  /** #582：批量写第 3、4 章，第 3 章写完后暂停（暂停中点定稿立即提示还不能定稿）；这时应用被关掉，重启后批次可续；作者定稿第 3 章后这一批不再列出，第 3 章可以重新打开；再重启仍不列出。 */
   'real-batch': { real: true, setup: context => seedBook(context, { finalized: [1, 2] }), run: async context => {
     const { shoot } = context
     let { page } = context
@@ -438,12 +438,9 @@ export const REAL_SCENARIOS = {
     assert.equal(measured.finalizeWhilePaused.dialogs, 0, '批次占着本章时不打开定稿确认框')
     assert.equal(measured.finalizeWhilePaused.finalizedInDb, false, '批次暂停时第 3 章不会被定稿')
 
-    // 暂停中的批次挡着退出（「创作任务仍在运行」），作者能走的路是在运行侧页取消它；取消后批次列为可恢复，这时定稿第 3 章（#582 的情形）。
-    await runSheet.openFromPalette(page)
-    const batchTitle = (await runSheet.activeTitles(page)).find(title => title.startsWith('批量草稿待审'))
-    assert.ok(batchTitle, `运行侧页里有这一批：${await runSheetText(page)}`)
-    await runSheet.sheet(page).getByRole('button', { name: `取消「${batchTitle}」` }).click()
-    await page.waitForFunction(() => !document.querySelector('.stage-capsule:not([data-tone="ok"])'), null, { timeout: 60_000 })
+    // #582 的情形是批次中断后作者定稿写好的一章。取消的批次不能再续（#568），所以这里让应用在暂停时被关掉：重启后批次列为可恢复。
+    await restartAndOpen(context, { killed: true })
+    page = context.page
     measured.recoveryBeforeFinalize = await batchRecovery(page)
     assert.equal(measured.recoveryBeforeFinalize.continueEnabled, true, '未定稿任何章的批次照旧可续')
     await openChapter(page, 3)

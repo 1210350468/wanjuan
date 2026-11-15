@@ -6,14 +6,16 @@ import path from 'node:path'
 export const REAL_KEY_ENV = 'SILICONFLOW_API_KEY'
 export const REAL_ORIGIN = 'https://api.siliconflow.cn'
 const REAL_BASE_URL = `${REAL_ORIGIN}/v1`
-export const REAL_GENERATION_MODEL = 'deepseek-ai/DeepSeek-V4-Flash'
+export const REAL_GENERATION_MODEL = 'deepseek-ai/DeepSeek-V4.1-Flash'
+/** 换用硅基流动上的另一个生成模型时设这个环境变量，填模型名。 */
+export const REAL_MODEL_ENV = 'SILICONFLOW_GENERATION_MODEL'
 export const REAL_EMBEDDING_MODEL = 'BAAI/bge-m3'
 
 /** 与设置页新建的硅基流动模型同形：生成模型按预设的输出上限，检索模型用预设的 bge-m3 与默认切块。 */
-export function realModelProfiles(apiKey) {
+export function realModelProfiles(apiKey, generationModel = process.env[REAL_MODEL_ENV]?.trim() || REAL_GENERATION_MODEL) {
   const common = { provider: 'siliconflow', protocol: 'openai', baseUrl: REAL_BASE_URL, apiKey, temperature: 0.7 }
   return {
-    generation: { ...common, id: 'realtest-generation', name: '真实测试生成模型', modelName: REAL_GENERATION_MODEL,
+    generation: { ...common, id: 'realtest-generation', name: '真实测试生成模型', modelName: generationModel,
       maxTokens: 16_384, purposes: ['generation'], reasoningOverride: 'auto' },
     embedding: { ...common, id: 'realtest-embedding', name: '真实测试检索模型', modelName: REAL_EMBEDDING_MODEL,
       maxTokens: 0, purposes: ['embedding'], embeddingOptions: { chunkSize: 500, chunkOverlap: 50, batchSize: 50 } },

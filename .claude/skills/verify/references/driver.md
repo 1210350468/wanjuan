@@ -4,7 +4,7 @@
 
 驱动脚本是 `scripts/redesign/drive.mjs`。它用 Playwright 的 `_electron` 启动当前工作树的构建产物（`electron .`），每个会话（一次冷启动）一个全新的隔离目录，模型调用全部走本机假服务，不调用真实模型。单跑一个场景就是只含这个场景的会话。
 
-例外是 `--real-model`：只用于 `real-*` 场景，应用的生成与嵌入请求发往硅基流动，凭据从环境变量 `SILICONFLOW_API_KEY` 读，见 `scripts/redesign/real-model.mjs`。
+例外是 `--real-model`：只用于 `real-*` 场景，应用的生成与嵌入请求发往硅基流动，凭据从环境变量 `SILICONFLOW_API_KEY` 读。生成模型默认 `deepseek-ai/DeepSeek-V4.1-Flash`，设环境变量 `SILICONFLOW_GENERATION_MODEL` 可换成别的模型名。见 `scripts/redesign/real-model.mjs`。
 
 应用窗口不出现在屏幕上。驱动用 `electron -r scripts/redesign/offscreen-window.cjs` 在应用主进程脚本之前挂上 `browser-window-created` 监听：窗口一创建就移到所有显示器右侧之外，去掉任务栏按钮，设为不可激活并交还焦点，不打扰正在用电脑的人。截图走页面视口，与窗口位置无关；页面焦点由 Playwright 的焦点模拟提供，`document.hasFocus()` 仍为 true。每次截图前断言 `document.visibilityState` 为 `visible`，防止屏幕外窗口被当作隐藏而停帧。
 
