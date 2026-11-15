@@ -17,7 +17,7 @@ const FINALIZATION_STEP_ERRORS: { code: RegExp; zh: string; en: string; enMany?:
   { code: /^FINALIZATION_GENERATION_INCOMPLETE$/, retry: 'prompt',
     zh: '模型这次没有返回完整结果（连接中断或输出被截断）。', en: 'The model did not return a complete result (the connection dropped or the output was cut off).' },
   { code: /^FINALIZATION_GENERATION_(ARTIFACT_REQUIRED|OUTCOME_UNKNOWN)$/, retry: 'prompt',
-    zh: '上一次生成没有完成，本次没有发出新的模型请求。', en: 'The previous generation did not finish, and no new model request was sent.' },
+    zh: '正文定稿已保存，这一步的模型请求没有完成（例如连接中断）。', en: "The finalized chapter text is saved, but this step's model request did not finish (for example, the connection dropped)." },
   { code: /^FINALIZATION_GENERATION_RESULT_UNUSABLE$/, retry: 'prompt',
     zh: '模型返回了内容，但结果不可用（例如为空）。', en: 'The model returned a response, but the result was unusable (for example, empty).' },
   { code: /^GENERATION_FINALIZATION_RECOVERY_UNAVAILABLE$/, retry: 'prompt',
