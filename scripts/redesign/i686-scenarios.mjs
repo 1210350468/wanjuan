@@ -39,6 +39,7 @@ export async function recoveryListed(app, page) {
     ipcMain._invokeHandlers.set('generation:list-recovery', async (...args) => {
       const result = await original(...args)
       globalThis.__i686Reads += 1
+      globalThis.__i686Partial = result?.partial === true
       return result
     })
   })
@@ -47,6 +48,7 @@ export async function recoveryListed(app, page) {
     if (await app.evaluate(() => globalThis.__i686Reads) > 0) break
     assert.ok(Date.now() < deadline, '10 秒内运行侧页没有读可恢复列表')
   }
+  assert.equal(await app.evaluate(() => globalThis.__i686Partial), false, '可恢复列表读全了：读不全时少列的卡片不能当作「不再列出」')
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
 }
 
