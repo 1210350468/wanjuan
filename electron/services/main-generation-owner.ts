@@ -479,6 +479,8 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
       for (const input of batch.authorInputs) {
         if (!isDeepStrictEqual(input, selection.authorInputs?.find(item => item.id === input.id))) throw new Error('GENERATION_BATCH_AUTHOR_INPUT_CHANGED')
       }
+      // 批次的新文字写在子运行上，根上记的字数比不出来；接着写这一批就算不再放弃。
+      if (repository.recoveryAbandonment(batch.rootHandle.runId)) repository.clearRecoveryAbandonment(batch.rootHandle.runId)
     }
     const continuation = selection.continueDirectoryOperationId === undefined ? undefined
       : repository.readDirectoryProgress(selection.continueDirectoryOperationId)

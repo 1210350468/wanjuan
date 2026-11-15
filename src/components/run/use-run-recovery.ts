@@ -163,9 +163,9 @@ export function useRunRecovery(): RunRecovery {
     return buildRecoveryEntries({ ...ofSession(generationList, { ...EMPTY_RECOVERY_SOURCES, partial: false }), candidates: ofSession(candidateList, []) }, locale)
   }, [session, generationList, candidateList, locale])
 
-  /** 1.4.0 本机「不再显示」过的卡，读到列表后迁成运行上的「不再恢复」；全部迁成才删本机标记，失败下次再迁。 */
+  /** 1.4.0 本机「不再显示」过的卡，读全列表后迁成运行上的「不再恢复」；全部迁成才删本机标记，失败下次再迁。 */
   useEffect(() => {
-    if (!session || !sameProjectSessionContext(generationList.session, session)) return
+    if (!session || !sameProjectSessionContext(generationList.session, session) || generationList.value.partial) return
     const hidden = readHiddenRecovery(session.projectId)
     if (!hidden.size) return
     const handles = entries.flatMap(entry => 'hideKey' in entry && hidden.has(entry.hideKey) ? [abandonHandle(entry)!] : [])
@@ -323,7 +323,7 @@ The generation records are kept.`)
       onDismiss: () => { if (undo === shown) undo = undefined },
       actions: [{ label: text('撤销', 'Undo'), onClick: async () => {
         if (!sameProjectSessionContext(session, currentSession())) return
-        for (const item of handles) await setRecoveryAbandoned(session, item, false)
+        await Promise.all(handles.map(item => setRecoveryAbandoned(session, item, false)))
       } }],
     }),
   }

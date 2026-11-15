@@ -628,6 +628,7 @@ export class GenerationRunRepository {
         this.db().prepare(`UPDATE generation_runs SET binding_json=json_set(binding_json,'$."$recoveryAbandonment"',json(?)) WHERE run_id=?`).run(JSON.stringify(shown), runId);
     }
     clearRecoveryAbandonment(runId: string): void {
+        if (this.portableFrozenRoot(this.get(runId).rootActionId)) fail('GENERATION_PLANNING_HISTORY_READ_ONLY');
         this.db().prepare(`UPDATE generation_runs SET binding_json=json_remove(binding_json,'$."$recoveryAbandonment"') WHERE run_id=?`).run(runId);
     }
     /** 选区建议发出了请求、气泡还没回执显示过。升级前的运行没有这一笔。 */
