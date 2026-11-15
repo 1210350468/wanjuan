@@ -444,6 +444,15 @@ describe('CodeMirror editor AI generation boundary', () => {
     expect(commit).toHaveBeenCalledWith('林岚走进北塔', '她走进北塔', expect.any(Array))
   })
 
+  it('断网时气泡说连不上模型服务，不露出错误码', async () => {
+    failureCode = 'NETWORK_ERROR'
+    await act(async () => root.render(<CodeMirrorEditor content="原文段落" mode="prose" />))
+    await act(async () => page.getByText('原文段落').click({ clickCount: 3 }))
+    await act(async () => page.getByRole('button', { name: '润色' }).click())
+    await expect.element(page.getByText(/连不上模型服务/)).toBeVisible()
+    expect(page.getByText(/NETWORK_ERROR/).elements()).toHaveLength(0)
+  })
+
   it('keeps a batch result copy-only when the author edits the chapter during generation', async () => {
     deferStream = true
     const commit = vi.fn(async () => {})
