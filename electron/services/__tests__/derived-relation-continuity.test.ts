@@ -1032,6 +1032,19 @@ describe('待确认项和写稿提示跟着作者的决定走', () => {
     expect(lines.every(line => line.includes('待作者裁定'))).toBe(true)
   })
 
+  it('第 5 章写成仇敌、第 7 章回到作者设定之后作者删掉了这条设定：写第 9 章用第 7 章的定稿记录', async () => {
+    openProject()
+    authorRelation('盟友')
+    commitModelOutput(finalizeNew(5, '第五章：林岚视沈砚为仇敌。'), output(relationChange('仇敌', '视沈砚为仇敌')))
+    commitModelOutput(finalizeNew(7, '第七章：两人重新结为盟友。'), output(relationChange('盟友', '重新结为盟友')))
+    db().transaction(() => {
+      deleteCharacterRelationship(db(), { relationshipId: 'author-line', sourceId: LIN, sourceName: '林岚', targetId: SHEN, targetName: '沈砚' }, 'seed-approval')
+      refreshCharacterIdentityProjection(db())
+    })()
+
+    expect(await promptLines(9)).toEqual(['定稿记录·与沈砚的关系（第7章，原文：重新结为盟友）'])
+  })
+
   it('后续章重述同样的关系：提示里的章号和原文仍是关系变成这样的那一章', async () => {
     openProject()
     commitModelOutput(finalizeNew(3, '第三章：林岚与沈砚结为盟友。'), output(relationChange('盟友', '结为盟友')))

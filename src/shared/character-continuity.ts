@@ -82,10 +82,13 @@ export interface DerivedRelationRun {
   declined: boolean
 }
 
-/** 正文当时是照着作者设定写的，作者之后从更晚的章起改了这对人物的设定：这段说法不再算数，也不和新设定并存。 */
-const authorMovedOn = (head: CharacterRelationNode, nodes: readonly ContinuityNode[], chapter: number) => !!head.matchedAuthor
-  && nodes.some(node => node.aspect === 'relation' && authorDecided(node.provenance) && pairKey(node) === pairKey(head)
-    && node.effectiveChapter > head.effectiveChapter && node.effectiveChapter <= chapter)
+/**
+ * 正文当时是照着作者设定写的，作者之后给这对人物换了从更晚的章起生效的设定：这段说法不再算数，也不和新设定并存。
+ * 作者只删掉设定、没写新的时，定稿记录照旧生效。
+ */
+const authorMovedOn = (head: CharacterRelationNode, settingsInForce: readonly ContinuityNode[]) => !!head.matchedAuthor
+  && settingsInForce.some(node => node.aspect === 'relation' && node.value !== '' && authorDecided(node.provenance) && pairKey(node) === pairKey(head)
+    && node.effectiveChapter > head.effectiveChapter)
 
 /** 按 relationshipId 分组，段按章升序。同一章重跑过几次时只认最后写入的说法。 */
 export function derivedRelationRuns(nodes: readonly ContinuityNode[]): Map<string, DerivedRelationRun[]> {
@@ -123,10 +126,10 @@ export function latestNodesBefore(nodes: readonly ContinuityNode[], chapter: num
     const key = seriesKey(node), current = latest.get(key)
     if (!current || newer(node, current)) latest.set(key, node)
   }
-  const inForce = [...latest.values()]
+  const settings = [...latest.values()], inForce = [...settings]
   for (const runs of derivedRelationRuns(nodes).values()) {
     const run = runs.filter(candidate => firstVisibleChapter(candidate.head) <= chapter).at(-1)
-    if (run && !run.declined && !authorMovedOn(run.head, nodes, chapter)) inForce.push(run.head)
+    if (run && !run.declined && !authorMovedOn(run.head, settings)) inForce.push(run.head)
   }
   const states: CharacterStateNode[] = []
   const pairs = new Map<string, CharacterRelationNode[]>()
