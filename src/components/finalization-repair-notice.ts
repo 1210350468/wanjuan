@@ -37,8 +37,8 @@ export function finalizationRepairMessage(repair: DuplicateFinalizationRepair, t
   })
   return [
     text(
-      '这部作品有章节存着不止一份定稿（旧版本「回退到此版本…」后再定稿留下的），后面的章节因此写不了。已经修好：',
-      'Some chapters had more than one final version (left by refinalizing after “Revert to this version…” in an older release), which blocked writing later chapters. This is now fixed:',
+      '这部作品有章节存着不止一份定稿（旧版本「回退到此版本…」后再定稿留下的），挡住了后面的章节。已经修好：',
+      'Some chapters had more than one final version (left by refinalizing after “Revert to this version…” in an older release), which blocked later chapters. This is now fixed:',
     ),
     ...chapters,
     repair.chapters.some(chapter => !chapter.cleanupRegistered && chapter.superseded.some(item => item.targetFileName))

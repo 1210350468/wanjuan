@@ -569,7 +569,7 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
         open={ask === 'reopen'}
         onOpenChange={open => { if (!open) setAsk(null) }}
         title={text(`重新打开第 ${chapterNumber} 章？`, `Reopen chapter ${chapterNumber}?`)}
-        description={text('现在的定稿会复制成一份新稿，照常编辑、审稿、修稿。新稿定稿后替换现在的定稿；在那之前，本章仍以现在的定稿为准。', 'The current final is copied into a new draft that you edit, review and revise as usual. Finalizing it replaces the current final; until then, the chapter stays as it is.')}
+        description={text('现在的定稿会复制成新稿，照常编辑、审稿、修稿。新稿定稿后替换现在的定稿，在那之前不变。', 'The current final is copied into a new draft to edit, review and revise as usual. Finalizing it replaces the current final; until then, nothing changes.')}
         footer={(
           <>
             <Button variant="secondary" onClick={() => setAsk(null)}>{text('取消', 'Cancel')}</Button>

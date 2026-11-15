@@ -100,7 +100,7 @@ describe('书房的更新提示', () => {
     await mount()
     await click(button('立即重启更新'))
     expect(dialogTitle()).toBe('创作任务尚未结束，暂不能更新')
-    expect(document.body.textContent).toContain('结果可能尚未完整写入作品')
+    expect(document.body.textContent).toContain('结果可能还没写完整')
     await click(button('知道了，返回处理任务'))
     expect(invoke).not.toHaveBeenCalledWith('update:quit-and-install')
   })

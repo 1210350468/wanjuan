@@ -134,10 +134,10 @@ export function useArchitectureConfirmForm({
     const { orderIssue, lastChapter } = synopsisEffect
     if (!orderIssue && lastChapter < 1) return text(`已有大纲只有序章，不能跳到第 ${from} 章开始。请从第 1 章起生成，序章会原样保留。`,
       `The outline only has a prologue, so it cannot skip to chapter ${from}. Start from chapter 1; the prologue stays as it is.`)
-    if (orderIssue?.kind === 'duplicate') return text(`已有大纲里第 ${orderIssue.chapter} 章出现了不止一次，按范围重写会打乱或丢掉其他章，后台会拒绝。请先删掉或改正重复的那一章。`,
-      `Chapter ${orderIssue.chapter} appears more than once in the existing outline, so rewriting a range would scramble or drop other chapters and would be rejected. Remove or correct the duplicate first.`)
-    if (orderIssue) return text('已有大纲的章节没有按章号顺序排列，按范围重写会打乱或丢掉其他章，后台会拒绝。请先把大纲里的章节按章号排好。', 'The chapters in the existing outline are out of order, so rewriting a range would scramble or drop other chapters and would be rejected. Put the outline chapters in order first.')
-    if (from > lastChapter + 1) return text(`已有大纲写到第 ${lastChapter} 章，不能跳到第 ${from} 章开始。请从第 ${lastChapter + 1} 章续写，或从第 1–${lastChapter} 章中的某一章起重写。`,
+    if (orderIssue?.kind === 'duplicate') return text(`已有大纲里第 ${orderIssue.chapter} 章出现了不止一次，按范围重写会打乱其他章。请先删掉或改正重复的那一章。`,
+      `Chapter ${orderIssue.chapter} appears more than once in the existing outline, so rewriting a range would scramble other chapters. Remove or correct the duplicate first.`)
+    if (orderIssue) return text('已有大纲的章节没按章号排列，按范围重写会打乱其他章。请先把章节按章号排好。', 'The chapters in the existing outline are out of order, so rewriting a range would scramble other chapters. Put them in order first.')
+    if (from > lastChapter + 1) return text(`已有大纲写到第 ${lastChapter} 章，不能跳到第 ${from} 章。请从第 ${lastChapter + 1} 章续写，或从第 1–${lastChapter} 章中某一章起重写。`,
       `The outline reaches chapter ${lastChapter}, so it cannot skip to chapter ${from}. Continue from chapter ${lastChapter + 1}, or rewrite from a chapter between 1 and ${lastChapter}.`)
     return text('这个范围会切开已有的章节条目，或已有大纲末尾的分批说明与正文对不上，后台会拒绝。请换一个起止章。', 'This range splits an existing chapter entry, or the batch note at the end of the outline does not match its text, so it would be rejected. Choose other chapters.')
   }

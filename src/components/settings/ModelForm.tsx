@@ -481,7 +481,7 @@ export function ModelForm({
       {usage === 'embedding' && model.provider === 'siliconflow' && model.modelName === 'BAAI/bge-m3' && (
         <div className="rounded-lg p-3 space-y-2" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-hover)' }}>
           <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-            {text('BAAI/bge-m3 当前在 SiliconFlow 提供免费调用。完成实名认证后可使用，仍受固定速率限制约束。', 'BAAI/bge-m3 is currently free on SiliconFlow. Verification is required; fixed rate limits still apply.')}
+            {text('BAAI/bge-m3 目前在 SiliconFlow 免费，实名认证后可用，有固定速率限制。', 'BAAI/bge-m3 is currently free on SiliconFlow. Verification is required; fixed rate limits still apply.')}
           </p>
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
             <button type="button" onClick={() => void openModelProviderResource('siliconflow-invite', text)} className="text-[var(--color-accent)] hover:underline">
@@ -594,10 +594,10 @@ export function ModelForm({
               </div>
               <p className="text-xs text-[var(--color-text-secondary)]" data-effective-output-limit={effectiveOutputLimit}>
                 {effectiveOutputLimit === null
-                  ? text('还没有有效输出额度：最大输出 Tokens、模型输出容量和已知服务商上限都没有填。请填写最大输出 Tokens 后再生成。',
-                    'No effective output allowance yet: Max output tokens, model output capacity, and a known provider limit are all empty. Fill in Max output tokens before generating.')
-                  : text(`当前有效输出额度为 ${effectiveOutputLimit.toLocaleString()}。取作者设置、模型输出容量与已知服务商上限中的较小值。新开始的生成每次请求最多发这么多，拆分的任务可能发得更少；旧版本开始的运行可能按 32,768 封顶。`,
-                    `Effective output allowance: ${effectiveOutputLimit.toLocaleString()}. It is the lowest of your setting, the model output capacity, and a known provider limit. A newly started generation sends at most this much per request, and a split task may send less; runs started by an older version may be capped at 32,768.`)}
+                  ? text('还没有有效输出额度。请填写最大输出 Tokens 后再生成。',
+                    'No effective output allowance yet. Fill in Max output tokens before generating.')
+                  : text(`当前有效输出额度为 ${effectiveOutputLimit.toLocaleString()}，取你的设置、模型输出容量和已知服务商上限中最小的。新开始的生成每次请求最多发这么多；旧版本开始的运行可能按 32,768 封顶。`,
+                    `Effective output allowance: ${effectiveOutputLimit.toLocaleString()}. It is the lowest of your setting, the model output capacity, and a known provider limit. New generations send at most this much per request; runs started by an older version may be capped at 32,768.`)}
               </p>
               <ModelReasoningOverrideSettings model={model} onModelChange={onChange} />
             </div>

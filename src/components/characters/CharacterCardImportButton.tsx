@@ -118,8 +118,8 @@ function SessionImportButton({ session, disabled }: Props & { session: ProjectSe
   }
 
   const consentText = (model: ModelProfile) => text(
-    `本次粘贴及选中文件的全部文本将发送到以下模型端点，用于提取角色卡。提取后需预览并确认，才会写入角色名单；不会直接覆盖角色名单。\n\n模型：${model.name} (${model.modelName})\n端点：${model.baseUrl}\n\n是否发送并提取？`,
-    `All pasted text and selected files will be sent to the following model endpoint to extract character cards. Preview and confirmation are required before saving to the cast; the cast will not be overwritten directly.\n\nModel: ${model.name} (${model.modelName})\nEndpoint: ${model.baseUrl}\n\nSend and extract?`,
+    `粘贴和选中文件的全部文本会发到下面的模型端点，用来提取角色卡。提取后要你预览确认，才写入角色名单。\n\n模型：${model.name} (${model.modelName})\n端点：${model.baseUrl}\n\n是否发送并提取？`,
+    `All pasted text and selected files will be sent to this model endpoint to extract character cards. Nothing is saved to the cast until you preview and confirm.\n\nModel: ${model.name} (${model.modelName})\nEndpoint: ${model.baseUrl}\n\nSend and extract?`,
   )
 
   async function send({ submittedDraft, materials, model }: Job) {

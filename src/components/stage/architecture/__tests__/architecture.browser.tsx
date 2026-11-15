@@ -410,7 +410,7 @@ describe('架构阶段', () => {
     await openOutlineRegenerate()
     await range(3, 5)
     expect(mark('synopsis')).toBe('范围无效')
-    expect(issue()).toBe('已有大纲的章节没有按章号顺序排列，按范围重写会打乱或丢掉其他章，后台会拒绝。请先把大纲里的章节按章号排好。')
+    expect(issue()).toBe('已有大纲的章节没按章号排列，按范围重写会打乱其他章。请先把章节按章号排好。')
     expect(effect()).toBeNull()
     expect(submit().disabled).toBe(true)
   })
@@ -422,7 +422,7 @@ describe('架构阶段', () => {
     await openOutlineRegenerate()
     await range(4, 5)
     expect(mark('synopsis')).toBe('范围无效')
-    expect(issue()).toBe('已有大纲里第 2 章出现了不止一次，按范围重写会打乱或丢掉其他章，后台会拒绝。请先删掉或改正重复的那一章。')
+    expect(issue()).toBe('已有大纲里第 2 章出现了不止一次，按范围重写会打乱其他章。请先删掉或改正重复的那一章。')
     expect(submit().disabled).toBe(true)
   })
 
@@ -451,8 +451,8 @@ describe('架构阶段', () => {
   })
 
   it.each([
-    ['第 0 章出现两次（0、1、2、0）', [0, 1, 2, 0], '已有大纲里第 0 章出现了不止一次，按范围重写会打乱或丢掉其他章，后台会拒绝。请先删掉或改正重复的那一章。'],
-    ['第 0 章不在最前（1、0、2）', [1, 0, 2], '已有大纲的章节没有按章号顺序排列，按范围重写会打乱或丢掉其他章，后台会拒绝。请先把大纲里的章节按章号排好。'],
+    ['第 0 章出现两次（0、1、2、0）', [0, 1, 2, 0], '已有大纲里第 0 章出现了不止一次，按范围重写会打乱其他章。请先删掉或改正重复的那一章。'],
+    ['第 0 章不在最前（1、0、2）', [1, 0, 2], '已有大纲的章节没按章号排列，按范围重写会打乱其他章。请先把章节按章号排好。'],
   ])('%s选第 3–4 章：判无效并说明原因', async (_, order, expected) => {
     const body = order.map(n => n === 0 ? PROLOGUE : outlineBody(n, n)).join('\n\n')
     core = { ...core, synopsis: renderPlotOutlineSynopsis(body, 2, OUTLINE_SOURCE) }

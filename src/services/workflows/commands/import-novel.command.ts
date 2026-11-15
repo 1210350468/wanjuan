@@ -627,7 +627,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     if (commitReceipt.mode === 'fill-empty') {
       const suggestionCount = commitReceipt.suggestions?.length ?? 0
       callbacks.log(text(
-        `空白的设定与架构已补齐，已有内容没改；${suggestionCount} 条与现有内容不同的反推结果放进了建议，导入完成后在这张运行卡片里采用。角色存为提议，等你采用。`,
+        `空白的设定与架构已补齐，已有内容没改；${suggestionCount} 条与现有内容不同的反推结果放进了建议，导入后在这张卡片里采用。角色存为提议，等你采用。`,
         `Empty settings and architecture were filled; existing content was left unchanged. ${suggestionCount} inferred ${suggestionCount === 1 ? 'value differs' : 'values differ'} from what you wrote and ${suggestionCount === 1 ? 'is kept as a suggestion' : 'are kept as suggestions'} you can adopt on this run card once the import finishes. Characters are saved as proposals for you to adopt.`,
       ))
     } else if (commitReceipt.characterProposal) {

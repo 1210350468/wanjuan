@@ -191,8 +191,8 @@ export default function StageBlueprint({ projectKey, initialChapterNumber, selec
           title={text('有一份蓝图恢复稿', 'A blueprint recovery draft is available')}
           actions={<Button variant="secondary" size="sm" onClick={plan.openPlanningRecovery}>{text('编辑恢复稿', 'Edit recovery draft')}</Button>}
         >
-          {text('上次生成蓝图时中断，恢复出了一部分。列表里仍是原来的蓝图；保存恢复稿才会替换，也可以在恢复稿里接着生成缺少的章节。',
-            'The last blueprint generation stopped partway. The list still shows the original blueprints; saving the recovery draft replaces them, and you can generate the missing chapters from there.')}
+          {text('上次生成蓝图时中断，恢复出了一部分。保存恢复稿才会替换现有蓝图，也可以在恢复稿里接着生成缺的章节。',
+            'The last blueprint generation stopped partway. Saving the recovery draft replaces the current blueprints; you can also generate the missing chapters from it.')}
         </Notice>
       )}
 

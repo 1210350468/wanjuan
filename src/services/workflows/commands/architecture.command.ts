@@ -1750,8 +1750,8 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
       )
       if (checkpointFingerprint !== expectedCheckpointFingerprint) {
         throw new Error(text(
-          '故事前提、角色、世界观或总章数等在中断后变了，不能接着生成。请从「AI 生成故事架构」重新生成情节大纲。',
-          'The premise, characters, worldbuilding, or chapter count changed after the interruption, so it cannot be continued. Regenerate the plot outline from “Generate story architecture”.',
+          '故事前提、角色或世界观等在中断后变了，不能接着生成。请从「AI 生成故事架构」重新生成情节大纲。',
+          'The premise, characters, worldbuilding, or similar inputs changed after the interruption, so it cannot be continued. Regenerate the plot outline from “Generate story architecture”.',
         ))
       }
       if (this.requireGenerationExecution().mainOwned) {
@@ -1849,8 +1849,8 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
         )
         if (checkpointFingerprint !== expectedCheckpointFingerprint) {
           throw new Error(text(
-            '故事前提、角色、世界观或总章数等在上次生成后变了，已有大纲不能接着写。请从「AI 生成故事架构」从第 1 章重新生成。',
-            'The premise, characters, worldbuilding, or chapter count changed since the last generation, so the existing outline cannot be extended. Regenerate from chapter 1 in “Generate story architecture”.',
+            '故事前提、角色或世界观等在上次生成后变了，已有大纲接不上。请在「AI 生成故事架构」里从第 1 章重新生成。',
+            'The premise, characters, worldbuilding, or similar inputs changed since the last generation, so the existing outline cannot be extended. Regenerate from chapter 1 in “Generate story architecture”.',
           ))
         }
         seedText = assertCheckpointDbMirrorCurrent(

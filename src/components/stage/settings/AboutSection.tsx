@@ -16,8 +16,8 @@ export default function AboutSection() {
         </div>
       </div>
       <p className="stage-set-about-text">{text(
-        '面向长篇小说的本地写作工具。作品、设定与草稿都存在你的电脑上；从设定、架构、蓝图到正文，每一步都可以交给你选择的模型协助。',
-        'A local writing tool for long-form fiction. Your books, settings and drafts stay on your computer, and every step from setup to manuscript can be assisted by the models you choose.',
+        '面向长篇小说的本地写作工具。作品都存在你的电脑上，每一步都可以交给你选的模型协助。',
+        'A local writing tool for long-form fiction. Your books stay on your computer, and every step can be assisted by the models you choose.',
       )}</p>
       <UpdateSettings />
     </div>

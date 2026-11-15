@@ -655,7 +655,7 @@ describe('GeneratePlotArchitectureCommand 批次状态机', () => {
     const harness = harnessWith({ synopsis_result: prefixBody, synopsis_covered_to: 20, synopsis_range: { from: 1, to: 20 }, synopsis_facts_fingerprint: '旧源指纹', synopsis_db_hash: dbHashOf(dbOutline), synopsis_step_guidance: '' }, dbOutline)
     const generation = mainOwnedResponses(harness, '不会发送')
 
-    await expect(makeCommand({ synopsisRange: { from: 21, to: 100 } }, true).execute({ step: {}, context, callbacks })).rejects.toThrow('在上次生成后变了，已有大纲不能接着写')
+    await expect(makeCommand({ synopsisRange: { from: 21, to: 100 } }, true).execute({ step: {}, context, callbacks })).rejects.toThrow('在上次生成后变了，已有大纲接不上')
 
     expect(generation.execute).not.toHaveBeenCalled()
     expect(harness.synopsisCommits).toHaveLength(0)
