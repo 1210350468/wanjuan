@@ -506,8 +506,8 @@ describe('RunFinalizePostProcessCommand character-state persistence', () => {
   it('reports only executing substeps before their model work and skips already successful steps on resume', async () => {
     const labels: string[] = []
     const labelAtModelCall: (string | undefined)[] = []
-    const original = useLLMStore.getState().generateStream
-    useLLMStore.setState({ generateStream: vi.fn(async (...args: Parameters<typeof original>) => {
+    const original = useFakeModelStream.getState().generateStream
+    useFakeModelStream.setState({ generateStream: vi.fn(async (...args: Parameters<typeof original>) => {
       labelAtModelCall.push(labels.at(-1))
       return original(...args)
     }) })
