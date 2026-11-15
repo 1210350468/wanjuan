@@ -283,7 +283,6 @@ async function batchRecovery(page) {
   return { text: await card.first().innerText(), continueEnabled: await button.isEnabled() }
 }
 
-/** 等运行侧页读完一次可恢复列表，再数这一批的卡片。 */
 async function batchCards(context) {
   await recoveryListed(context.app, context.page)
   return runSheet.recovery(context.page).getByRole('article').filter({ hasText: /批量正文：/ }).count()

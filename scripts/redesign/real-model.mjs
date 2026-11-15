@@ -7,7 +7,6 @@ export const REAL_KEY_ENV = 'SILICONFLOW_API_KEY'
 export const REAL_ORIGIN = 'https://api.siliconflow.cn'
 const REAL_BASE_URL = `${REAL_ORIGIN}/v1`
 export const REAL_GENERATION_MODEL = 'deepseek-ai/DeepSeek-V4.1-Flash'
-/** 换用硅基流动上的另一个生成模型时设这个环境变量，填模型名。 */
 export const REAL_MODEL_ENV = 'SILICONFLOW_GENERATION_MODEL'
 export const REAL_EMBEDDING_MODEL = 'BAAI/bge-m3'
 
