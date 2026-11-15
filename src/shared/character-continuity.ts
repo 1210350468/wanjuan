@@ -29,6 +29,8 @@ export interface CharacterRelationNode extends ContinuityNodeBase {
   targetName: string
   relationshipId: string
   authorDeclined?: true
+  /** 只有定稿关系带：抽取这一章时，这条说法和作者当时的设定一样。作者之后怎么改设定都不改它。 */
+  matchedAuthor?: true
 }
 export type ContinuityNode = CharacterStateNode | CharacterRelationNode
 
@@ -68,12 +70,20 @@ const pairKey = (node: CharacterRelationNode) => JSON.stringify([node.subjectId,
 const withoutAuthorRepeats = (lines: readonly CharacterRelationNode[]) =>
   lines.filter(line => line.provenance.kind !== 'derived' || !lines.some(other => other.provenance.kind !== 'derived' && other.value === line.value))
 
-/** 定稿对一对人物的说法里，值相同的连续几章是一段，head 是最早那一章。作者拒绝过其中一章的说法，整段都算拒绝。 */
+/**
+ * 定稿对一对人物的说法里，值相同、matchedAuthor 也相同的连续几章是一段，head 是最早那一章。
+ * 作者拒绝过其中一章的说法，整段都算拒绝。
+ */
 export interface DerivedRelationRun {
   head: CharacterRelationNode
   observations: CharacterRelationNode[]
   declined: boolean
 }
+
+/** 正文当时是照着作者设定写的，作者之后从更晚的章起改了这对人物的设定：这段说法不再算数，也不和新设定并存。 */
+const authorMovedOn = (head: CharacterRelationNode, nodes: readonly ContinuityNode[], chapter: number) => !!head.matchedAuthor
+  && nodes.some(node => node.aspect === 'relation' && authorDecided(node.provenance) && pairKey(node) === pairKey(head)
+    && node.effectiveChapter > head.effectiveChapter && node.effectiveChapter <= chapter)
 
 /** 按 relationshipId 分组，段按章升序。同一章重跑过几次时只认最后写入的说法。 */
 export function derivedRelationRuns(nodes: readonly ContinuityNode[]): Map<string, DerivedRelationRun[]> {
@@ -89,7 +99,7 @@ export function derivedRelationRuns(nodes: readonly ContinuityNode[]): Map<strin
     const runs: DerivedRelationRun[] = []
     for (const node of [...series.values()].sort((left, right) => left.effectiveChapter - right.effectiveChapter)) {
       const run = runs.at(-1)
-      if (run?.head.value === node.value) {
+      if (run && run.head.value === node.value && run.head.matchedAuthor === node.matchedAuthor) {
         run.observations.push(node)
         run.declined ||= !!node.authorDeclined
       } else runs.push({ head: node, observations: [node], declined: !!node.authorDeclined })
@@ -114,7 +124,7 @@ export function latestNodesBefore(nodes: readonly ContinuityNode[], chapter: num
   const inForce = [...latest.values()]
   for (const runs of derivedRelationRuns(nodes).values()) {
     const run = runs.filter(candidate => firstVisibleChapter(candidate.head) <= chapter).at(-1)
-    if (run && !run.declined) inForce.push(run.head)
+    if (run && !run.declined && !authorMovedOn(run.head, nodes, chapter)) inForce.push(run.head)
   }
   const states: CharacterStateNode[] = []
   const pairs = new Map<string, CharacterRelationNode[]>()
@@ -182,15 +192,17 @@ function foldAdoptedRelations(changes: readonly CharacterTimelineChange[]): Char
 }
 
 /**
- * 时间线只列变化：一段定稿关系只留段首。第一段的值和这一章之前就生效的设定相同时是重述，也不留。
+ * 时间线只列变化：一段定稿关系只留段首。值和上一段相同、或第一段的值和这一章之前就生效的设定相同时是重述，也不留。
  * nodes 要带上这对人物两个方向的节点，只有一边时会把隔着对方说法的两段并成一段。
  */
 export function withoutRelationRestatements(nodes: readonly ContinuityNode[]): ContinuityNode[] {
   const settings = nodes.filter(node => !isDerivedRelation(node))
   const changes = new Set<ContinuityNode>()
   for (const runs of derivedRelationRuns(nodes).values()) runs.forEach(({ head }, index) => {
-    const restated = index === 0 && latestNodesBefore(settings.filter(node => node.effectiveChapter < head.effectiveChapter), head.effectiveChapter).relations
-      .some(pair => pair.lines.some(line => pairKey(line) === pairKey(head) && line.value === head.value))
+    const previous = runs[index - 1]?.head
+    const restated = previous ? previous.value === head.value
+      : latestNodesBefore(settings.filter(node => node.effectiveChapter < head.effectiveChapter), head.effectiveChapter).relations
+        .some(pair => pair.lines.some(line => pairKey(line) === pairKey(head) && line.value === head.value))
     if (!restated) changes.add(head)
   })
   return nodes.filter(node => !isDerivedRelation(node) || changes.has(node))
