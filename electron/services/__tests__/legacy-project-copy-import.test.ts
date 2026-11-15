@@ -28,7 +28,6 @@ import { listDocuments, readDocumentCopy } from '../../knowledge-base'
 import { exportPortableProject } from '../project-archive-service'
 import { FinalizationRepository } from '../../repositories/finalization-repository'
 import { registerAsReopenDraft } from '../../../test/helpers/reopened-draft'
-import { WINDOWS_RUNNER_IO_STALL_TIMEOUT_MS } from '../../../test/helpers/windows-runner-io-stall'
 
 const Database = createRequire(import.meta.url)('better-sqlite3') as typeof import('better-sqlite3')
 const roots: string[] = []
@@ -221,8 +220,8 @@ function owned<A extends unknown[]>(body: (...args: A) => Promise<void>) {
   }
 }
 const it = Object.assign(
-  (name: string, body: () => Promise<void>) => vitestIt(name, owned(body), WINDOWS_RUNNER_IO_STALL_TIMEOUT_MS),
-  { each: <T>(cases: readonly T[]) => (name: string, body: (value: T) => Promise<void>) => vitestIt.each(cases)(name, owned(body), WINDOWS_RUNNER_IO_STALL_TIMEOUT_MS) },
+  (name: string, body: () => Promise<void>) => vitestIt(name, owned(body)),
+  { each: <T>(cases: readonly T[]) => (name: string, body: (value: T) => Promise<void>) => vitestIt.each(cases)(name, owned(body)) },
 )
 afterEach(async () => {
   const bodies = [...runningBodies], caseRoots = roots.splice(0)
@@ -237,7 +236,7 @@ afterEach(async () => {
   const removeRoots = async () => { for (const root of caseRoots) await removeDirectoryWithWindowsRetry(root) }
   if (settled) return removeRoots()
   void Promise.allSettled(bodies).then(removeRoots).catch(() => undefined)
-}, BODY_SETTLE_MS + 10_000)
+})
 
 it.each(['v100', 'v110'] as const)('%s 有旧角色原文但无角色卡时拒绝发布且保留源', async version => {
   const f = fixture(version), before = sourceState(f)
@@ -305,7 +304,7 @@ it('旧项目复制导入后在当前版本上，角色导入时的状态补了�
   expect(await importLegacyProjectCopy({ sourceRoot: f.source, targetRoot: f.target, preflightOptions })).toMatchObject({ state: 'ready' })
   const db = new Database(path.join(f.target, '.ai-novel', 'project.db'), { readonly: true })
   try {
-    expect(db.pragma('user_version', { simple: true })).toBe(9)
+    expect(db.pragma('user_version', { simple: true })).toBe(10)
     expect(db.prepare('SELECT stable_fact_key,chapter_number,reason,revoked FROM consistency_exemptions ORDER BY stable_fact_key').all()).toEqual([
       { stable_fact_key: 'death:乙', chapter_number: null, reason: '假死', revoked: 1 },
       { stable_fact_key: 'scar:甲', chapter_number: null, reason: '旧伤', revoked: 0 },
@@ -600,7 +599,7 @@ it.each(['v100', 'v110'] as const)('%s 合法空角色名单的离线完整副�
   expect(fs.readFileSync(path.join(f.target, 'outline.md'), 'utf8')).toBe('作者目录级大纲')
   expect(fs.readFileSync(path.join(f.target, '.ai-novel', 'prompts', 'author.txt'), 'utf8')).toBe('作者项目级提示词')
   expect(fs.readFileSync(path.join(f.target, '.ai-novel', 'skills', 'author.md'), 'utf8')).toBe('作者项目级 Skill 原文')
-  expect(verifyProjectSqlite({ databasePath: path.join(f.target, '.ai-novel', 'project.db') }).schemaVersion).toBe(9)
+  expect(verifyProjectSqlite({ databasePath: path.join(f.target, '.ai-novel', 'project.db') }).schemaVersion).toBe(10)
   const db = new Database(path.join(f.target, '.ai-novel', 'project.db'), { readonly: true })
   try {
     expect(db.prepare('SELECT characters_arch FROM project_core WHERE id=?').pluck().get('main')).toBe('')
@@ -809,7 +808,7 @@ it.each(['sqlite-converted', 'renamed'] as const)('%s 子进程终止后源保�
     expect(await importLegacyProjectCopy({ sourceRoot: f.source, targetRoot: f.target, preflightOptions }))
       .toMatchObject({ state: 'ready', targetRoot: f.target })
   } else {
-    expect(verifyProjectSqlite({ databasePath: path.join(f.target, '.ai-novel', 'project.db') }).schemaVersion).toBe(9)
+    expect(verifyProjectSqlite({ databasePath: path.join(f.target, '.ai-novel', 'project.db') }).schemaVersion).toBe(10)
     const access = new ProjectAccessService(preflightOptions)
     const trusted = access.adoptLegacyProject(access.probeExistingProject(f.target))
     expect(trusted.projectId).not.toBe(f.sourceProjectId)
@@ -1084,4 +1083,32 @@ it('有定稿收据的旧项目复制导入后，替换那一章再写稿、导�
     assets: { snapshot: () => ({ files: [], verifyUnchanged: () => undefined }) },
     snapshotGeneration: 'legacy-replaced',
   })).resolves.toBeTruthy()
+})
+
+it('v1.1 建过惰性蓝图表的项目复制导入后，蓝图与待同步操作原样可读', async () => {
+  const { BlueprintRepository } = await import('../../repositories/blueprint-repository')
+  const { ensureBaselineBlueprintTables } = await import('../../migrations/baseline-blueprint-schema')
+  const f = fixture('v110', ''), source = new Database(path.join(f.legacy, 'vela.db'))
+  const blueprint = { chapterNumber: 1, title: '第一章', role: 'setup', purpose: '开局', keyEvents: '相遇', characters: ['主角'],
+    suspenseHook: '谁在门外', userGuidance: '慢热', notes: '作者备注', notesUpdatedAt: '' }
+  try {
+    ensureBaselineBlueprintTables(source)
+    source.prepare(`INSERT INTO blueprints(chapter_number,title,role,purpose,key_events,characters,suspense_hook,user_guidance,notes)
+      VALUES(1,'第一章','setup','开局','相遇','["主角"]','谁在门外','慢热','作者备注')`).run()
+    const insertCommit = source.prepare(`INSERT INTO blueprint_commit_operations(operation_id,payload_hash,mode,start_chapter,end_chapter,character_sync_input)
+      VALUES(?,?,'replace-range',1,1,?)`)
+    const insertSync = source.prepare(`INSERT INTO blueprint_character_sync_operations(operation_id,blueprint_commit_operation_id,
+      blueprint_commit_payload_hash,status,start_chapter,end_chapter,character_sync_input,completion_receipt) VALUES(?,?,?,?,1,1,?,?)`)
+    for (const [id, status] of [['done', 'completed'], ['waiting', 'pending']] as const) {
+      insertCommit.run(id, 'e'.repeat(64), JSON.stringify([blueprint]))
+      insertSync.run(`blueprint-sync-${id}`, id, 'e'.repeat(64), status, JSON.stringify([blueprint]), status === 'completed'
+        ? JSON.stringify({ blueprintCommitOperationId: id, operationId: `blueprint-sync-${id}`, status: 'already-satisfied' }) : null)
+    }
+  } finally { source.close() }
+
+  const result = await importLegacyProjectCopy({ sourceRoot: f.source, targetRoot: f.target, preflightOptions })
+  expect(result, JSON.stringify(result)).toMatchObject({ state: 'ready' })
+  initProjectDatabase(f.target)
+  expect(BlueprintRepository.getAll()).toMatchObject([blueprint])
+  expect(BlueprintRepository.listPendingCharacterSyncOperations().map(operation => operation.operationId)).toEqual(['blueprint-sync-waiting'])
 })

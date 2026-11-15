@@ -54,7 +54,7 @@ import type {
   NarrativeThreadView,
 } from './narrative-thread'
 import type { NarrativeThreadReviewCandidate } from './narrative-thread-review-candidates'
-import type { PlotTreeSnapshot, PlotTreeSourceBundle } from './plot-tree'
+import type { PlotTreeSourceBundle } from './plot-tree'
 import type {
   UpdateActionResponse,
   UpdateCheckResponse,
@@ -154,7 +154,14 @@ export interface WindowChannels {
     args: [requestId: string, decision: 'proceed' | 'cancel']
     return: { success: boolean }
   }
+  /** 写作、审稿、修稿、定稿结束时调用；窗口在后台且设置开着时才弹系统通知。 */
+  'window:notify-stage': {
+    args: [notice: StageNotice]
+    return: { shown: boolean }
+  }
 }
+
+export interface StageNotice { title: string; body: string }
 
 export interface WindowEvents {
   'window:close-requested': { requestId: string }
@@ -202,6 +209,8 @@ export interface GlobalConfig {
   stageModelIds?: StageModelIds
   /** 定稿与后处理成功后，打开下一章的创作窗口（默认关闭）。 */
   autoOpenNextChapterAfterFinalize?: boolean
+  /** 书童在后台时，阶段结束弹系统通知（缺省为开）。 */
+  backgroundStageNotifications?: boolean
   editorFontSize: number
   editorFontFamily: string
   autoSaveInterval: number
@@ -558,31 +567,6 @@ export interface LLMChannels {
     args: [request: LocalContextWindowRequest]
     return: number | null
   }
-  'llm:begin-execution-lease': {
-    args: [modelId: string]
-    return: {
-      success: boolean
-      lease?: ModelExecutionLeaseReceipt
-      errorCode?: 'MODEL_NOT_FOUND' | 'LEASE_BEGIN_FAILED'
-      error?: string
-    }
-  }
-  'llm:close-execution-lease': {
-    args: [leaseId: string]
-    return: { success: boolean; error?: string }
-  }
-  'llm:generate': {
-    args: [request: LLMRequest]
-    return: LLMResponse
-  }
-  'llm:generate-stream': {
-    args: [requestId: string, request: LLMRequest]
-    return: { requestId: string; started: boolean; error?: string }
-  }
-  'llm:cancel': {
-    args: [requestId: string]
-    return: { success: boolean }
-  }
   'llm:list-models': {
     args: []
     return: ModelProfile[]
@@ -643,18 +627,6 @@ export interface LLMChannels {
     args: [model: ModelProfile, creativeStrategy?: CreativeStrategy]
     return: { success: boolean; error?: string }
   }
-}
-
-export interface LLMStreamEvents {
-  'llm:stream-chunk': { requestId: string; chunk: string }
-  'llm:stream-done': {
-    requestId: string
-    fullText: string
-    usage?: TokenUsage
-    /** Main-process-normalized completion state. Missing provider values become `unknown`. */
-    finishReason: LLMFinishReason
-  }
-  'llm:stream-error': { requestId: string; error: string }
 }
 
 // ===== 公共数据类型 =====
@@ -1128,16 +1100,14 @@ export interface DatabaseChannels {
     args: [expectedProjectPath: string]
     return: PlotTreeSourceBundle
   }
-  'db:plot-tree-save': {
-    args: [snapshot: PlotTreeSnapshot, expectedSourceRevision: string, expectedProjectPath: string]
-    return: { success: boolean; snapshot?: PlotTreeSnapshot; errorCode?: 'sources-changed'; error?: string }
-  }
   'db:plot-tree-clear': {
     args: [expectedProjectPath: string]
     return: { success: boolean; error?: string }
   }
   'db:draft-next-version': { args: [chapterNumber: number, expectedProjectPath: string]; return: number }
   'db:draft-update-status': { args: [id: number, status: string, wordCount: number | undefined, expectedProjectPath: string]; return: { success: boolean; error?: string } }
+  'db:annotation-history-list': { args: [draftId: number, expectedProjectPath: string]; return: { id: number; before: string; after: string; annotations: import('./editor-inline-generation').EditorInlineAnnotation[]; createdAt: string }[] }
+  'db:annotation-commit': { args: [input: { draftId: number; expectedSaved: string; before: string; after: string; annotations: import('./editor-inline-generation').EditorInlineAnnotation[] }, expectedProjectPath: string]; return: { success: boolean; error?: string } }
   'db:draft-update-content': { args: [id: number, content: string, wordCount: number, expectedProjectPath: string]; return: { success: boolean; error?: string } }
   'db:draft-delete': {
     args: [id: number, expectedProjectPath: string]
@@ -1414,7 +1384,7 @@ export interface MCPChannels {
 
 // ===== 合并所有频道 =====
 export type AllInvokeChannels = LegacyRosterGenerationChannels & CharacterAvatarChannels & CloudBackupChannels & GraphGenerationChannels & FinalizationGenerationChannels & EditorInlineGenerationChannels & ImportGenerationChannels & AgentGenerationChannels & ReviewRevisionGenerationInvokeChannels & FinalizedCharacterGenerationChannels & CharacterProposalChannels & GenerationOwnerChannels & StartupChannels & WindowChannels & OfficialHomepageChannels & ModelProviderResourceChannels & ConfigChannels & UpdateChannels & ProjectChannels & FileChannels & AppDataChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ChapterLifecycleChannels & ImportChannels & MCPChannels
-export type AllEventChannels = GenerationOwnerEvents & LLMStreamEvents & UpdateStateEvents & WindowEvents
+export type AllEventChannels = GenerationOwnerEvents & UpdateStateEvents & WindowEvents
 
 /** 提取 invoke 频道名 */
 export type InvokeChannel = keyof AllInvokeChannels
