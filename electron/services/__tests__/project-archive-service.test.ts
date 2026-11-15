@@ -524,6 +524,23 @@ describe('portable project export service', () => {
     } finally { restored.close() }
   })
 
+  it('审稿报告保存后，同一循环的修稿卡点了「不再恢复」，项目照样能导出', async () => {
+    const f = fixture()
+    seedMergedCycle(f)
+    const db = new Database(f.databasePath)
+    try { new GenerationRunRepository(() => db).recordRecoveryAbandonment('run-revision', { 'artifact-revision': 14 }) }
+    finally { db.close() }
+    await exportPortableProject(input(f))
+    const targetRoot = path.join(f.base, 'restored-abandoned')
+    await restorePortableProject({ archivePath: f.target, targetProjectRoot: targetRoot })
+    const restored = new Database(path.join(targetRoot, '.ai-novel', 'project.db'), { readonly: true })
+    try {
+      const binding = JSON.parse(restored.prepare("SELECT binding_json FROM generation_runs WHERE run_id='run-revision'").pluck().get() as string)
+      expect(Object.keys(binding).filter(key => key.startsWith('$'))).toEqual([])
+      expect(binding.sourceManifest.operation).toBe('refine-from-review')
+    } finally { restored.close() }
+  })
+
   it('rejects unknown fields in a saved review result', async () => {
     const f = fixture()
     seedMergedCycle(f)
