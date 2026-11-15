@@ -150,7 +150,7 @@ function usageOf(view: Pick<MainGenerationRunView, 'budgetDiagnostics' | 'ledger
 /** 没写出任何字的片段（例如刚发出请求就取消）没有可复制、可续接的内容，不列出。 */
 export const hasText = (item: { text: string }) => item.text.trim().length > 0
 
-/** 1.4.0 本机「不再显示」记下的标记：运行 id 加当时列出的片段与尾段。只用来把旧的隐藏迁成运行上的「不再恢复」。 */
+/** 1.4.0 本机「不再显示」的标记：运行 id 加当时列出的片段与尾段。 */
 const hideKeyOf = (runId: string, items: readonly RecoveryText[]) => `${runId}#${items.map(item => `${item.id}:${item.text.length}`).join(',')}`
 
 const texts = (items: readonly { attemptId: string; text: string }[] | undefined): RecoveryText[] =>
@@ -488,7 +488,7 @@ export function canResumeDraft(entry: DraftEntry, picked: readonly string[]): bo
   return !entry.changed && (picked.length > 0 || !entry.needsPick)
 }
 
-/** 「不再恢复」记在哪次运行上；旧恢复候选表不是生成运行，没有。 */
+/** 旧恢复候选表不是生成运行，没有可放弃的运行。 */
 export function abandonHandle(entry: RecoveryEntry): MainGenerationRunHandle | undefined {
   switch (entry.kind) {
     case 'planning': return entry.canDismiss ? entry.recovery.handle : undefined

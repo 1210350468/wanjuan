@@ -63,7 +63,7 @@ export class GenerationDraftEffects {
     return { commits: groupByBatch(rows), unreadable }
   }
   /** settledChapter 这一章按已确认完（已发布、后处理关键步骤都完成）算进度，用于放回删除前已确认完的章：放回会把它重置为待发布、待重导。 */
-  /** 还能续写的批次（根运行 id）：续写只接受 active、paused 且未阻断的根，已取消、已封存或被阻断的再也续不上；作者点了「不再恢复」的也不算。侧页列出与锁章共用这一条。 */
+  /** 还能续写的批次（根运行 id）：active、paused、未阻断，且作者没点「不再恢复」。侧页列出与锁章共用这一条，免得两边判定又分开。 */
   resumableBatchIds(projectId: string): string[] {
     return this.db.prepare(`SELECT r.run_id FROM generation_runs r JOIN generation_roots g ON g.root_action_id=r.root_action_id
       WHERE json_valid(r.binding_json) AND json_extract(r.binding_json,'$.sourceManifest.batchIntent') IS NOT NULL

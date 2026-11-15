@@ -885,7 +885,7 @@ export function createMainGenerationOwner(deps: MainGenerationOwnerDependencies)
     const shown = repository.recoveryAbandonment(run.runId)
     return shown !== null && Object.entries(recoveryOutputs(run)).every(([id, length]) => length <= (shown[id] ?? 0))
   }
-  /** 「不再恢复」与撤销：只记在运行上，生成记录、候选原文与正式内容都不动。规划恢复稿正在续写时不能放弃。 */
+  /** 只在运行上记一笔，不动生成记录、候选原文与正式内容。 */
   const setRecoveryAbandoned = ({ handle, abandoned }: { handle: MainGenerationRunHandle; abandoned: boolean }) => {
     const run = requireRun(handle)
     if (!abandoned) return repository.clearRecoveryAbandonment(run.runId)

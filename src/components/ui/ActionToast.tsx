@@ -29,7 +29,6 @@ export interface ActionToastOptions {
   actions?: ActionToastAction[]
   /** 自动消失时间（毫秒），设 0 表示不自动消失。默认 8000 */
   duration?: number
-  /** 通知离开时调一次 */
   onDismiss?: () => void
 }
 

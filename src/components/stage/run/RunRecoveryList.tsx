@@ -72,7 +72,7 @@ function RecoveryCard({ entry, recovery, text }: { entry: RecoveryEntry; recover
   }
 }
 
-/** 右上角「不再恢复」：只记在运行上，可在提示条里撤销，所以不用危险色，也不先确认。 */
+/** 可在提示条里撤销，所以不用危险色，也不先确认。 */
 function AbandonButton({ disabled, onClick, text }: { disabled: boolean; onClick: () => void; text: Text }) {
   return <Button variant="text" size="sm" className="run-card-abandon" disabled={disabled} onClick={onClick}><X aria-hidden />{text('不再恢复', 'Dismiss')}</Button>
 }

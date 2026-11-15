@@ -68,7 +68,6 @@ export interface RunRecovery {
   resumeReview: (entry: ReviewEntry) => void
   resumeBatch: (entry: BatchEntry) => void
   resumeDraft: (entry: DraftEntry) => void
-  /** 「不再恢复」：只记在运行上，生成记录、候选原文与正式内容都不动；提示条里可以撤销。 */
   abandon: (entry: RecoveryEntry) => void
 }
 
@@ -299,7 +298,7 @@ export function useRunRecovery(): RunRecovery {
 
 let undo: { session: ProjectSessionContext; handles: MainGenerationRunHandle[]; titles: string[]; close: () => void } | undefined
 
-/** 撤销提示条还在时又关了几张卡，并成一条，「撤销」把这几张一起放回来；侧页旁不堆一摞提示，连点两下也都撤得回。 */
+/** 提示条还在时再关的卡并进同一条，「撤销」一起放回，侧页旁不堆一摞提示。 */
 function showUndo(session: ProjectSessionContext, handle: MainGenerationRunHandle, title: string) {
   const merged = undo && sameProjectSessionContext(undo.session, session) ? undo : undefined
   undo = undefined
