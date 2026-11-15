@@ -56,21 +56,28 @@ export const I686D_SCENARIOS = {
     await context.shoot('i686d-cards')
 
     const restarted = context.page
-    const abandonTwo = async () => {
+    const abandonTwo = async afterFirst => {
       for (const [title, left] of [['第4章审稿候选', 2], ['第3章候选', 1]]) {
         await runSheet.sheet(restarted).locator('.run-recovery > .run-card').filter({ has: restarted.getByRole('heading', { name: title }) })
           .getByRole('button', { name: '不再恢复' }).click()
         await restarted.waitForFunction(count => document.querySelectorAll('.run-recovery > .run-card').length === count, left)
+        if (left === 2) await afterFirst?.()
       }
     }
-    await abandonTwo()
+    await abandonTwo(async () => {
+      const single = restarted.locator('.pi-toast:not([data-exiting])').filter({ hasText: '已不再恢复「第4章审稿候选」' })
+      await single.waitFor({ state: 'visible' })
+      await restarted.mouse.move(0, 0)
+      assert.ok(!(await single.innerText()).includes('生成记录'), '单张提示条不说生成记录还在')
+      await context.shoot('i686d-abandoned-one')
+    })
     const toast = restarted.locator('.pi-toast:not([data-exiting])').filter({ hasText: '已不再恢复 2 张卡片' })
     await toast.waitFor({ state: 'visible' })
     await restarted.mouse.move(0, 0)
     const abandoned = await allCards(restarted)
     assert.deepEqual(titles(abandoned), ['编辑器选区建议'], '点了的两张不再列出，选区卡不动')
     const toastText = await toast.innerText()
-    assert.ok(toastText.includes('生成记录仍保留。'), '提示条说明记录还在')
+    assert.ok(toastText.includes('已不再恢复') && !toastText.includes('生成记录'), '提示条不说生成记录还在')
     assert.ok(await toast.getByRole('button', { name: '撤销' }).isVisible(), '提示条可撤销')
     await context.shoot('i686d-abandoned')
 
