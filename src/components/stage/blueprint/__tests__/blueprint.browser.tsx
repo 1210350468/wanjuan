@@ -572,6 +572,7 @@ describe('蓝图阶段', () => {
       expect(invoke.mock.calls.some(call => call[0] === 'db:blueprint-upsert' && (call[1] as ChapterBlueprint).chapterNumber === 2)).toBe(true)
       await expect.element(page.getByText('第 2 章蓝图把 林岚 和 守塔人 写成「亲密同伴」，但第 1 章起两人是「决裂」。')).toBeVisible()
       await expect.element(page.getByText('依据：你的设定 · 决裂')).toBeVisible()
+      await expect.element(page.getByText('改这一章的蓝图，或确认这是有意安排。')).toBeVisible()
       await expect.element(page.getByRole('button', { name: '写第 2 章' })).toBeEnabled()
     })
 

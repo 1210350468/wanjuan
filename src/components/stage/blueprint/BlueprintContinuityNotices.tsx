@@ -35,7 +35,8 @@ export default function BlueprintContinuityNotices({ chapterNumber, notice, ai }
             </>
           )}
         >
-          <PreflightFindingSource finding={finding} />
+          <p><PreflightFindingSource finding={finding} /></p>
+          <p>{locale === 'en-US' ? finding.suggestion.enUS : finding.suggestion.zhCN}</p>
         </Notice>
       ))}
       {exempted && (
