@@ -35,7 +35,7 @@ const originalProject = useProjectStore.getState()
 const originalCharacters = useCharacterStore.getState()
 
 const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
-const button = (name: string) => [...host.querySelectorAll('button')].find(item => item.textContent?.trim() === name || item.getAttribute('aria-label') === name)
+const button = (name: string) => [...host.querySelectorAll('button')].find(item => item.textContent?.trim() === name || item.getAttribute('aria-label')?.startsWith(name))
 const click = async (name: string) => { await act(async () => { button(name)!.click() }); await settle() }
 const relationBox = (text = '雾灯人 → 林岚：暗中守护') => [...host.querySelectorAll('label')].find(label => label.textContent?.includes(text))?.querySelector('input')
 const calls = (channel: string) => invoke.mock.calls.filter(([name]) => name === channel).map(call => call[1])
@@ -71,6 +71,30 @@ afterEach(async () => {
   useLocaleStore.setState(originalLocale, true)
   useProjectStore.setState(originalProject, true)
   useCharacterStore.setState(originalCharacters, true)
+})
+
+it('多行建议的「检查」按钮读屏名称各带所属条目，分得清是哪一项', async () => {
+  pending = [summary, { ...summary, proposalBatchId: 'cpb:blueprint-14', blueprintChapters: { from: 14, to: 14 } }]
+  invoke.mockImplementation(async (channel: string) => {
+    if (channel === 'character-proposal:list-pending-finalized') return pending
+    if (channel === 'finalized-character:list-relation-candidates') return [
+      { candidateKey: 'r1', sourceName: '林岚', targetName: '守塔人', source: { chapterNumber: 3 } },
+      { candidateKey: 'r2', sourceName: '林岚', targetName: '雾灯人', source: { chapterNumber: 3 } }]
+    if (channel === 'finalized-character:list-state-candidates') return [
+      { candidateKey: 's1', characterName: '林岚', field: 'location' },
+      { candidateKey: 's2', characterName: '守塔人', field: 'location' }]
+    return []
+  })
+  await act(async () => root.render(<CharacterSuggestions key="reload" />))
+  await settle()
+  expect([...host.querySelectorAll('.cast-suggestion button')].map(item => item.getAttribute('aria-label'))).toEqual([
+    '检查蓝图角色决策：第 13 章蓝图的新角色（1 位）',
+    '检查蓝图角色决策：第 14 章蓝图的新角色（1 位）',
+    '检查定稿状态建议：林岚 · 位置',
+    '检查定稿状态建议：守塔人 · 位置',
+    '检查定稿关系建议：林岚 → 守塔人 · 第 3 章',
+    '检查定稿关系建议：林岚 → 雾灯人 · 第 3 章',
+  ])
 })
 
 it('列表里写明是第几章蓝图的新角色，计入待处理数', () => {

@@ -1,5 +1,6 @@
 import { ChevronRight } from 'lucide-react'
 import type { ChapterThreadPanelRow } from '../../../shared/narrative-thread'
+import { pluralEn } from '../../../shared/plural-en'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { Button } from '../../ui/Button'
 import type { useChapterThreadTasks } from './use-chapter-thread-tasks'
@@ -21,13 +22,18 @@ export default function WriteThreadTasks({ chapterNumber, threads }: WriteThread
     return row.schedule.kind === 'due' ? text('本章到期', 'Due now') : text('本章推进', 'This chapter')
   }
 
+  const action = (title: string, zh: string, en: string, onClick: () => void) => (
+    <Button variant="text" size="sm" disabled={saving} aria-label={text(`${zh}：${title}`, `${en}: ${title}`)} onClick={onClick}>{text(zh, en)}</Button>
+  )
+
   const actionsOf = (row: ChapterThreadPanelRow) => {
-    if (row.state === 'deferred') return <Button variant="text" size="sm" disabled={saving} onClick={() => undo(row.thread.id, row.deferredTo)}>{text('撤销', 'Undo')}</Button>
-    if (row.schedule.kind === 'assigned') return <Button variant="text" size="sm" disabled={saving} onClick={() => undo(row.thread.id, chapterNumber)}>{text('撤销', 'Undo')}</Button>
+    const { id, title } = row.thread
+    if (row.state === 'deferred') return action(title, '撤销', 'Undo', () => undo(id, row.deferredTo))
+    if (row.schedule.kind === 'assigned') return action(title, '撤销', 'Undo', () => undo(id, chapterNumber))
     return (
       <>
-        <Button variant="text" size="sm" disabled={saving} onClick={() => defer(row.thread.id, 1)}>{text('延后一章', 'Move 1 on')}</Button>
-        <Button variant="text" size="sm" disabled={saving} onClick={() => defer(row.thread.id, 3)}>{text('延后三章', 'Move 3 on')}</Button>
+        {action(title, '延后一章', 'Move 1 on', () => defer(id, 1))}
+        {action(title, '延后三章', 'Move 3 on', () => defer(id, 3))}
       </>
     )
   }
@@ -47,7 +53,7 @@ export default function WriteThreadTasks({ chapterNumber, threads }: WriteThread
           ))}
         </ul>
       )}
-      {panel.leftOut > 0 && <p className="stage-write-thread-note">{text(`另有 ${panel.leftOut} 条本次不进任务`, `${panel.leftOut} more stay out of this run`)}</p>}
+      {panel.leftOut > 0 && <p className="stage-write-thread-note">{text(`另有 ${panel.leftOut} 条本次不进任务`, `${panel.leftOut} more ${pluralEn(panel.leftOut, 'stays', 'stay')} out of this run`)}</p>}
       {failure && <p className="stage-write-error" role="alert">{failure}</p>}
       {panel.canAdvance.length > 0 && (
         <details className="stage-write-more">
@@ -60,7 +66,7 @@ export default function WriteThreadTasks({ chapterNumber, threads }: WriteThread
               <li key={thread.id} className="stage-write-thread">
                 <span className="stage-write-thread-name"><b>{thread.title}</b></span>
                 <span className="stage-write-thread-actions">
-                  <Button variant="text" size="sm" disabled={saving} onClick={() => assign(thread.id)}>{text('本章推进', 'Advance here')}</Button>
+                  {action(thread.title, '本章推进', 'Advance here', () => assign(thread.id))}
                 </span>
               </li>
             ))}

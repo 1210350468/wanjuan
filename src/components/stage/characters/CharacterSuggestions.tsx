@@ -81,7 +81,7 @@ function SessionSuggestions({ session }: { session: ProjectSessionContext }) {
               <li key={summary.proposalBatchId} className="cast-suggestion" data-kind="decision">
                 <span className="cast-suggestion-kind">{labels.kind}</span>
                 <span className="cast-suggestion-text">{labels.title}</span>
-                <Button variant="text" size="sm" disabled={busy} aria-label={labels.review} onClick={() => { void proposals.read(summary) }}>
+                <Button variant="text" size="sm" disabled={busy} aria-label={`${labels.review}${text('：', ': ')}${labels.title}`} onClick={() => { void proposals.read(summary) }}>
                   <Eye size={14} aria-hidden />{text('检查', 'Review')}
                 </Button>
               </li>
@@ -97,16 +97,19 @@ function SessionSuggestions({ session }: { session: ProjectSessionContext }) {
               </div>
             </li>
           )}
-          {!states.candidate && states.summaries.map(summary => (
-            <li key={summary.candidateKey} className="cast-suggestion" data-kind="state">
-              <span className="cast-suggestion-kind">{text('状态建议', 'State')}</span>
-              <span className="cast-suggestion-text">{summary.characterName} · {text(...STATE_FIELD_LABELS[summary.field])}</span>
-              <Button variant="text" size="sm" disabled={busy} aria-label={text('检查定稿状态建议', 'Review finalized state suggestion')}
-                onClick={() => { void states.read(summary) }}>
-                <Eye size={14} aria-hidden />{text('检查', 'Review')}
-              </Button>
-            </li>
-          ))}
+          {!states.candidate && states.summaries.map(summary => {
+            const title = `${summary.characterName} · ${text(...STATE_FIELD_LABELS[summary.field])}`
+            return (
+              <li key={summary.candidateKey} className="cast-suggestion" data-kind="state">
+                <span className="cast-suggestion-kind">{text('状态建议', 'State')}</span>
+                <span className="cast-suggestion-text">{title}</span>
+                <Button variant="text" size="sm" disabled={busy} aria-label={text(`检查定稿状态建议：${title}`, `Review finalized state suggestion: ${title}`)}
+                  onClick={() => { void states.read(summary) }}>
+                  <Eye size={14} aria-hidden />{text('检查', 'Review')}
+                </Button>
+              </li>
+            )
+          })}
           {states.candidate && (
             <li className="cast-suggestion cast-suggestion-open" data-kind="state">
               <div className="cast-suggestion-compare">
@@ -120,16 +123,19 @@ function SessionSuggestions({ session }: { session: ProjectSessionContext }) {
               </div>
             </li>
           )}
-          {!relations.open && relations.candidates.map(candidate => (
-            <li key={candidate.candidateKey} className="cast-suggestion" data-kind="relation">
-              <span className="cast-suggestion-kind">{text('关系建议', 'Relationship')}</span>
-              <span className="cast-suggestion-text">{relationTitle(candidate, text)}</span>
-              <Button variant="text" size="sm" disabled={busy} aria-label={text('检查定稿关系建议', 'Review finalized relationship suggestion')}
-                onClick={() => relations.review(candidate.candidateKey)}>
-                <Eye size={14} aria-hidden />{text('检查', 'Review')}
-              </Button>
-            </li>
-          ))}
+          {!relations.open && relations.candidates.map(candidate => {
+            const title = relationTitle(candidate, text)
+            return (
+              <li key={candidate.candidateKey} className="cast-suggestion" data-kind="relation">
+                <span className="cast-suggestion-kind">{text('关系建议', 'Relationship')}</span>
+                <span className="cast-suggestion-text">{title}</span>
+                <Button variant="text" size="sm" disabled={busy} aria-label={text(`检查定稿关系建议：${title}`, `Review finalized relationship suggestion: ${title}`)}
+                  onClick={() => relations.review(candidate.candidateKey)}>
+                  <Eye size={14} aria-hidden />{text('检查', 'Review')}
+                </Button>
+              </li>
+            )
+          })}
           {relations.open && (
             <li className="cast-suggestion cast-suggestion-open" data-kind="relation">
               <div className="cast-suggestion-compare">
