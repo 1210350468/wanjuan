@@ -530,7 +530,9 @@ describe('portable project export service', () => {
     const db = new Database(f.databasePath)
     try { new GenerationRunRepository(() => db).recordRecoveryAbandonment('run-revision', { 'artifact-revision': 14 }) }
     finally { db.close() }
+    const sourceBefore = fs.readFileSync(f.databasePath)
     await exportPortableProject(input(f))
+    expect(fs.readFileSync(f.databasePath)).toEqual(sourceBefore)
     const targetRoot = path.join(f.base, 'restored-abandoned')
     await restorePortableProject({ archivePath: f.target, targetProjectRoot: targetRoot })
     const restored = new Database(path.join(targetRoot, '.ai-novel', 'project.db'), { readonly: true })
