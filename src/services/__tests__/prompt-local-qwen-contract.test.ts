@@ -143,7 +143,8 @@ const expectedJsonFields: Record<string, string[]> = {
   consistency_check: ['items', 'category', 'severity', 'quote', 'description', 'summary'],
   update_character_cards: [
     'updates',
-    'newCharacters',
+    'characterId',
+    'name',
     'currentState',
     'location',
     'powerLevel',
@@ -151,7 +152,7 @@ const expectedJsonFields: Record<string, string[]> = {
     'mentalState',
     'keyItems',
     'recentEvents',
-    'updatedAtChapter',
+    'evidence',
   ],
   infer_novel_config: [
     'novelConfig',

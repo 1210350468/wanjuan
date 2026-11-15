@@ -22,6 +22,7 @@ import { deriveChapters, type ChapterFacts } from '../../../stores/navigation/st
 import { fetchChapterDrafts, useDraftStore } from '../../../stores/draft-store'
 import { useProjectStore } from '../../../stores/project-store'
 import { includedCount, useReviewChecklist } from '../../editor/review-checklist'
+import type { AnnotationRevision } from '../../editor/CodeMirrorEditor'
 import { reviewDimensions, type useDraftActions } from '../../editor/use-draft-actions'
 import { deleteDraftVersion } from '../../panels/sidebar/draft-deletion'
 import { deleteFinalizedChapter } from '../../panels/sidebar/finalized-chapter-deletion'
@@ -63,7 +64,7 @@ type Ask = 'refine' | 'finalize' | 'delete' | 'discard' | 'reopen' | null
  * 完成合并、定稿；直接修稿、删除这一稿、复制本章正文在「更多」里。审稿清单的状态也在这里，
  * 侧页的勾选数与主按钮的「按 N 项意见修稿」是同一份。挂载方以审稿报告的会话键作 key，报告变了清单随之重置。
  */
-export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, title, draft, facts, review, focus }: {
+export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, title, draft, facts, review, focus, annotation }: {
   sheetSlot: HTMLDivElement | null
   tab: EditorTab
   stage: ChapterStage
@@ -74,6 +75,8 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
   facts: ChapterFacts | undefined
   review: LatestReview | null
   focus: boolean
+  /** 批注统一修改进行中：此时打开修稿合并会卸载正文，批注修改会丢。 */
+  annotation: AnnotationRevision | null
 }) {
   const text = useLocaleStore(s => s.text)
   const locale = useLocaleStore(s => s.locale)
@@ -120,6 +123,14 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
   }, [review, stage, filePath])
   const included = includedCount(checklist.items)
   const busy = draft.isChapterBusy
+  const annotating = annotation !== null
+  const reviseLocked = busy || annotating
+  const lockHint = annotating ? (
+    <>
+      {text('批注修改还在等你处理，修稿会冲掉它。先接受或取消批注修改。', 'Your annotation edits are still pending, and a revision would discard them. Accept or cancel them first.')}
+      {annotation.reveal && <Button variant="text" size="sm" onClick={annotation.reveal}>{text('回到预览', 'Back to preview')}</Button>}
+    </>
+  ) : null
   const generationModels = models.filter(isGenerationModel)
   const selectedReviseModel = reviseModelId ?? preferredGenerationModelId(models, refinementModelId)
   // 有几份能合并时取最新的一份；过期的修稿不占主流程，只能查看或丢弃。
@@ -143,6 +154,10 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
     void openPendingRevision(revision)
   }, [openPendingRevision])
   const autoOpened = useRef<number | null>(null)
+  // 批注修改中到的修稿记作已打开过：打开会卸载正文，结束后也不再自动打开，由作者自己点。
+  useEffect(() => {
+    if (annotating && pending) autoOpened.current = pending.id
+  }, [annotating, pending])
   useEffect(() => {
     if (stage !== 'merge' || !pending || mergeData || mergeLater || autoOpened.current === pending.id) return
     autoOpened.current = pending.id
@@ -264,7 +279,7 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
   const deleteLabel = reopening ? text('放弃修改…', 'Discard changes…') : text('删除这一稿…', 'Delete this draft…')
   const moreGroups: MenuGroupSpec[] = [
     { id: 'chapter', items: [
-      ...(editable ? [{ id: 'refine', label: text('直接修稿…', 'Revise directly…'), disabled: busy, onSelect: () => { setRefinePrompt(''); setAsk('refine') } }] : []),
+      ...(editable ? [{ id: 'refine', label: text('直接修稿…', 'Revise directly…'), disabled: reviseLocked, onSelect: () => { setRefinePrompt(''); setAsk('refine') } }] : []),
       ...(editable && stage !== 'revised' && !(stage === 'reviewed' && nothingToRevise) ? [{ id: 'finalize', label: text('定稿…', 'Finalize…'), disabled: !draft.canFinalize || olderDraft, onSelect: () => draft.requestFinalize(() => setAsk('finalize')) }] : []),
       ...(review && !sheetOpen && !focus ? [{ id: 'report', label: text('审稿报告', 'Review report'), onSelect: () => setSheet(true) }] : []),
       { id: 'history', label: text('版本历史', 'Version history'), onSelect: () => navigate({ kind: 'resource', page: 'history' }) },
@@ -299,7 +314,7 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
               <p className="stage-ch-options-foot">{text('只用于这一次审稿', 'Applies to this review only')}</p>
             </SplitAction>
             {more}
-            <span className="stage-ch-hint">{text(`可以直接改正文，${commandLabel('s')} 保存`, `Edit the text directly; ${commandLabel('s')} saves`)}</span>
+            <span className="stage-ch-hint">{lockHint ?? text(`可以直接改正文，${commandLabel('s')} 保存`, `Edit the text directly; ${commandLabel('s')} saves`)}</span>
           </>
         )
       case 'reviewed':
@@ -318,7 +333,7 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
               popoverClassName="stage-ch-options"
               label={text(`按 ${included} 项意见修稿`, `Revise with ${included} ${included === 1 ? 'note' : 'notes'}`)}
               icon={<Sparkles size={15} aria-hidden />}
-              disabled={busy || included === 0 || checklist.confirming || checklist.processing}
+              disabled={reviseLocked || included === 0 || checklist.confirming || checklist.processing}
               onRun={() => void revise()}
               optionsLabel={text('修稿选项', 'Revision options')}
             >
@@ -333,7 +348,7 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
             </SplitAction>}
             {reviewAgain}
             {more}
-            <span className="stage-ch-hint">{confirmWaived
+            <span className="stage-ch-hint">{lockHint ?? (confirmWaived
               ? text('这些意见都不修改，确认后记进审稿记录', 'None of these notes will be revised; confirm to record that in the review')
               : nothingToRevise
                 ? finalizeHint ?? nothingToReviseHint
@@ -341,17 +356,17 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
                 ? text('修稿结果会以差异给你确认，不会直接覆盖', 'You confirm the revision as a diff; nothing is overwritten')
                 : waived
                   ? finalizeHint ?? text('已确认不修改，可以在「更多」里定稿', 'Confirmed with no revision; finalize from More')
-                  : text('至少勾选一项意见', 'Check at least one note')}</span>
+                  : text('至少勾选一项意见', 'Check at least one note'))}</span>
           </>
         )
       case 'merge':
         return (
           <>
-            <Button variant="primary" disabled={busy} onClick={() => { setMergeLater(false); if (pending) openRevision(pending) }}>
+            <Button variant="primary" disabled={reviseLocked} onClick={() => { setMergeLater(false); if (pending) openRevision(pending) }}>
               {text('打开修稿合并', 'Open revision merge')}
             </Button>
             {more}
-            <span className="stage-ch-hint">{text('修稿已生成，逐段选择后完成合并', 'The revision is ready; choose paragraph by paragraph, then finish the merge')}</span>
+            <span className="stage-ch-hint">{lockHint ?? text('修稿已生成，逐段选择后完成合并', 'The revision is ready; choose paragraph by paragraph, then finish the merge')}</span>
           </>
         )
       case 'revised':
@@ -362,7 +377,7 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
             </Button>
             {reviewAgain}
             {more}
-            <span className="stage-ch-hint" data-tone={!finalizeHint && recheck?.recheckDisposition === 'completed' ? 'ok' : undefined}>{finalizeHint ?? revisedHint}</span>
+            <span className="stage-ch-hint" data-tone={!lockHint && !finalizeHint && recheck?.recheckDisposition === 'completed' ? 'ok' : undefined}>{lockHint ?? finalizeHint ?? revisedHint}</span>
           </>
         )
       case 'final':
@@ -412,7 +427,7 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
 
   return (
     <>
-      {!draft.mergeData && <div className="stage-ch-actions">{bar}</div>}
+      {!draft.mergeData && <div className="stage-ch-actions stage-ch-actions-sticky">{bar}</div>}
       <div className="stage-ch-notices">
         {!draft.mergeData && reopening && (
           <Notice title={text(`正在修改已定稿的${chapterLabel(chapterNumber, text)}`, `Editing finalized ${chapterLabel(chapterNumber, text).toLowerCase()}`)}>
@@ -433,7 +448,7 @@ export default function ChapterActions({ sheetSlot, tab, stage, chapterNumber, t
             title={text(`有 ${stale.length} 份修稿不能再合并`, `${stale.length} revision(s) can no longer be merged`)}
             actions={(
               <>
-                <Button variant="secondary" size="sm" disabled={busy} onClick={() => openRevision(stale.at(-1)!)}>{text('查看修稿', 'View revision')}</Button>
+                <Button variant="secondary" size="sm" disabled={reviseLocked} onClick={() => openRevision(stale.at(-1)!)}>{text('查看修稿', 'View revision')}</Button>
                 <Button variant="danger" size="sm" disabled={busy} onClick={() => setAsk('discard')}>{text('丢弃…', 'Discard…')}</Button>
               </>
             )}

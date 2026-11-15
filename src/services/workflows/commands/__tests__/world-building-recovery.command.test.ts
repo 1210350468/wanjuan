@@ -9,7 +9,7 @@ import {
   recoverableWorldBuildingCandidate,
   type ArchitectureProjectSnapshot,
 } from '../architecture.command'
-import { createWorkflowRuntimeDependencies } from './workflow-generation-runtime.fixture'
+import { createWorkflowRuntimeDependencies, useFakeModelStream, type FakeGenerateStream } from './workflow-generation-runtime.fixture'
 import { clearProjectCustomPrompts, getBuiltinPromptTemplate, type PromptTemplate } from '../../../prompt-templates'
 
 const projectPath = 'C:\\novels\\世界观恢复测试'
@@ -39,7 +39,7 @@ const snapshot: ArchitectureProjectSnapshot = {
   expectedProjectPath: projectPath,
   novelConfig,
 }
-const originalGenerateStream = useLLMStore.getState().generateStream
+const originalGenerateStream = useFakeModelStream.getState().generateStream
 const originalDefaultModelId = useLLMStore.getState().defaultModelId
 
 interface ResponseItem {
@@ -87,7 +87,8 @@ function installResponses(items: readonly ResponseItem[], writesAtRequestStart: 
     }
     return `世界观请求-${index}`
   })
-  useLLMStore.setState({ defaultModelId: 'world-recovery-model', generateStream })
+  useLLMStore.setState({ defaultModelId: 'world-recovery-model' })
+  useFakeModelStream.setState({ generateStream })
   return generateStream
 }
 
@@ -167,10 +168,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
-  useLLMStore.setState({
-    defaultModelId: originalDefaultModelId,
-    generateStream: originalGenerateStream,
-  })
+  useLLMStore.setState({ defaultModelId: originalDefaultModelId })
+  useFakeModelStream.setState({ generateStream: originalGenerateStream })
   useProjectStore.setState({ currentProject: null })
   clearProjectCustomPrompts()
 })
@@ -205,7 +204,7 @@ describe('GenerateWorldBuildingCommand 截断恢复', () => {
       ).execute({ step: {}, context: runContext, callbacks: callbacks() })
 
       expect(generateStream).toHaveBeenCalledTimes(1)
-      const messages = generateStream.mock.calls[0]![0] as Parameters<ReturnType<typeof useLLMStore.getState>['generateStream']>[0]
+      const messages = generateStream.mock.calls[0]![0] as Parameters<FakeGenerateStream>[0]
       const prompt = messages.filter(message => message.role === 'user').map(message => message.content).join('\n')
       if (templateSource === 'custom') expect(prompt).toContain('Build a world for')
       expect(prompt).toContain(config.coreOutline)

@@ -54,12 +54,61 @@ it('main实际模板与UTF16原文hash冻结，不把草稿声称为canonical',(
  expect(f.spy).not.toHaveBeenCalled()
  expect(()=>f.owner.beginEditorInline({...request,input:{...input,from:2}})).toThrow()
 })
-it('运行侧页的可恢复列表把选区建议列为选区恢复，不当作单章候选',async()=>{
- const f=fixture(),recovery=f.owner.beginEditorInline(request)
- await f.owner.executeEditorInline(recovery.view.handle)
+const replying=(text:string,finishReason:'stop'|'length'):GenerationRunServiceDependencies['dispatch']=>async(_request,options)=>{options.onVisible({kind:'delta',text});return {finishReason,usage:null}}
+it('半截建议和还没发出的选区任务列为选区恢复，不当作单章候选',async()=>{
+ const f=fixture(replying('林岚停下','length'))
+ const cut=f.owner.beginEditorInline({...request,uiActionNonce:'半截'}).view.handle
+ await f.owner.executeEditorInline(cut)
+ const pending=f.owner.beginEditorInline({...request,uiActionNonce:'没发出'}).view.handle
  const list=f.reopenStorage().listRecovery()
- expect(list.editors.map(item=>item.view.handle.runId)).toEqual([recovery.view.handle.runId])
+ expect(list.editors.map(item=>item.view.handle.runId).sort()).toEqual([cut.runId,pending.runId].sort())
  expect(list).toMatchObject({drafts:[],planning:[],reviews:[],partial:false})
+})
+it('气泡显示过的建议和作者拒绝过的建议不再列为可恢复（#686）',async()=>{
+ const f=fixture(replying('林岚停下脚步。','stop'))
+ const delivered=f.owner.beginEditorInline({...request,uiActionNonce:'送达'}).view.handle
+ await f.owner.executeEditorInline(delivered)
+ f.owner.acknowledgeEditorInline(delivered)
+ const rejected=f.owner.beginEditorInline({...request,uiActionNonce:'拒绝'}).view.handle
+ await f.owner.executeEditorInline(rejected)
+ f.owner.cancel(rejected)
+ const unsent=f.owner.beginEditorInline({...request,uiActionNonce:'没发就拒绝'}).view.handle
+ f.owner.cancel(unsent)
+ expect(f.reopenStorage().listRecovery()).toMatchObject({editors:[],partial:false})
+})
+it('生成完整但气泡没显示过（编辑器已卸载）：重开后仍列出，建议可从侧页复制',async()=>{
+ const f=fixture(replying('林岚停下脚步。','stop'))
+ const handle=f.owner.beginEditorInline(request).view.handle
+ await f.owner.executeEditorInline(handle)
+ const listed=f.reopenStorage().listRecovery().editors
+ expect(listed.map(item=>item.view.handle.runId)).toEqual([handle.runId])
+ expect((listed[0]!.view.candidates??listed[0]!.view.artifacts).map(item=>item.text)).toEqual(['林岚停下脚步。'])
+})
+it('升级前留下的完整建议没有待送达记录，按原判据不再列出',async()=>{
+ const f=fixture(replying('林岚停下脚步。','stop'))
+ const handle=f.owner.beginEditorInline(request).view.handle
+ await f.owner.executeEditorInline(handle)
+ f.db.prepare(`UPDATE generation_runs SET binding_json=json_remove(binding_json,'$."$editorInlineAwaitingDelivery"') WHERE run_id=?`).run(handle.runId)
+ expect(f.reopenStorage().listRecovery()).toMatchObject({editors:[],partial:false})
+})
+it('发起时记下原稿身份，重开后从运行读得到；旧运行没有这项',async()=>{
+ const f=fixture()
+ const withOrigin=f.owner.beginEditorInline({...request,uiActionNonce:'带原稿',input:{...input,filePath:'drafts/3-1.md'}}).view.handle
+ const legacy=f.owner.beginEditorInline({...request,uiActionNonce:'旧运行'}).view.handle
+ const next=f.reopenStorage()
+ expect(next.readEditorInlineRecovery(withOrigin).context.filePath).toBe('drafts/3-1.md')
+ expect(next.readEditorInlineRecovery(legacy).context.filePath).toBeUndefined()
+})
+it('拒绝过的建议还有没落盘的文字时仍列出，那段文字只能从这里复制',async()=>{
+ const f=fixture(replying('林岚停下脚步。','stop'))
+ const handle=f.owner.beginEditorInline(request).view.handle
+ f.db.exec("CREATE TRIGGER reject_snapshot BEFORE UPDATE OF artifact_json ON generation_artifacts BEGIN SELECT RAISE(FAIL,'synthetic disk failure'); END")
+ const receipt=await f.owner.executeEditorInline(handle)
+ f.db.exec('DROP TRIGGER reject_snapshot')
+ expect(receipt.run.unsavedTails?.[0]?.text.trim()).toBeTruthy()
+ f.owner.cancel(handle)
+ expect(f.owner.listRecovery().editors.map(item=>item.view.handle.runId)).toEqual([handle.runId])
+ f.owner.discardCandidate(handle,receipt.run.unsavedTails![0]!.artifactId)
 })
 it('同nonce不同作者输入拒绝，generic begin/execute不能绕过editor owner',async()=>{
  const f=fixture(),recovery=f.owner.beginEditorInline(request)
@@ -162,4 +211,56 @@ it.each([
  const [role,contract]=system.split(heading)
  for(const phrase of rule) expect(role).toContain(phrase)
  expect(contract).toBe(composePromptSystemRole(template,language).split(heading)[1])
+})
+
+
+const batchDocument = input.documentText
+const batchInput = {
+ action: 'batch-instruct' as const,
+ documentText: batchDocument,
+ from: 0,
+ to: batchDocument.length,
+ selectedText: batchDocument,
+ annotations: [
+  { id: '批注一', from: input.from, to: input.to, selectedText: input.selectedText, instruction: '改成第一人称' },
+  { id: '批注二', from: batchDocument.length - 1, to: batchDocument.length, selectedText: '乙', instruction: '删掉这个字' },
+ ],
+}
+it('多处批注冻结为一个完整章节任务，一次执行并可在重开后恢复，原稿身份一并记下', async () => {
+ const f = fixture(async (_r, o) => { o.onVisible({ kind: 'delta', text: '修改后的完整章节' }); return { finishReason: 'stop', usage: null } })
+ const recovery = f.owner.beginEditorInline({ input: { ...batchInput, filePath: 'drafts/3-1.md' }, modelId: 'synthetic', uiActionNonce: '统一批注修改' })
+ await f.owner.executeEditorInline(recovery.view.handle)
+ expect(f.spy).toHaveBeenCalledTimes(1)
+ const { task } = f.spy.mock.calls[0]![0] as { task: { messages: { role: string; content: string }[] } }
+ const sent = task.messages.map(message => message.content).join('\n')
+ for (const expected of ['改成第一人称', '删掉这个字', '完整章节', batchDocument]) expect(sent).toContain(expected)
+ expect(f.reopenStorage().readEditorInlineRecovery(recovery.view.handle).context).toMatchObject({ ...batchInput, filePath: 'drafts/3-1.md' })
+})
+it('批注统一修改的结果没回执前留在恢复列表，回执后不再列出', async () => {
+ const f = fixture(replying('修改后的完整章节', 'stop'))
+ const handle = f.owner.beginEditorInline({ input: batchInput, modelId: 'synthetic', uiActionNonce: '统一修改待送达' }).view.handle
+ await f.owner.executeEditorInline(handle)
+ expect(f.owner.listRecovery().editors.map(item => item.view.handle.runId)).toEqual([handle.runId])
+ f.owner.acknowledgeEditorInline(handle)
+ expect(f.reopenStorage().listRecovery().editors).toEqual([])
+})
+it('同一段原文在章里出现多次时，提示词写明批注的是第几处', async () => {
+ const repeated = '灯亮了。风停了。灯亮了。'
+ const twice = { action: 'batch-instruct' as const, documentText: repeated, from: 0, to: repeated.length, selectedText: repeated,
+  annotations: [{ id: '后一处', from: 8, to: 12, selectedText: '灯亮了。', instruction: '改成灯灭了' }] }
+ const f = fixture(async (_r, o) => { o.onVisible({ kind: 'delta', text: '灯亮了。风停了。灯灭了。' }); return { finishReason: 'stop', usage: null } })
+ const recovery = f.owner.beginEditorInline({ input: twice, modelId: 'synthetic', uiActionNonce: '重复原文' })
+ await f.owner.executeEditorInline(recovery.view.handle)
+ const { task } = f.spy.mock.calls[0]![0] as { task: { messages: { role: string; content: string }[] } }
+ expect(task.messages.map(message => message.content).join('\n')).toContain('全文第 2 处（共 2 处）')
+})
+it.each([
+ ['空批注', { ...batchInput, annotations: [] }],
+ ['批注重叠', { ...batchInput, annotations: [batchInput.annotations[0], { ...batchInput.annotations[1], from: 2 }] }],
+ ['批注原文不符', { ...batchInput, annotations: [batchInput.annotations[0], { ...batchInput.annotations[1], selectedText: '伪原文' }] }],
+ ['不是整章目标', { ...batchInput, from: 1, selectedText: batchDocument.slice(1) }],
+])('%s时拒绝批量运行', (_name, bad) => {
+ const f = fixture()
+ expect(() => f.owner.beginEditorInline({ input: bad, modelId: 'synthetic', uiActionNonce: '非法批注' })).toThrow('GENERATION_EDITOR_INPUT_INVALID')
+ expect(f.spy).not.toHaveBeenCalled()
 })

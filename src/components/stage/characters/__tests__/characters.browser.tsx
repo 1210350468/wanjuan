@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
-import { page, userEvent } from 'vitest/browser'
+import { userEvent } from 'vitest/browser'
 import { createRoot, type Root } from 'react-dom/client'
 import type { StoreApi } from 'zustand'
 
@@ -20,6 +20,7 @@ import { CHARACTER_DRAFT_TAB } from '../../../../stores/project-editor-draft-led
 import { useProjectStore } from '../../../../stores/project-store'
 import { useWorkflowStore } from '../../../../stores/workflow-store'
 import StageCharacters from '../StageCharacters'
+import { resizeViewport } from '../../../ui/__tests__/viewport'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -86,7 +87,7 @@ async function render() {
 
 beforeEach(async () => {
   // 宿主 1200 宽；视口比它窄时焦点移到屏外按钮会滚动页面，滚动事件晚一帧到达时会关掉刚打开的菜单。
-  await page.viewport(1280, 960)
+  await resizeViewport(1280, 960)
   pendingStates = []
   pendingDecisions = 0
   timeline = { nodes: [], chapterRange: { next: 1, last: 1 } }
@@ -266,7 +267,7 @@ describe('角色名单', () => {
       ? Promise.reject(ipcError(channel)) : base(channel, ...args))
     await render()
     await vi.waitFor(() => expect(banner()?.querySelector('.pi-notice-title')?.textContent).toBe('角色建议读取失败'))
-    expect(banner()!.querySelector('.pi-notice-text')?.textContent).toBe('定稿与导入留下的角色建议这次没读出来，可以重新读取。')
+    expect(banner()!.querySelector('.pi-notice-text')?.textContent).toBe('定稿、导入和蓝图留下的角色建议这次没读出来，可以重新读取。')
     expect([...banner()!.querySelectorAll('button')].map(button => button.textContent)).toEqual(['重新读取'])
     expect(banner()!.textContent).not.toContain('Error invoking remote method')
     expect(banner()!.textContent).not.toContain('项目会话已失效')
@@ -332,7 +333,7 @@ describe('角色名单', () => {
     await vi.waitFor(() => expect(banner()?.textContent).toContain('建议：北塔'))
     await click('接受状态建议')
     await vi.waitFor(() => expect(banner()?.querySelector('.pi-notice-title')?.textContent).toBe('角色建议读取失败'))
-    expect(banner()!.querySelector('.pi-notice-text')?.textContent).toBe('定稿与导入留下的角色建议这次没读出来，可以重新读取。')
+    expect(banner()!.querySelector('.pi-notice-text')?.textContent).toBe('定稿、导入和蓝图留下的角色建议这次没读出来，可以重新读取。')
   })
 
   it('读取失败后点「重新读取」重读两份列表，读到就换成待处理的建议', async () => {
