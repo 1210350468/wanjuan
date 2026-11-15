@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DRAFT_STATUS_INFO } from '../../../shared/draft-status'
 import { countDraftUnits } from '../../../shared/draft-units'
 import { formatResourceUri } from '../../../shared/project-paths'
@@ -6,12 +6,12 @@ import type { EditorTab } from '../../../stores/editor-store'
 import { readDraftBody } from '../../../stores/draft-store'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { chapterPhase } from '../../../stores/navigation/stage-progress'
-import { useStageStore } from '../../../stores/navigation/stage-store'
+import { useStageStore, type StageSheet } from '../../../stores/navigation/stage-store'
 import { useProjectStore } from '../../../stores/project-store'
 import type { ReviewEntry } from '../../../services/draft-index'
 import { ipc } from '../../../services/ipc-client'
 import { confirmationSourceReviewId, parseHumanConfirmedReviewSnapshot } from '../../../shared/human-confirmed-review'
-import CodeMirrorEditor from '../../editor/CodeMirrorEditor'
+import CodeMirrorEditor, { type AnnotationRevision } from '../../editor/CodeMirrorEditor'
 import { useReviewCycle } from '../../editor/review-checklist'
 import { useDraftActions } from '../../editor/use-draft-actions'
 import { sameProjectSessionContext } from '../../../shared/project-session-context'
@@ -107,6 +107,8 @@ function DraftChapter({ tab, filePath, projectKey }: { tab: EditorTab; filePath:
   const target = useProjectStore(s => s.currentProject?.novelConfig.wordsPerChapter) || 0
   const [sheetSlot, setSheetSlot] = useState<HTMLDivElement | null>(null)
   const sheetFree = useStageStore(s => s.focus || s.sheet === null || (s.sheet.kind === 'review' && (s.sheet.filePath !== filePath || latest === null)))
+  // 批注坞顶掉的侧页，批注用完放回；作者已另开别的则不动。
+  const sheetBeforeDock = useRef<StageSheet | null>(null)
 
   const facts = useStageStore(s => draft.meta && s.chapterFacts && session && sameProjectSessionContext(s.chapterFacts.session, session)
     ? s.chapterFacts.byDraft[draft.meta.id]
@@ -123,16 +125,19 @@ function DraftChapter({ tab, filePath, projectKey }: { tab: EditorTab; filePath:
   useEffect(() => {
     if (!request || request.filePath !== filePath || !sameProjectSessionContext(request.session, captureProjectSession(useProjectStore.getState().currentProject))) return
     useStageStore.setState({ chapterRequest: null, sheet: null })
+    sheetBeforeDock.current = null
     reload()
   }, [request, filePath, reload])
 
   // 请求只交给看得见的编辑器；被合并视图或批注审阅盖住时留在 store，露出后再交。交接后清掉，重挂不会重开气泡。
-  const [reviewing, setReviewing] = useState(false)
-  const covered = draft.mergeData !== null || reviewing
+  const [annotationRevision, setAnnotationRevision] = useState<AnnotationRevision | null>(null)
+  const covered = draft.mergeData !== null || annotationRevision?.phase === 'review'
   const recovery = useStageStore(s => !covered && s.selectionRequest?.filePath === filePath && session && sameProjectSessionContext(s.selectionRequest.session, session)
     ? s.selectionRequest : undefined)
   useEffect(() => {
-    if (recovery) useStageStore.setState({ selectionRequest: null, sheet: null })
+    if (!recovery) return
+    useStageStore.setState({ selectionRequest: null, sheet: null })
+    sheetBeforeDock.current = null
   }, [recovery])
   useEffect(() => {
     if (!covered) return
@@ -176,6 +181,7 @@ function DraftChapter({ tab, filePath, projectKey }: { tab: EditorTab; filePath:
               facts={facts}
               review={latest ? { report: latest.content, reviewId: latest.id, snapshot: review.snapshot, cycle: review.cycle, reloadCycle: review.reloadCycle } : null}
               focus={focus}
+              annotation={annotationRevision}
             />
           )}
           {chapterNumber !== undefined && (
@@ -204,8 +210,18 @@ function DraftChapter({ tab, filePath, projectKey }: { tab: EditorTab; filePath:
                 onChange={draft.onBodyChange}
                 onSave={body => draft.save(body)}
                 annotationSlot={sheetFree ? sheetSlot : null}
-                onAnnotationAdded={() => useStageStore.setState({ sheet: null })}
-                onReviewChange={setReviewing}
+                onAnnotationAdded={first => {
+                  const { sheet } = useStageStore.getState()
+                  if (sheet) sheetBeforeDock.current = sheet
+                  else if (first) sheetBeforeDock.current = null
+                  useStageStore.setState({ sheet: null })
+                }}
+                onAnnotationsCleared={() => {
+                  const sheet = sheetBeforeDock.current
+                  sheetBeforeDock.current = null
+                  if (sheet && useStageStore.getState().sheet === null) useStageStore.setState({ sheet })
+                }}
+                onAnnotationRevisionChange={setAnnotationRevision}
                 chapterAnnotations
                 onCommitAnnotations={async (before, after, annotations) => {
                   await draft.commitAnnotations(before, after, annotations)
