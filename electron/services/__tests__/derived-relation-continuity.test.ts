@@ -1632,6 +1632,47 @@ describe('时间线算不算变化，看这对人物两个方向的记录', () =
   })
 })
 
+describe('一次抽取对一对人物只记一条说法，方向也算说法的一部分', () => {
+  const linesInForce = (chapter: number) => latestNodesBefore(readCharacterContinuityNodes(db()), chapter).relations
+    .flatMap(pair => pair.lines.map(line => [line.subjectId, line.targetId, line.value]))
+  const timelineRows = (characterId: string) => characterTimeline(readCharacterContinuityTimeline(db(), characterId).nodes)
+    .flatMap(group => group.changes.map(change => [group.chapter, change.value]))
+  const cards = () => pending().map(({ sourceId, targetId, value }) => [sourceId, targetId, value])
+
+  it('同一份定稿重跑时说法没变、方向改了：生效的关系和时间线都换成改后的方向', () => {
+    openProject()
+    const draftId = finalizeNew(8, CHAPTER_EIGHT)
+    commitModelOutput(draftId, { updates: [], relations: [relationChange('崇拜', BREAK_UP)] })
+    commitModelOutput(draftId, { updates: [], relations: [relationChange('崇拜', BREAK_UP, SHEN, LIN)] })
+
+    expect(linesInForce(9)).toEqual([[SHEN, LIN, '崇拜']])
+    expect(timelineRows(SHEN)).toEqual([[8, '崇拜']])
+    expect(timelineRows(LIN)).toEqual([])
+  })
+
+  it('作者设定盟友，同一次抽取报林岚→沈砚「仇敌」和沈砚→林岚「盟友」：生效的关系里有建议卡上的「仇敌」，待作者裁定', () => {
+    openProject()
+    authorRelation('盟友')
+    commitModelOutput(finalizeNew(8, CHAPTER_EIGHT), { updates: [], relations: [relationChange('仇敌', BREAK_UP), relationChange('盟友', BREAK_UP, SHEN, LIN)] })
+
+    expect(cards()).toEqual([[LIN, SHEN, '仇敌']])
+    expect(latestNodesBefore(readCharacterContinuityNodes(db()), 9).relations.map(pair => [pair.conflict, pair.lines.map(line => line.value).sort()])).toEqual([[true, ['仇敌', '盟友']]])
+  })
+
+  it('同一次抽取两个方向各报一种说法：只记后报的一条，重跑同一份结果不再多记', () => {
+    openProject()
+    const draftId = finalizeNew(8, CHAPTER_EIGHT)
+    const output = { updates: [], relations: [relationChange('拜师', BREAK_UP), relationChange('收徒', BREAK_UP, SHEN, LIN)] }
+    commitModelOutput(draftId, output)
+    const before = eventCount()
+
+    commitModelOutput(draftId, output)
+    expect(eventCount()).toBe(before)
+    expect(linesInForce(9)).toEqual([[SHEN, LIN, '收徒']])
+    expect(timelineRows(LIN)).toEqual([])
+  })
+})
+
 describe('后续章重述同样的关系，之后再定稿更早的章', () => {
   const inForce = (chapter: number) => latestNodesBefore(readCharacterContinuityNodes(db()), chapter).relations.flatMap(pair => pair.lines.map(line => line.value)).sort()
 

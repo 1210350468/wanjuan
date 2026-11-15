@@ -433,19 +433,25 @@ function relationCandidateKey(source: FinalizedSourceIdentity, change: Pick<Fina
 function commitDerivedRelations(db: BetterSqlite3.Database, context: FinalizedCharacterContext, changes: readonly FinalizedRelationChange[]): void {
   const { source } = context
   const name = (id: string) => context.characters.find(character => character.characterId === id)!.displayNameSnapshot
-  const candidates: FinalizedRelationCandidate[] = []
+  const statements = new Map<string, { change: FinalizedRelationChange; matchesAuthor: boolean; authorLinesAtExtraction: string[] | undefined }>()
   for (const change of changes) {
+    const pair = unorderedPairKey(change.sourceId, change.targetId)
+    const authorAtExtraction = context.authorRelations?.filter(line => unorderedPairKey(line.sourceId, line.targetId) === pair)
+    const matchesAuthor = !!authorAtExtraction?.some(line => line.relation === change.relation)
+    // 一次抽取对一对人物只认一条说法，节点和建议都出自它。两个方向都报了时取后报的，但重述作者设定的不顶掉和设定不同的那条。
+    if (matchesAuthor && statements.get(pair)?.matchesAuthor === false) continue
+    statements.set(pair, { change, matchesAuthor, authorLinesAtExtraction: authorAtExtraction?.map(line => JSON.stringify([line.sourceId, line.targetId, line.relation])).sort() })
+  }
+  const candidates: FinalizedRelationCandidate[] = []
+  for (const { change, matchesAuthor, authorLinesAtExtraction } of statements.values()) {
     const series = derivedRelationSeries(change.sourceId, change.targetId)
     const seriesNodes = readCharacterContinuityNodes(db, [change.sourceId, change.targetId]).filter(node => node.aspect === 'relation' && node.relationshipId === series)
     const ownLatest = seriesNodes.filter(node => node.provenance.kind === 'derived' && node.provenance.source.finalizationId === source.finalizationId)
       .sort((left, right) => left.seq - right.seq).at(-1)
-    const authorAtExtraction = context.authorRelations?.filter(line => unorderedPairKey(line.sourceId, line.targetId) === unorderedPairKey(change.sourceId, change.targetId))
-    const authorLinesAtExtraction = authorAtExtraction?.map(line => JSON.stringify([line.sourceId, line.targetId, line.relation])).sort()
-    const matchesAuthor = !!authorAtExtraction?.some(line => line.relation === change.relation)
     const names = { sourceName: name(change.sourceId), targetName: name(change.targetId) }
     const firstRecordRestatesAuthor = matchesAuthor && !seriesNodes.some(node => node.effectiveChapter <= source.chapterNumber)
     if (firstRecordRestatesAuthor) continue
-    if (ownLatest?.value !== change.relation) appendDerivedRelationNode(db, { ...change, ...names, source, quote: change.evidence })
+    if (ownLatest?.value !== change.relation || ownLatest.subjectId !== change.sourceId) appendDerivedRelationNode(db, { ...change, ...names, source, quote: change.evidence })
     if (authorLinesAtExtraction?.length && !matchesAuthor) candidates.push({ candidateKey: relationCandidateKey(source, change), source: structuredClone(source), sourceId: change.sourceId, targetId: change.targetId,
       ...names, value: change.relation, evidence: change.evidence, authorLinesAtCreation: authorLinesAtExtraction })
   }
