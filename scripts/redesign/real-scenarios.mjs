@@ -437,7 +437,7 @@ export const REAL_SCENARIOS = {
     assert.equal(measured.finalizeWhilePaused.dialogs, 0, '批次占着本章时不打开定稿确认框')
     assert.equal(measured.finalizeWhilePaused.finalizedInDb, false, '批次暂停时第 3 章不会被定稿')
 
-    // #582 的情形是批次中断后作者定稿写好的一章。取消的批次不能再续（#568），所以这里让应用在暂停时被关掉：重启后批次列为可恢复。
+    // 用关掉应用而不是取消来中断批次：取消的批次不能再续（#568）。
     await restartAndOpen(context, { killed: true })
     page = context.page
     measured.recoveryBeforeFinalize = await batchRecovery(page)

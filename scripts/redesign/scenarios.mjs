@@ -316,7 +316,7 @@ export async function untilGateHolds(gate, timeoutMs = 15_000) {
 
 /**
  * 跑 action，等主进程里 channel 至少有一次调用在 action 开始后返回，界面也已按返回值渲染完。
- * 「没有 X」「只有一条 X」这类断言要等能产出 X 的那次读取结束，不能用固定等待代替。
+ * 用于「没有 X」「只有一条 X」这类断言：等产出 X 的那次读取结束，不用固定等待。
  * 同一窗口的 IPC 按序送达：之后再发一次 IPC，它的回复到了，channel 的回复也已交给界面，再等两帧让 React 提交。
  */
 export async function afterIpc(app, page, channel, action) {

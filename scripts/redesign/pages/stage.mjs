@@ -333,7 +333,7 @@ export async function openChapter(page, number) {
   return prose(page)
 }
 
-/** 按 Ctrl S 保存。先等顶栏是「未保存」：不脏时顶栏本来就写「已保存」，只等它证明不了这一下保存过。 */
+/** 先等顶栏变「未保存」：不脏时顶栏本就写「已保存」，只等它证明不了保存发生过。 */
 export async function saveWithCtrlS(page) {
   await saveStatus(page).filter({ hasText: /^未保存$/ }).waitFor({ state: 'visible' })
   await page.keyboard.press('ControlOrMeta+S')
