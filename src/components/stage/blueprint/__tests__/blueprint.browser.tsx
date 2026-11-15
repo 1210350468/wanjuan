@@ -1449,6 +1449,14 @@ describe('AI 检查（蓝图正文对照时间线）', () => {
     await expect.element(page.getByText('没发现和时间线矛盾的地方。检查到第 3 章。')).toBeVisible()
   })
 
+  it('模型报的结论都因依据不成立被丢掉：不说没发现矛盾，说明这次查得不全', async () => {
+    read = { ...checked([]), result: { ...checked([]).result, droppedFindings: 2 } }
+    await renderPage(2)
+    await check()
+    await expect.element(page.getByText('蓝图没有改动。有 2 条结论的依据不成立，没有显示，再点一次“AI 检查”。')).toBeVisible()
+    expect(document.body.textContent).not.toContain('没发现和时间线矛盾的地方')
+  })
+
   it('结果读不出来：说明蓝图没动，不显示结论', async () => {
     read = { attemptCount: 1 }
     await renderPage(2)

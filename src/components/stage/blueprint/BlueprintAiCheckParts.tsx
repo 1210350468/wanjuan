@@ -1,4 +1,5 @@
 import { Fragment } from 'react'
+import { pluralEn } from '../../../shared/plural-en'
 import { useLocaleStore } from '../../../stores/locale-store'
 import { Button } from '../../ui/Button'
 import { Notice } from '../../ui/Notice'
@@ -53,7 +54,9 @@ export function BlueprintAiSummary({ ai, onSelectChapter }: { ai: BlueprintAiChe
   if (status.kind === 'unreadable') return <Notice tone="warn" title={text('蓝图没有改动。这次结果没读出来，再点一次“AI 检查”。', 'Your blueprints are unchanged. This result could not be read. Choose AI check again.')} />
   if (status.kind === 'failed') return <Notice tone="warn" title={status.message} />
   if (status.kind !== 'done' || through === null) return null
-  if (ai.clean) return <Notice tone="ok" title={text(`没发现和时间线矛盾的地方。检查到第 ${through} 章。`, `No conflicts with the timeline. Checked through chapter ${through}.`)} />
+  const dropped = ai.droppedWhenQuiet
+  if (dropped === 0) return <Notice tone="ok" title={text(`没发现和时间线矛盾的地方。检查到第 ${through} 章。`, `No conflicts with the timeline. Checked through chapter ${through}.`)} />
+  if (dropped !== null) return <Notice tone="warn" title={text(`蓝图没有改动。有 ${dropped} 条结论的依据不成立，没有显示，再点一次“AI 检查”。`, `Your blueprints are unchanged. ${dropped} ${pluralEn(dropped, 'finding')} cited an invalid basis and stayed hidden. Choose AI check again.`)} />
   const chapters = [...new Set(ai.findings.map(finding => finding.chapterNumber))]
   if (chapters.length === 0) return null
   return (
