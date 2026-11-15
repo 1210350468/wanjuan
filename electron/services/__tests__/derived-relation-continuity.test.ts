@@ -485,13 +485,14 @@ describe('定稿后自动记录人物关系变化', () => {
     expect(pending()).toMatchObject([{ value: '恩断义绝', authorRelations: ['师徒'] }])
   })
 
-  it('模型重述作者已有的关系不算变化，不记节点也不提示', () => {
+  it('模型重述作者已有的关系不算变化：时间线没有这一章，生效的只有作者设定，也不提示', () => {
     openProject()
     authorRelation('师徒')
     const draftId = finalizeNew(8, CHAPTER_EIGHT)
     commitModelOutput(draftId, { updates: [], relations: [relationChange('师徒', BREAK_UP)] })
 
-    expect(derivedNodes()).toEqual([])
+    expect(characterTimeline(readCharacterContinuityTimeline(db(), LIN).nodes).map(group => group.chapter)).toEqual([1])
+    expect(latestNodesBefore(relationNodes(), 9).relations.flatMap(pair => pair.lines.map(line => line.provenance.kind))).toEqual(['author'])
     expect(pending()).toEqual([])
   })
 
@@ -595,7 +596,7 @@ describe('定稿后自动记录人物关系变化', () => {
     expect(pending().map(item => item.value)).toEqual(['求师门原谅'])
   })
 
-  it('同一对角色后续章重述同样的派生关系不算变化，不产生新节点', () => {
+  it('同一对角色后续章重述同样的派生关系不算变化：时间线没有这一章，也不提示', () => {
     openProject()
     authorRelation('师徒')
     const eight = finalizeNew(8, CHAPTER_EIGHT)
@@ -604,7 +605,7 @@ describe('定稿后自动记录人物关系变化', () => {
     const nine = finalizeNew(9, '第九章：沈砚望着断裂的信物，一言不发。')
     commitModelOutput(nine, { updates: [], relations: [relationChange('恩断义绝', '沈砚望着断裂的信物')] })
 
-    expect(derivedNodes()).toHaveLength(1)
+    expect(characterTimeline(readCharacterContinuityTimeline(db(), LIN).nodes).map(group => group.chapter)).toEqual([8, 1])
     expect(pending()).toEqual([])
   })
 
@@ -714,7 +715,7 @@ describe('采用后的时间线只留一行', () => {
     decide('accept')
 
     expect(chapterChanges(8, SHEN).map(change => [change.source, change.removed, change.value])).toEqual([['author', true, '素不相识']])
-    expect(chapterChanges(8, LIN).map(change => [change.node.targetId, change.source, change.value])).toContainEqual([SHEN, 'author', '彼此信任'])
+    expect(chapterChanges(8, LIN).map(change => [change.node.subjectId, change.source, change.value])).toContainEqual([LIN, 'author', '彼此信任'])
   })
 })
 
@@ -733,12 +734,12 @@ describe('关系比对查两个方向', () => {
     expect(allAuthorRows()).toEqual([{ source: LIN, target: SHEN, relation: '彼此信任' }])
   })
 
-  it('模型反写作者已有的关系不算变化，不记节点也不提示', () => {
+  it('模型反写作者已有的关系不算变化：生效的只有作者设定，也不提示', () => {
     openProject()
     authorRelation('师徒', SHEN, LIN)
     commitModelOutput(finalizeNew(8, CHAPTER_EIGHT), { updates: [], relations: [relationChange('师徒', BREAK_UP)] })
 
-    expect(allDerived()).toEqual([])
+    expect(latestNodesBefore(readCharacterContinuityNodes(db()), 9).relations.flatMap(pair => pair.lines.map(line => [line.subjectId, line.provenance.kind]))).toEqual([[SHEN, 'author']])
     expect(pending()).toEqual([])
   })
 
@@ -1458,5 +1459,23 @@ describe('派生关系的系列是这对人物，方向和说法照定稿原样'
     decide('accept')
     expect(db().prepare('SELECT source_character_id AS source,target_character_id AS target,relation FROM character_relationships').all())
       .toEqual([{ source: SHEN, target: LIN, relation: '收徒' }])
+  })
+})
+
+describe('后续章重述同样的关系，之后再定稿更早的章', () => {
+  const inForce = (chapter: number) => latestNodesBefore(readCharacterContinuityNodes(db()), chapter).relations.flatMap(pair => pair.lines.map(line => line.value)).sort()
+
+  it.each([
+    ['同向重述', LIN, SHEN, [7, 5, 3]],
+    ['反向重述', SHEN, LIN, [5, 3]],
+  ])('第 3 章盟友、第 7 章%s盟友，之后定稿第 5 章仇敌：第 8 章仍是盟友，林岚的时间线记下第 7 章变回盟友', (_label, source, target, linChapters) => {
+    openProject()
+    commitModelOutput(finalizeNew(3, '第三章：林岚与沈砚结为盟友。'), { updates: [], relations: [relationChange('盟友', '结为盟友')] })
+    commitModelOutput(finalizeNew(7, '第七章：两人仍是盟友。'), { updates: [], relations: [relationChange('盟友', '仍是盟友', source, target)] })
+    commitModelOutput(finalizeNew(5, '第五章：林岚视沈砚为仇敌。'), { updates: [], relations: [relationChange('仇敌', '视沈砚为仇敌')] })
+
+    expect(inForce(6)).toEqual(['仇敌'])
+    expect(inForce(8)).toEqual(['盟友'])
+    expect(characterTimeline(readCharacterContinuityTimeline(db(), LIN).nodes).map(group => group.chapter)).toEqual(linChapters)
   })
 })

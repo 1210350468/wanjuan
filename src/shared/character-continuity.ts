@@ -85,7 +85,8 @@ export function latestNodesBefore(nodes: readonly ContinuityNode[], chapter: num
     const key = JSON.stringify([node.subjectId, node.targetId].sort())
     pairs.set(key, [...pairs.get(key) ?? [], node])
   }
-  const relations = [...pairs.values()].flatMap(lines => {
+  const relations = [...pairs.values()].flatMap(all => {
+    const lines = all.filter(line => line.provenance.kind !== 'derived' || !all.some(other => other.provenance.kind !== 'derived' && other.value === line.value))
     const shown = wanted ? lines.filter(line => wanted.has(line.subjectId)) : lines
     return shown.length ? [{ lines: shown, conflict: hasConflict(lines) }] : []
   })
@@ -143,6 +144,15 @@ function foldAdoptedRelations(changes: readonly CharacterTimelineChange[]): Char
   return folded.filter(change => !absorbed.has(change))
 }
 
+/** 定稿重述写这一章之前已经生效的同一说法，不算变化。同章作者的决定（比如采用）在这条记录之后，不算之前。 */
+function restates(nodes: readonly ContinuityNode[], node: ContinuityNode): boolean {
+  if (node.aspect !== 'relation' || node.provenance.kind !== 'derived') return false
+  const pair = JSON.stringify([node.subjectId, node.targetId].sort())
+  const before = nodes.filter(other => other.provenance.kind === 'derived' || other.effectiveChapter < node.effectiveChapter)
+  return latestNodesBefore(before, node.effectiveChapter).relations.some(({ lines }) => lines.some(line =>
+    JSON.stringify([line.subjectId, line.targetId].sort()) === pair && line.value === node.value))
+}
+
 /** 同章同字段的取舍规则与 latestNodesBefore 相同。 */
 export function characterTimeline(nodes: readonly ContinuityNode[]): CharacterTimelineChapter[] {
   const series = new Map<string, ContinuityNode[]>()
@@ -157,7 +167,7 @@ export function characterTimeline(nodes: readonly ContinuityNode[]): CharacterTi
     let previous = ''
     line.forEach((node, index) => {
       const removed = node.value === ''
-      if (line[index + 1]?.effectiveChapter !== node.effectiveChapter) {
+      if (line[index + 1]?.effectiveChapter !== node.effectiveChapter && !restates(nodes, node)) {
         const changes = chapters.get(node.effectiveChapter) ?? []
         changes.push({ node, source: TIMELINE_SOURCE[node.provenance.kind], removed, value: removed ? previous : node.value })
         chapters.set(node.effectiveChapter, changes)

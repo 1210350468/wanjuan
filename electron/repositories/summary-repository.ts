@@ -437,17 +437,19 @@ function commitDerivedRelations(db: BetterSqlite3.Database, context: FinalizedCh
   const candidates: FinalizedRelationCandidate[] = []
   for (const change of changes) {
     const series = derivedRelationSeries(change.sourceId, change.targetId)
-    const pairNodes = [...readCharacterContinuityNodes(db, change.sourceId), ...readCharacterContinuityNodes(db, change.targetId)]
-    const previous = latestNodesBefore(pairNodes, source.chapterNumber + 1).relations
-      .flatMap(pair => pair.lines).find(line => line.relationshipId === series)
+    const seriesNodes = [...readCharacterContinuityNodes(db, change.sourceId), ...readCharacterContinuityNodes(db, change.targetId)]
+      .filter(node => node.aspect === 'relation' && node.relationshipId === series)
+    const [previous] = latestNodesBefore(seriesNodes, source.chapterNumber + 1).relations.flatMap(pair => pair.lines)
     const unchanged = previous?.value === change.relation
+    const rerun = unchanged && previous.provenance.kind === 'derived' && previous.provenance.source.finalizationId === source.finalizationId
     const authorAtExtraction = context.authorRelations?.filter(line => unorderedPairKey(line.sourceId, line.targetId) === unorderedPairKey(change.sourceId, change.targetId))
     const authorLinesAtExtraction = authorAtExtraction?.map(line => JSON.stringify([line.sourceId, line.targetId, line.relation])).sort()
     const matchesAuthor = !!authorAtExtraction?.some(line => line.relation === change.relation)
-    if (matchesAuthor && (!previous || unchanged)) continue
-    if (unchanged && !(previous.provenance.kind === 'derived' && previous.provenance.source.finalizationId === source.finalizationId)) continue
     const names = { sourceName: name(change.sourceId), targetName: name(change.targetId) }
-    if (!unchanged) appendDerivedRelationNode(db, { ...change, ...names, source, quote: change.evidence })
+    if (matchesAuthor && !previous) continue
+    // 重述也留节点，之后再定稿更早的章时这一章的说法仍挡在后面；算不算变化由读取端判断。
+    if (!rerun) appendDerivedRelationNode(db, { ...change, ...names, source, quote: change.evidence })
+    if (unchanged && !rerun) continue
     if (authorLinesAtExtraction?.length && !matchesAuthor) candidates.push({ candidateKey: relationCandidateKey(source, change), source: structuredClone(source), sourceId: change.sourceId, targetId: change.targetId,
       ...names, value: change.relation, evidence: change.evidence, authorLinesAtCreation: authorLinesAtExtraction })
   }
@@ -475,11 +477,19 @@ function candidateReceipts(db: BetterSqlite3.Database): StoredCharacterStateDeci
     .flatMap(item => parseCharacterStateCandidateStore(item.candidates).receipts)
 }
 
+/** 后续章重述拒绝过的值，同样算拒绝过。 */
 function markDeclinedRelations(db: BetterSqlite3.Database, nodes: ContinuityNode[]): ContinuityNode[] {
-  const declined = new Set(candidateReceipts(db).filter(receipt => receipt.decision === 'decline').map(receipt => receipt.candidateKey))
-  return nodes.map(node => node.aspect === 'relation' && node.provenance.kind === 'derived'
-    && declined.has(relationCandidateKey(node.provenance.source, { sourceId: node.subjectId, targetId: node.targetId, relation: node.value }))
-    ? { ...node, authorDeclined: true as const } : node)
+  const declinedKeys = new Set(candidateReceipts(db).filter(receipt => receipt.decision === 'decline').map(receipt => receipt.candidateKey))
+  const declined = new Set<string>()
+  const lastOfSeries = new Map<string, ContinuityNode>()
+  for (const node of [...nodes].sort((left, right) => left.effectiveChapter - right.effectiveChapter || left.seq - right.seq)) {
+    if (node.aspect !== 'relation' || node.provenance.kind !== 'derived') continue
+    const previous = lastOfSeries.get(node.relationshipId)
+    if (declinedKeys.has(relationCandidateKey(node.provenance.source, { sourceId: node.subjectId, targetId: node.targetId, relation: node.value }))
+      || previous && declined.has(previous.eventId) && previous.value === node.value) declined.add(node.eventId)
+    lastOfSeries.set(node.relationshipId, node)
+  }
+  return nodes.map(node => declined.has(node.eventId) ? { ...node, authorDeclined: true as const } : node)
 }
 
 function relationDecisionPayloadHash(request: FinalizedRelationDecisionRequest): string {
