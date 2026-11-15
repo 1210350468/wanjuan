@@ -347,6 +347,32 @@ describe('替换定稿后检查后续蓝图', () => {
     await expect.element(page.getByText('蓝图没有改动。这次结果没读出来，再点“检查后续蓝图”。')).toBeVisible()
   })
 
+  it('在两章替换定稿的标签之间切换：上一章在跑的检查不挡这一章的按钮，结果也不落到这一章', async () => {
+    backend.state.impacts = [IMPACT, { ...IMPACT, chapterNumber: 4, finalizationId: 'finalization-b', laterChapters: [5], blueprintOnlyChapters: [] }]
+    const respond = backend.invoke.getMockImplementation()!
+    backend.invoke.mockImplementation(async (channel, ...args) => channel === 'graph-generation:suggestions'
+      && (args[0] as { finalizationId: string }).finalizationId === 'finalization-b' ? null : respond(channel, ...args))
+    const fourth = backend.addDraft({ status: 'finalized', chapterNumber: 4, version: 2 })
+    await openReplaced()
+    await click('检查后续蓝图')
+    await expect.element(button('正在检查…')).toBeDisabled()
+
+    await openDraft(fourth.id)
+    await expect.element(page.getByText('第 4 章已修改')).toBeVisible()
+    await expect.element(button('检查后续蓝图')).toBeEnabled()
+
+    const tabOf = (chapterNumber: number) => useEditorStore.getState().tabs.find(tab => tab.chapterNumber === chapterNumber)!.id
+    await act(async () => useEditorStore.getState().setActiveTab(tabOf(3)))
+    backend.state.suggestions = list([card(5)])
+    await finish()
+    await expect.element(page.getByText('第 5 章写林舟和老周并肩，新稿里两人已成死敌。')).toBeVisible()
+
+    await act(async () => useEditorStore.getState().setActiveTab(tabOf(4)))
+    await expect.element(page.getByText('第 4 章已修改')).toBeVisible()
+    await expect.element(button('检查后续蓝图')).toBeEnabled()
+    expect(document.body.textContent).not.toContain('第 5 章写林舟和老周并肩')
+  })
+
   it('英文界面：按钮、卡片与提示都是英文', async () => {
     useLocaleStore.setState({ locale: 'en-US' })
     backend.addDraft({ status: 'draft', chapterNumber: 4 })

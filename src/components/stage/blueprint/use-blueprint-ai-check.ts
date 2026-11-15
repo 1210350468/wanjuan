@@ -204,13 +204,15 @@ export function useBlueprintAiCheck(projectKey: string, blueprints: readonly Cha
   }
 
   const chapterFindings = (chapterNumber: number) => findings.filter(finding => finding.chapterNumber === chapterNumber)
+  /** 按章隐藏掉的结论不算「没发现」，只有模型确实没报（或都被豁免）才算安静。 */
+  const quiet = status.kind === 'done' && report !== null && !stale && [...report.chapters.keys()].every(unchanged) && report.result.findings.every(finding =>
+    exemptedFactKeys(exemptions, finding.chapterNumber).has(continuityFindingKey(finding.eventIds)))
 
   return {
     status, hasTimeline, busy, findings, chapterFindings, exempt, undo,
     checkedThroughChapter: report?.result.checkedThroughChapter ?? null,
-    /** 按章隐藏掉的结论不算「没发现」，只有模型确实没报（或都被豁免）才说没问题。 */
-    clean: status.kind === 'done' && report !== null && !stale && [...report.chapters.keys()].every(unchanged) && report.result.findings.every(finding =>
-      exemptedFactKeys(exemptions, finding.chapterNumber).has(continuityFindingKey(finding.eventIds))),
+    quiet,
+    droppedFindings: report && !stale ? report.result.droppedFindings : 0,
     exempted: (chapterNumber: number | undefined) => exempted && exempted.finding.chapterNumber === chapterNumber && isProjectSessionCurrent(exempted.session) ? exempted : null,
     clearExempted: useCallback(() => setExempted(null), []),
     run,

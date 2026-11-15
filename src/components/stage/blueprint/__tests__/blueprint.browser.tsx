@@ -572,6 +572,7 @@ describe('蓝图阶段', () => {
       expect(invoke.mock.calls.some(call => call[0] === 'db:blueprint-upsert' && (call[1] as ChapterBlueprint).chapterNumber === 2)).toBe(true)
       await expect.element(page.getByText('第 2 章蓝图把 林岚 和 守塔人 写成「亲密同伴」，但第 1 章起两人是「决裂」。')).toBeVisible()
       await expect.element(page.getByText('依据：你的设定 · 决裂')).toBeVisible()
+      await expect.element(page.getByText('改这一章的蓝图，或确认这是有意安排。')).toBeVisible()
       await expect.element(page.getByRole('button', { name: '写第 2 章' })).toBeEnabled()
     })
 
@@ -1447,6 +1448,23 @@ describe('AI 检查（蓝图正文对照时间线）', () => {
     await renderPage(2)
     await check()
     await expect.element(page.getByText('没发现和时间线矛盾的地方。检查到第 3 章。')).toBeVisible()
+  })
+
+  it('模型报的结论都因依据不成立被丢掉：不说没发现矛盾，说明这次查得不全', async () => {
+    read = { ...checked([]), result: { ...checked([]).result, droppedFindings: 2 } }
+    await renderPage(2)
+    await check()
+    await expect.element(page.getByText('蓝图没有改动。有 2 条结论的依据不成立，没有显示，再点一次“AI 检查”。')).toBeVisible()
+    expect(document.body.textContent).not.toContain('没发现和时间线矛盾的地方')
+  })
+
+  it('一部分结论被丢掉：照常列出矛盾的章，并说明另有几条没有显示', async () => {
+    const shown = checked([finding(3, '第 3 章同样写成同伴。')])
+    read = { ...shown, result: { ...shown.result, droppedFindings: 1 } }
+    await renderPage(2)
+    await check()
+    await expect.element(page.getByText('AI 检查到第 3 章，这些章和时间线矛盾。')).toBeVisible()
+    await expect.element(page.getByText('另有 1 条结论的依据不成立，没有显示。')).toBeVisible()
   })
 
   it('结果读不出来：说明蓝图没动，不显示结论', async () => {
