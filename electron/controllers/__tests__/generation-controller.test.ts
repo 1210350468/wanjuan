@@ -768,6 +768,7 @@ describe('chapter outline command through registered main IPC and formal CAS', (
       name: '合成小说', sessionLease: session.leaseId, novelConfig: config, characterStates: '', createdAt: '', updatedAt: '' } })
     syncProject()
     let fault = options.crash, calls = 0
+    const navigationWrites: string[] = []
     const progress: number[] = [], requestProgress: number[] = []
     const prompts: string[] = []
     const fetch = vi.fn(async (_url: string, init: RequestInit) => {
@@ -791,7 +792,13 @@ describe('chapter outline command through registered main IPC and formal CAS', (
       if (channel === 'fs:list-dir') return fs.readdirSync(String(args[0]), { withFileTypes: true }).map(item => ({ name: item.name, path: path.join(String(args[0]), item.name), isDir: item.isDirectory() }))
       if (channel === 'fs:read-file') return { success: true, content: fs.readFileSync(String(args[0]), 'utf8') }
       if (channel === 'fs:read-json') return fs.existsSync(String(args[0])) ? { success: true, data: JSON.parse(fs.readFileSync(String(args[0]), 'utf8')) } : { success: false }
-      if (channel === 'fs:write-json') { fs.mkdirSync(path.dirname(String(args[0])), { recursive: true }); fs.writeFileSync(String(args[0]), JSON.stringify(args[1])); return { success: true } }
+      if (channel === 'fs:write-json') {
+        const content = JSON.stringify(args[1])
+        fs.mkdirSync(path.dirname(String(args[0])), { recursive: true })
+        fs.writeFileSync(String(args[0]), content)
+        if (path.basename(String(args[0])) === 'partial_arch.json') navigationWrites.push(content)
+        return { success: true }
+      }
       if (channel === 'db:project-core-synopsis-commit' && fault === 'complete-before-cas') { fault = undefined; throw new Error('TEST_TRANSPORT_LOST_BEFORE_CAS') }
       const handler = mocks.handlers.get(channel)
       if (!handler) throw new Error(`UNEXPECTED_TEST_TRANSPORT:${channel}`)
@@ -821,7 +828,7 @@ describe('chapter outline command through registered main IPC and formal CAS', (
     }
     const navigation = () => JSON.parse(fs.readFileSync(path.join(getProjectDataRoot(session.projectPath), 'partial_arch.json'), 'utf8')) as { synopsis_generation_handle: MainGenerationRunHandle; synopsis_incomplete: boolean; synopsis_protocol: string; synopsis_result?: string }
     const target = renderPlotOutlineSynopsis(Array.from({ length: chapters }, (_, index) => accepted(index + 1)).join('\n\n'), chapters, expected)
-    return { execute, reopen, navigation, target, accepted, fetch, bridge, prompts, progress, requestProgress, expected, facts: [premise, characters, world, guidance, config.coreOutline, config.worldSetting] }
+    return { execute, reopen, navigation, navigationWrites, target, accepted, fetch, bridge, prompts, progress, requestProgress, expected, facts: [premise, characters, world, guidance, config.coreOutline, config.worldSetting] }
   }
 
   it('rebuilds once from complete original facts and accepts six chapters before a single formal CAS', async () => {
@@ -840,6 +847,8 @@ describe('chapter outline command through registered main IPC and formal CAS', (
     expect(commit).toHaveBeenCalledTimes(1)
     expect(ProjectCoreRepository.get()?.synopsis).toBe(f.target)
     expect(f.navigation()).toMatchObject({ synopsis_protocol: PLOT_OUTLINE_PROTOCOL, synopsis_incomplete: false })
+    expect(f.navigationWrites).toHaveLength(9)
+    expect(new Set(f.navigationWrites).size).toBe(9)
     expect(f.prompts[1]).toContain('本次从原始冻结事实和已接受前缀重新构建此章')
     for (const prompt of f.prompts) {
       for (const fact of f.facts) expect(prompt.split(fact)).toHaveLength(2)
@@ -949,6 +958,7 @@ describe('chapter outline command through registered main IPC and formal CAS', (
     const view = await invoke('generation:read', handle)
     expect(view.candidates).toHaveLength(2)
     expect(view.plotOutline!.composition).toBeNull()
+    expect(f.navigationWrites).toHaveLength(2)
     f.reopen()
     await expect(f.execute(handle)).rejects.toThrow('attempts-exhausted')
     expect(f.fetch).toHaveBeenCalledTimes(2)

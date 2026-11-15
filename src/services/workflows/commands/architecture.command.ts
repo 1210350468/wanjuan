@@ -2233,7 +2233,7 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
       const current = await ipc.invokeWithProjectSession(session, 'generation:read', handle)
       if (!current.plotOutline) throw new Error('GENERATION_PLOT_OUTLINE_SOURCE_INVALID')
       outline = current.plotOutline
-      await saveNavigation(outline)
+      if (cursor.kind === 'accept') await saveNavigation(outline)
       publishProgress(outline)
     }
     this.assertNotCancelled(context)
