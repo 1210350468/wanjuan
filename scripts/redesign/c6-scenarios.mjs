@@ -13,7 +13,7 @@ const NEW_RELATION = '彼此信任'
 const EVIDENCE = '他给林岚倒了一杯很淡的茶，自己却只是捧着杯子，看着炉火。'
 const CHAPTER_FOUR_MARKER = '守塔人的屋子在灯塔背风的一侧'
 
-export async function seedKeeperRelation({ page, invoke, path: projectPath, session }) {
+export async function seedKeeperRelation({ page, invoke, path: projectPath, session }, relation = AUTHOR_RELATION) {
   const commit = async (roster, entries) => {
     const result = await invoke(page, 'db:character-roster-commit', { operationId: randomUUID(), expectedRevision: roster.revision,
       expectedIdentityRevision: roster.identityRevision, schemaVersion: 1, intent: 'manual_edit', entries }, projectPath, session)
@@ -26,7 +26,7 @@ export async function seedKeeperRelation({ page, invoke, path: projectPath, sess
   const second = await read()
   const keeper = second.entries.find(entry => entry.name === '守塔人')
   await commit(second, second.entries.map(entry => entry.name === '林岚'
-    ? { ...entry, relationships: [{ targetCharacterId: keeper.characterId, target: '守塔人', relation: AUTHOR_RELATION }] } : entry))
+    ? { ...entry, relationships: [{ targetCharacterId: keeper.characterId, target: '守塔人', relation }] } : entry))
 }
 
 async function seedKeeperInNextChapter(context) {
