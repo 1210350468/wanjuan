@@ -1203,7 +1203,7 @@ export async function runRealProviderGenerationQualification(options = {}) {
     kind: 'real-provider-generation-qualification',
     mode,
     qualificationScope: 'provider-adapter',
-    executionSeam: 'generation-runtime-with-in-memory-adapter-lease',
+    executionSeam: 'generation-harness-with-in-memory-adapter-lease',
     limitations: [
       'does-not-exercise-electron-ipc-main-process-lease',
       'checksum-provides-integrity-not-authenticity',

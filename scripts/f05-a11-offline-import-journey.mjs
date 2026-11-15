@@ -628,8 +628,15 @@ async function verify(source) {
     await home(session.page)
     v025Stage('first-launch-ready')
     let requestCounts = editSaveProof ? await observeRequests(session) : null
-    await session.app.evaluate(({ dialog }, { sourceCopy, targetParent }) => {
+    await session.app.evaluate(({ dialog, ipcMain }, { sourceCopy, targetParent }) => {
       globalThis.__a11Dialogs = []
+      globalThis.__a11ImportResults = []
+      const importCopy = ipcMain._invokeHandlers.get('project:import-legacy-copy')
+      ipcMain._invokeHandlers.set('project:import-legacy-copy', async (...args) => {
+        const result = await importCopy(...args)
+        globalThis.__a11ImportResults.push(result)
+        return result
+      })
       dialog.showOpenDialog = async options => {
         globalThis.__a11Dialogs.push({ type: 'open', title: options.title })
         if (options.title === '选择旧版小说项目文件夹') return { canceled: false, filePaths: [sourceCopy] }
@@ -649,6 +656,8 @@ async function verify(source) {
       const code = 'LEGACY_IMPORT_ROSTER_UNAVAILABLE'
       await session.page.locator('[role="status"]').filter({ hasText: '导入时出了问题' })
         .waitFor({ state: 'visible', timeout: 30_000 })
+      assert.deepEqual(await session.app.evaluate(() => globalThis.__a11ImportResults), [{ state: 'blocked', code }],
+        'Import was refused because the roster is unavailable, not for another reason')
       const requests = await requestCounts()
       const stages = fs.readdirSync(targetParent).filter(name => name.startsWith(`.${path.basename(target)}.legacy-import-`))
       assert.equal(stages.length, 1, 'Expected one retained unpublished import staging attempt')

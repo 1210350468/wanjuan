@@ -729,7 +729,7 @@ export function probeTarget(target) {
   const result = spawnSync(target.startup.executable, target.startup.argv, { cwd: target.startup.cwd, env, encoding: 'utf8', timeout: 60000, maxBuffer: 4 * 1024 * 1024, windowsHide: true })
   if (result.status !== 0) fail('BASELINE_RUNTIME_PROBE_FAILED')
   const receipt = JSON.parse(result.stdout)
-  if (receipt.mode !== 'dry-run' || receipt.provenance.sourceSha !== target.codeSha || receipt.executionSeam !== 'generation-runtime-with-in-memory-adapter-lease') fail('PROBE_RECEIPT_MISMATCH')
+  if (receipt.mode !== 'dry-run' || receipt.provenance.sourceSha !== target.codeSha || receipt.executionSeam !== 'generation-harness-with-in-memory-adapter-lease') fail('PROBE_RECEIPT_MISMATCH')
   inspectTarget(target)
   const commands = runProductionCommandProbe(target, env, guard)
   inspectTarget(target)
