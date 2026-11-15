@@ -60,7 +60,7 @@ export const SETDEL_SCENARIOS = {
     const listed = await root.getByRole('button', { name: `编辑「${EXTRA.name}」` }).count()
     await shoot('setdel-final')
     const deleteCalls = await app.evaluate(() => globalThis.__setdelCalls)
-    const dialogs = await page.getByRole('dialog').count()
+    const dialogs = await page.getByRole('dialog').or(page.getByRole('alertdialog')).count()
     const measured = { formAfterDelete, storedAfterSave, listed, deleteCalls, dialogs }
     assert.deepEqual(measured, { formAfterDelete: false, storedAfterSave: false, listed: 0, deleteCalls: 2, dialogs: 0 }, JSON.stringify(measured))
     return measured

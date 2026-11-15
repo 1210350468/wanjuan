@@ -150,6 +150,9 @@ export const I686_SCENARIOS = {
     await context.shoot('i686-tail-copy-only-run-sheet')
     assert.deepEqual(listed.map(card => card.title), ['编辑器选区建议', '第4章审稿候选'], '中途被拦下的选区建议和来源已变的审稿仍列出')
     assert.ok(listed.every(card => card.buttons.includes('不再恢复')), '两张卡都有「不再恢复」')
+    const resumable = await runSheet.sheet(context.page).locator('.run-recovery > .run-card').evaluateAll(cards => cards.map(card =>
+      [...card.querySelectorAll('.run-card-buttons .pi-btn--secondary')].map(button => ({ label: button.textContent, disabled: button.disabled }))))
+    assert.ok(resumable.every(buttons => buttons.length > 0 && buttons.every(button => button.disabled)), `两张卡的继续类按钮都不可点：${JSON.stringify(resumable)}`)
     await runSheet.sheet(context.page).locator('.run-recovery > .run-card').last().locator('.run-card-buttons').scrollIntoViewIfNeeded()
     await context.shoot('i686-tail-copy-only-review')
 
@@ -160,7 +163,7 @@ export const I686_SCENARIOS = {
     await runSheet.sheet(context.page).locator('.run-recovery').waitFor({ state: 'detached' })
     const hidden = await allCards(context.page)
     assert.deepEqual(hidden, [], '两张卡点「不再恢复」后都不再列出')
-    return { listed, hidden }
+    return { listed, resumable, hidden }
   } },
   /** 选区润色建好运行、请求还没发出去应用就关了；重启后在「进行中」点「继续原选区任务」，回到第 4 章原选区，气泡里出建议，替换后卡片不再列出。 */
   'i686-continue-selection': { model: true, shell: 'stage', setup: context => seedStageSample(context), run: async context => {

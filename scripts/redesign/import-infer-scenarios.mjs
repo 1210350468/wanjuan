@@ -158,12 +158,13 @@ export const IMPORT_INFER_SCENARIOS = {
   'import-progress': { model: true, shell: 'stage', setup: seedEmptyBook, run: async context => {
     const { app, page, roots, fake, shoot } = context
     const dialog = await openAuthorImport(app, page, EMPTY_BOOK, manuscript(roots, [[1, '匿名信'], [2, '茶馆'], [3, '河对岸']]))
+    const workload = dialog.getByTestId('author-import-workload')
+    await workload.getByText(/^已开反推/u).waitFor({ state: 'visible' })
     await dialog.getByText('同时反推设定、架构、角色和蓝图', { exact: true }).click()
     assert.equal(await dialog.getByRole('checkbox', { name: /同时反推设定、架构、角色和蓝图/u }).isChecked(), false)
-    const workload = dialog.getByTestId('author-import-workload')
     const workText = await workload.innerText()
     assert.match(workText, /新增 3 章通常需 6 次 AI 请求/u)
-    assert.doesNotMatch(workText, /预计耗时|预估 AI 消耗/u)
+    assert.doesNotMatch(workText, /已开反推/u, '取消反推后工作量不再写反推那一行')
     await workload.scrollIntoViewIfNeeded()
     await shoot('import-progress-workload')
     fake.gate.hold()

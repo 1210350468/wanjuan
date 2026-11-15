@@ -191,11 +191,12 @@ export const I668_SCENARIOS = {
     const searchHit = await hit(input)
     const primaryHit = await hit(chapterView.primary(page))
     const readingLine = await middleLine.evaluate(element => Math.round(element.getBoundingClientRect().top))
-    const viewport = await scrollState(page)
+    const searchBottom = await bottomOf(chapterView.view(page).locator('.cm-panels-top'))
+    const scrollerBottom = await bottomOf(scroller(page))
     await shoot('i668-search-mid')
     assert.equal(searchHit, true, '读到中段按 Ctrl F，搜索框就在眼前')
     assert.equal(primaryHit, true, '搜索框开着，动作条主按钮仍可点')
-    assert.ok(readingLine > 0 && readingLine < viewport.client, '读到的那段还在视口里')
+    assert.ok(readingLine >= searchBottom && readingLine < scrollerBottom, `读到的那段还在视口里，没被搜索栏盖住：${JSON.stringify({ readingLine, searchBottom, scrollerBottom })}`)
 
     await page.keyboard.type('第 20 次涨潮')
     await page.keyboard.press('Shift+Enter')
@@ -211,6 +212,6 @@ export const I668_SCENARIOS = {
     await shoot('i668-search-prev')
     assert.ok(matchTop >= panelBottom, '往上找到的匹配行不被搜索面板挡住')
 
-    return { changes, mergeEnd, finishHit, focusTops, mergeBarBottom, searchHit, primaryHit, readingLine, panelBottom, matchTop }
+    return { changes, mergeEnd, finishHit, focusTops, mergeBarBottom, searchHit, primaryHit, readingLine, searchBottom, scrollerBottom, panelBottom, matchTop }
   } },
 }
