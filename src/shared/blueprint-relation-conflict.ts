@@ -34,7 +34,7 @@ const TURN_DENIED = /[不没无未非假伪似疑或]|表面|名义|可能|拒|�
 
 const FEIGNED = /假意|伪装|\bpretend\w*\b/iu
 
-/** 先去掉转折词再查否定：冰释前嫌、重修旧好里的字不算否定。装出来的转折在转折词表里，去掉之前先查。 */
+/** 先去掉转折词再查否定：冰释前嫌、重修旧好里的字不算否定。 */
 function hintAssertsTurn(relation: string): boolean {
   const rest = relation.replace(HINT_TURN, ' ')
   return rest !== relation && !FEIGNED.test(relation) && !TURN_DENIED.test(rest)

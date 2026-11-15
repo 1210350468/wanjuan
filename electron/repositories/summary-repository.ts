@@ -432,7 +432,6 @@ function relationCandidateKey(source: FinalizedSourceIdentity, change: RelationS
   return `fcs-relation:${sha256(JSON.stringify([source.draftId, source.finalizationId, source.contentHash, change.sourceId, change.targetId, sha256(change.relation)]))}`
 }
 
-/** 键带方向，重跑改了方向就是另一张建议。作者的拒绝和当初的作者行快照跟着说法走，换了方向也认。 */
 const candidateKeysInEitherDirection = (source: FinalizedSourceIdentity, change: RelationStatement) =>
   [relationCandidateKey(source, change), relationCandidateKey(source, { ...change, sourceId: change.targetId, targetId: change.sourceId })]
 
