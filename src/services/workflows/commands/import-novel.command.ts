@@ -49,6 +49,7 @@ import {
   decodeImportInferenceJson,
   decodeRecoveredImportInference,
   importEndpointRecoveryTargets,
+  IMPORT_INFERENCE_ROUNDS,
   MAX_IMPORT_INFERENCE_CHARACTER_CARDS,
   parseImportInferenceJsonObject,
 } from './import-inference-contract'
@@ -429,33 +430,37 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     ))
     callbacks.setProgress(25)
 
-    const initial = await this.callLLMResult(
-      prompt,
-      composePromptSystemRole({
-        systemRole: template.systemRole || promptLanguageText(writingLanguage, '你是一位资深小说编辑和阅读分析师。', 'You are a senior fiction editor and reading analyst.'),
-      }, writingLanguage),
-      callbacks,
-      {
-        responseFormat: { type: 'json_object' },
-        purpose: 'import-inference',
-        reasoningStage: 'planning',
-        writingSkillStage: 'planning',
-      },
-      context,
-    )
-    assertImportCompletionNotStopped(initial, callbacks, context)
-    if (initial.finishReason !== 'stop') throw this.createIncompleteCompletionError(initial.finishReason)
-    let rawResult = initial.content
-    if (isRepairableDirectJsonSyntaxFailure(rawResult)) {
+    let rawResult: string | undefined
+    for (let round = 0; round < IMPORT_INFERENCE_ROUNDS && rawResult === undefined; round += 1) {
+      const initial = await this.callLLMResult(
+        prompt,
+        composePromptSystemRole({
+          systemRole: template.systemRole || promptLanguageText(writingLanguage, '你是一位资深小说编辑和阅读分析师。', 'You are a senior fiction editor and reading analyst.'),
+        }, writingLanguage),
+        callbacks,
+        {
+          responseFormat: { type: 'json_object' },
+          purpose: 'import-inference',
+          reasoningStage: 'planning',
+          writingSkillStage: 'planning',
+        },
+        context,
+      )
+      assertImportCompletionNotStopped(initial, callbacks, context)
+      if (initial.finishReason !== 'stop') throw this.createIncompleteCompletionError(initial.finishReason)
+      if (!isRepairableDirectJsonSyntaxFailure(initial.content)) {
+        rawResult = initial.content
+        continue
+      }
       callbacks.log(text(
-        '导入推演 JSON 存在词法错误，正在执行唯一一次完整替代语法修复...',
-        'The import-inference JSON has a syntax error; running the single full-replacement syntax repair...',
+        '导入推演 JSON 存在词法错误，正在执行一次完整替代语法修复...',
+        'The import-inference JSON has a syntax error; running one full-replacement syntax repair...',
       ))
       const repairTask = buildStructuredSyntaxRepairTask({
         purpose: 'import-inference',
         output: 'structured-data',
         messages: [],
-      }, inferenceContract, rawResult, writingLanguage)
+      }, inferenceContract, initial.content, writingLanguage)
       const repair = await this.callLLMResult(
         repairTask.messages[1].content,
         repairTask.messages[0].content,
@@ -471,14 +476,18 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
       )
       assertImportCompletionNotStopped(repair, callbacks, context)
       if (repair.finishReason !== 'stop') throw this.createIncompleteCompletionError(repair.finishReason)
-      if (!preservesStructuredJsonEvidence(rawResult, repair.content)) {
-        await this.discardRejectedImportOutput(callbacks)
-        throw new Error(text(
-          '导入推演 JSON 语法修复改变了候选事实，已拒绝写入',
-          'The import-inference JSON syntax repair changed candidate facts, so the write was rejected.',
-        ))
-      }
-      rawResult = repair.content
+      if (preservesStructuredJsonEvidence(initial.content, repair.content)) rawResult = repair.content
+      else callbacks.log(text(
+        '语法修复改动了推演内容，这一轮作废',
+        'The syntax repair changed the inferred content, so this round was discarded.',
+      ))
+    }
+    if (rawResult === undefined) {
+      await this.discardRejectedImportOutput(callbacks)
+      throw new Error(text(
+        '已导入的内容都已保存，只是 AI 推演结果连续两次格式有误，没有写入。在导入对话框里点「继续导入」重试。',
+        'Everything already imported is saved, but the AI inference came back malformed twice and was not written. Choose Continue import in the import dialog to try again.',
+      ))
     }
     this.assertNotCancelled(context)
 

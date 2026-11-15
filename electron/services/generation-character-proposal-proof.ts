@@ -10,17 +10,14 @@ import type { CharacterProposalProof } from './character-proposal-service'
 import type { ImportGlobalFactsReceipt } from '../../src/shared/import-global-facts'
 import { proveFinalizedCharacterGeneration } from './finalized-character-generation-proof'
 import { readLegacyRosterGenerationProof } from './legacy-roster-generation-proof'
-import { decodeRecoveredImportInference } from '../../src/services/workflows/commands/import-inference-contract'
+import { decodeRecoveredImportInference, IMPORT_INFERENCE_ROUNDS } from '../../src/services/workflows/commands/import-inference-contract'
 import { preservesStructuredJsonEvidence } from '../../src/services/workflows/structured-syntax-repair'
 
 function importCharacterEntriesFromArtifacts(db: Database.Database, runs: GenerationRunRepository, runId: string) {
   const rows = db.prepare(`SELECT t.attempt_id,json_extract(t.usage_receipt_json,'$.purpose') AS purpose
     FROM generation_attempts t JOIN generation_artifacts a ON a.attempt_id=t.attempt_id
     WHERE t.run_id=? AND a.status<>'discarded' ORDER BY t.rowid`).all(runId) as { attempt_id: string; purpose: string }[]
-  const inference = rows.filter(row => row.purpose === 'import-inference')
-  const syntax = rows.filter(row => row.purpose === 'import-inference:structured-syntax-repair')
   const endpoint = rows.filter(row => row.purpose === 'import-inference:endpoint-card-recovery')
-  if (inference.length !== 1 || syntax.length > 1 || endpoint.length > 1) return null
   const output = (row: typeof rows[number]) => {
     const receipt = runs.receipt(row.attempt_id), artifact = receipt.artifact
     if (!artifact || receipt.failureCode || receipt.result?.finishReason !== 'stop'
@@ -28,12 +25,20 @@ function importCharacterEntriesFromArtifacts(db: Database.Database, runs: Genera
       throw new Error('CHARACTER_PROPOSAL_SOURCE_INVALID')
     return artifact.text
   }
-  let original = output(inference[0])
-  if (syntax[0]) {
-    const repaired = output(syntax[0])
-    if (!preservesStructuredJsonEvidence(original, repaired)) return null
-    original = repaired
+  const rounds: { inference: string; repair?: string }[] = []
+  for (const row of rows) {
+    if (row.purpose === 'import-inference') rounds.push({ inference: output(row) })
+    if (row.purpose !== 'import-inference:structured-syntax-repair') continue
+    const round = rounds.at(-1)
+    if (!round || round.repair !== undefined) return null
+    round.repair = output(row)
   }
+  const accepted = rounds.map(round => round.repair === undefined ? round.inference
+    : preservesStructuredJsonEvidence(round.inference, round.repair) ? round.repair : null)
+  if (!rounds.length || rounds.length > IMPORT_INFERENCE_ROUNDS || endpoint.length > 1
+    || accepted.slice(0, -1).some(text => text !== null)) return null
+  const original = accepted.at(-1)
+  if (!original) return null
   const delta = endpoint[0] ? output(endpoint[0]) : null
   try {
     return decodeRecoveredImportInference(original, delta, (_zh, en) => en).result.characterCards

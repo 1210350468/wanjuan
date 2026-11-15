@@ -18,6 +18,8 @@ export interface ImportInferenceResult {
 }
 
 export const MAX_IMPORT_INFERENCE_CHARACTER_CARDS = 8
+/** 语法修复被守卫拒绝时整份推演重请求一次，所以最多两轮。 */
+export const IMPORT_INFERENCE_ROUNDS = 2
 const PLOT_STRUCTURES = ['three_act', 'heros_journey', 'save_the_cat', 'kishotenketsu', 'multi_thread', 'freeform'] as const
 const NARRATIVE_POVS = ['third_limited', 'first_person', 'third_omniscient', 'multi_pov'] as const
 const EDGE_INVISIBLE_WRAPPER_RESIDUE = new Set(['\uFEFF', '\u200B', '\u200C', '\u200D', '\u2060'])
