@@ -544,11 +544,12 @@ describe('运行侧页', () => {
       expect(abandonCalls()).toEqual([['7', true], ['8', true], ['7', false], ['8', false]])
     })
 
-    it('一起撤销时放回某张失败，其余几张照样放回', async () => {
+    it('一起撤销时放回某张失败，其余几张照样放回，没放回的留在提示条里可以再撤销', async () => {
+      let failing = true
       const fallback = invoke.getMockImplementation()!
       invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
         const request = args.find(arg => typeof arg === 'object' && arg !== null && 'handle' in arg) as { handle: { runId: string }; abandoned: boolean } | undefined
-        if (channel === 'generation:set-recovery-abandoned' && request?.handle.runId === '7' && !request.abandoned) throw new Error('写入失败')
+        if (channel === 'generation:set-recovery-abandoned' && request?.handle.runId === '7' && !request.abandoned && failing) throw new Error('写入失败')
         return fallback(channel, ...args)
       })
       await render()
@@ -559,6 +560,14 @@ describe('运行侧页', () => {
       await vi.waitFor(() => expect(toast()).toBeTruthy())
       await act(async () => [...toast()!.querySelectorAll('button')].find(item => item.textContent === '撤销')!.click())
       await vi.waitFor(() => expect(abandonCalls()).toEqual([['7', true], ['8', true], ['7', false], ['8', false]]))
+      await vi.waitFor(() => expect(titles()).toContain('第8章候选'))
+      expect(titles()).not.toContain('第7章候选')
+
+      const retry = () => [...document.querySelectorAll('.pi-toast:not([data-exiting])')].find(node => node.querySelector('.pi-toast-title')?.textContent === '已不再恢复「第7章候选」')
+      await vi.waitFor(() => expect(retry()).toBeTruthy())
+      failing = false
+      await act(async () => [...retry()!.querySelectorAll('button')].find(item => item.textContent === '撤销')!.click())
+      await vi.waitFor(() => expect(titles()).toContain('第7章候选'))
     })
 
     it('1.4.0 在本机「不再显示」过的卡，升级后迁成「不再恢复」，迁完删掉本机记录', async () => {
@@ -586,7 +595,10 @@ describe('运行侧页', () => {
       expect(localStorage.getItem(key)).not.toBeNull()
 
       partial = false
-      await reopen()
+      await act(async () => root!.unmount())
+      root = createRoot(host!)
+      await act(async () => useStageStore.setState({ sheet: null }))
+      await render()
       await vi.waitFor(() => expect(abandonCalls()).toEqual([['7', true], ['8', true]]))
       await vi.waitFor(() => expect(localStorage.getItem(key)).toBeNull())
     })
