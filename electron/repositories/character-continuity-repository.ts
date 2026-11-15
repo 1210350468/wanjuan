@@ -122,7 +122,7 @@ export function deleteCharacterRelationship(db: BetterSqlite3.Database, line: Ch
     aspect: 'relation', value: '', effectiveChapter, provenance: { kind: 'author', operationId }, draftId: null, evidence: { relationshipId: line.relationshipId } })
 }
 
-/** 同一对角色的派生关系是一个系列，不分方向；每个节点照定稿记下自己的方向和说法。和作者关系行分开，派生值不会盖掉作者设定。 */
+/** 派生关系与作者关系行分开记，派生值不会盖掉作者设定。 */
 export const derivedRelationSeries = (sourceId: string, targetId: string) => `derived:${JSON.stringify([sourceId, targetId].sort())}`
 
 export interface DerivedRelationWrite {

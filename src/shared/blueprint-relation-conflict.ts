@@ -29,7 +29,7 @@ const RELATION_TURN = /和解|解开误会|误会解开|解除误会|重归于�
 
 /** 「成为、变成」在蓝图其他字段里太常见，只在关系提示里算转折。 */
 const HINT_TURN = new RegExp(`${RELATION_TURN.source}|成为|变成|成了|转为|\\b(?:becom(?:e|es|ing)|became|turn(?:s|ed|ing)? into)\\b`, 'giu')
-/** 只认否定、失败、作假和拿不准。「原本、昔日、曾经、former」说的是转折前的关系，不算否定。 */
+/** 不含「原本、昔日、曾经、former」：它们修饰转折前的关系，不否定转折。 */
 const TURN_DENIED = /[不没无未非假伪似疑或]|表面|名义|可能|拒|失败|\b(?:not|no|never|fake|false|pretend\w*|sham|seeming(?:ly)?|maybe|perhaps|refus\w*|fail\w*)\b/iu
 
 /** 先去掉转折词再查否定：冰释前嫌、重修旧好里的字不算否定。 */

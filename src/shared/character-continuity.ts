@@ -32,7 +32,7 @@ export interface CharacterRelationNode extends ContinuityNodeBase {
 }
 export type ContinuityNode = CharacterStateNode | CharacterRelationNode
 
-/** 同一对角色（不分方向）在某一章仍然有效的全部关系，每行带自己的方向。说法互相冲突时 conflict 为真，交给读者判断，不替作者选。 */
+/** 同一对角色（不分方向）的有效关系。conflict 为真表示说法互相冲突，交给读者判断，不替作者选。 */
 export interface CharacterRelationPair {
   lines: CharacterRelationNode[]
   conflict: boolean
@@ -60,7 +60,6 @@ function newer(candidate: ContinuityNode, current: ContinuityNode): boolean {
 const seriesKey = (node: ContinuityNode) =>
   node.aspect === 'relation' ? `relation:${node.relationshipId}` : `state:${JSON.stringify([node.subjectId, node.aspect])}`
 
-/** 作者两个方向各写一行是两条设定，不算冲突；同方向说法不同、或定稿记录和别的行说法不同才算。 */
 const hasConflict = (lines: readonly CharacterRelationNode[]) => lines.some((left, index) => lines.slice(index + 1).some(right => left.value !== right.value
   && (left.subjectId === right.subjectId || left.provenance.kind === 'derived' || right.provenance.kind === 'derived')))
 
@@ -144,7 +143,7 @@ function foldAdoptedRelations(changes: readonly CharacterTimelineChange[]): Char
   return folded.filter(change => !absorbed.has(change))
 }
 
-/** 定稿重述写这一章之前已经生效的同一说法，不算变化。同章作者的决定（比如采用）在这条记录之后，不算之前。 */
+/** 同章作者的决定（比如采用）发生在这条定稿记录之后，不算它之前的状态。 */
 function restates(nodes: readonly ContinuityNode[], node: ContinuityNode): boolean {
   if (node.aspect !== 'relation' || node.provenance.kind !== 'derived') return false
   const pair = JSON.stringify([node.subjectId, node.targetId].sort())

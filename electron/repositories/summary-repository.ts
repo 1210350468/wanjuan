@@ -418,7 +418,6 @@ function authorRelationRows(db: BetterSqlite3.Database, sourceId: string, target
     WHERE r.source_character_id=? AND r.target_character_id=? AND a.retired=0 AND b.retired=0 ORDER BY r.relationship_id`).all(sourceId, targetId) as AuthorRelationRow[]
 }
 
-/** 比对不分方向。rows 是建议要换掉的作者行：同方向有就是同方向的，否则是反向的。 */
 function authorRelationsOfPair(db: BetterSqlite3.Database, sourceId: string, targetId: string) {
   const forward = authorRelationRows(db, sourceId, targetId), backward = authorRelationRows(db, targetId, sourceId)
   const lines = [...forward, ...backward].map(row => JSON.stringify([row.sourceId, row.targetId, row.relation])).sort()
@@ -477,7 +476,6 @@ function candidateReceipts(db: BetterSqlite3.Database): StoredCharacterStateDeci
     .flatMap(item => parseCharacterStateCandidateStore(item.candidates).receipts)
 }
 
-/** 后续章重述拒绝过的值，同样算拒绝过。 */
 function markDeclinedRelations(db: BetterSqlite3.Database, nodes: ContinuityNode[]): ContinuityNode[] {
   const declinedKeys = new Set(candidateReceipts(db).filter(receipt => receipt.decision === 'decline').map(receipt => receipt.candidateKey))
   const declined = new Set<string>()
