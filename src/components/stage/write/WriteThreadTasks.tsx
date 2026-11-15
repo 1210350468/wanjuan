@@ -49,7 +49,7 @@ export default function WriteThreadTasks({ chapterNumber, threads }: WriteThread
         </ul>
       )}
       {panel.leftOut > 0 && <p className="stage-write-thread-note">{text(`另有 ${panel.leftOut} 条本次不进任务`, `${panel.leftOut} more stay out of this run`)}</p>}
-      {failure &&<p className="stage-write-error" role="alert">{failure}</p>}
+      {failure && <p className="stage-write-error" role="alert">{failure}</p>}
       {panel.canAdvance.length > 0 && (
         <details className="stage-write-more">
           <summary>
