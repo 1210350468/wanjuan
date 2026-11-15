@@ -12,6 +12,7 @@ import * as refs from './pages/refs.mjs'
 import * as runSheet from './pages/run-sheet.mjs'
 import * as stage from './pages/stage.mjs'
 import { recoveryListed } from './i686-scenarios.mjs'
+import { afterIpc } from './scenarios.mjs'
 import { countUnits, STAGE_SAMPLE, stageChapterTitle } from './stage-sample.mjs'
 
 const BOOK = STAGE_SAMPLE.name
@@ -390,7 +391,8 @@ export const REAL_SCENARIOS = {
     assert.ok(measured.chapter2Rewrite.length > 0, '第 2 章在原位置写出了新稿')
     await shoot('real-gap-ch2-rewritten')
     measured.chapter2Finalize = await finalizeAndPostProcess(page, 2)
-    await blueprint.open(page)
+    // 缺口列表在蓝图列表出现后才读回，等这次读取返回再数，否则数到零不说明问题。
+    await afterIpc(context.app, page, 'db:draft-authority-sequence', () => blueprint.open(page))
     measured.gapNoticeAfterFinalize = await page.locator('.pi-notice').filter({ hasText: /第 2 章(的正文)?已删除/u }).count()
     assert.equal(measured.gapNoticeAfterFinalize, 0, '第 2 章重写定稿后缺口提示消失')
     await openChapter(page, 2)
