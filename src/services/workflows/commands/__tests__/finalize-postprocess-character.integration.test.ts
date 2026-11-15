@@ -17,7 +17,7 @@ import { CharacterRepository } from '../../../../../electron/repositories/charac
 import { CharacterRosterRepository, commitCharacterIdentities, refreshCharacterIdentityProjection } from '../../../../../electron/repositories/character-roster-repository'
 import { DraftRepository } from '../../../../../electron/repositories/draft-repository'
 import { PostProcessRepository } from '../../../../../electron/repositories/post-process-repository'
-import { POST_PROCESS_INTERRUPTED } from '../../../../shared/finalization-step-error'
+import { POST_PROCESS_INTERRUPTED, describeFinalizationStepError } from '../../../../shared/finalization-step-error'
 import { ProjectCoreRepository } from '../../../../../electron/repositories/project-core-repository'
 import {
   invalidateContinuityProjectionFrom,
@@ -1074,6 +1074,25 @@ it('#420 角色状态断流后，用户重试每次只发一次新请求，失�
  expect((await run(true)).steps.character_cards.ok).toBe(true)
  expect(characterCalls).toBe(3)
  expect(CharacterRosterRepository.read().revision).toBe(before + 1)
+})
+
+it('#708 角色状态请求发出后断开：步骤说明不说没有发出请求', async () => {
+ insertFinalizedDraft(7, 2)
+ let characterCalls = 0
+ useLLMStore.setState({ defaultModelId: 'test-model' })
+ useFakeModelStream.setState({ generateStream: vi.fn(async (messages, streamCallbacks) => {
+  const system = messages.find((message: { role: string; content: string }) => message.role === 'system')?.content ?? ''
+  if (!system.includes('character records')) { streamCallbacks.onDone?.('The handoff is complete.', undefined, 'stop'); return 'notes' }
+  characterCalls++
+  streamCallbacks.onError?.('synthetic network error')
+  return 'interrupted'
+ }) })
+ const status = await command('The brass key changes hands.').execute({ step: {}, context: workflowContext, callbacks: callbacks() })
+ expect(characterCalls).toBe(1)
+ const error = status.steps.character_cards.error!
+ expect(describeFinalizationStepError(error, zh => zh)).not.toContain('没有发出')
+ expect(describeFinalizationStepError(error, (_zh, en) => en)).not.toMatch(/no new model request/i)
+ expect(describeFinalizationStepError(error, zh => zh)).toMatch(/没有拿到模型的结果.*请点「重试」/u)
 })
 
 it('#420 模型正常结束但返回空文本：步骤记结果不可用（不说没发请求），自动重试不再计费，作者重试发一次新请求后成功', async () => {

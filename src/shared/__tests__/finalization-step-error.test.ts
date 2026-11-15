@@ -105,11 +105,17 @@ describe('定稿后处理步骤错误', () => {
     expect(describeFinalizationStepError('network error: socket hang up', en)).toBe('network error: socket hang up')
   })
 
-  it('结果不可用不否认已发请求并提示重试；没发请求的情形保留原说明', () => {
+  it('结果不可用不否认已发请求并提示重试', () => {
     expect(finalizationStepErrorCode('FINALIZATION_GENERATION_RESULT_UNUSABLE')).toBe('FINALIZATION_GENERATION_RESULT_UNUSABLE')
     expect(describeFinalizationStepError('FINALIZATION_GENERATION_RESULT_UNUSABLE', zh)).toBe('模型返回了内容，但结果不可用（例如为空）。请点「重试」重新生成这一步。')
     expect(describeFinalizationStepError('FINALIZATION_GENERATION_RESULT_UNUSABLE', en)).not.toMatch(/no new model request/)
-    expect(describeFinalizationStepError('FINALIZATION_GENERATION_ARTIFACT_REQUIRED', zh)).toContain('本次没有发出新的模型请求')
+  })
+
+  it('#708 没拿到结果时不断言请求失败：ARTIFACT_REQUIRED 与 OUTCOME_UNKNOWN 同一说明', () => {
+    for (const code of ['FINALIZATION_GENERATION_ARTIFACT_REQUIRED', 'FINALIZATION_GENERATION_OUTCOME_UNKNOWN']) {
+      expect(describeFinalizationStepError(code, zh)).toBe('正文定稿已保存，这一步没有拿到模型的结果（例如连接中断）。请点「重试」重新生成这一步。')
+      expect(describeFinalizationStepError(code, en)).not.toMatch(/did not finish|no new model request/i)
+    }
   })
 
   describe('#512 提交时项目数据已变', () => {
