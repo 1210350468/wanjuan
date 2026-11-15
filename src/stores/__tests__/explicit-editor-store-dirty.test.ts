@@ -228,6 +228,7 @@ describe('explicit editor dirty integration', () => {
   })
   it('unbinds project A character data before openProject publishes project B and loads B', async () => {
     const fileTree = deferred<[]>()
+    const fileTreeRequested = deferred<void>()
     invoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
       if (channel === 'project:open') {
         return {
@@ -239,6 +240,7 @@ describe('explicit editor dirty integration', () => {
       }
       if (channel === 'fs:list-dir') {
         expect(args[0]).toBe(projectB().path)
+        fileTreeRequested.resolve()
         return fileTree.promise
       }
       if (channel === 'db:character-roster-read') {
@@ -250,13 +252,12 @@ describe('explicit editor dirty integration', () => {
     })
 
     const opening = useProjectStore.getState().openProject(projectB().path)
-    await vi.waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith(
-        'fs:list-dir',
-        projectB().path,
-        projectB().path,
-      )
-    })
+    await Promise.race([fileTreeRequested.promise, opening])
+    expect(invoke).toHaveBeenCalledWith(
+      'fs:list-dir',
+      projectB().path,
+      projectB().path,
+    )
 
     expect(useProjectStore.getState().currentProject?.path).toBe(projectB().path)
     expect(useCharacterStore.getState()).toMatchObject({
