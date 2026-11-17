@@ -1,6 +1,6 @@
 # 万卷 Wanjuan — 发布清单
 
-本机没有 `gh`，当前 `origin` 指向上游 `EthanYoQ/Pagekin`。下面的步骤需要在你自己的 GitHub 账号下建仓库并推送；我没有你的凭证，不会代你执行推送。
+本机没有预装 `gh`，已安装到 `C:\Users\12103\.local\bin\gh.exe`。仓库 `1210350468/wanjuan` 已创建，源码已推送到 `master`。下面的步骤保留为换账号或重建仓库时的参考。
 
 ## 一、推送前检查
 
@@ -26,7 +26,7 @@ git branch -M main
 git push -u origin main
 ```
 
-`origin` 被移除前请先确认本地提交都完成了；上游 Pagekin 的更新以后需要手动合并。
+更新检查与「官方主页」入口已指向 `1210350468/wanjuan`（`electron/services/github-release-update-backend.ts`、`src/shared/official-homepage.ts`、`electron-builder.json5`），不再读上游 Release。换账号时这三处要一起改，测试里的断言也要同步。
 
 ## 三、构建与上传安装包
 

@@ -47,8 +47,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "EthanYoQ",
-        "repo": "AI-Novel-Writer",
+        "owner": "1210350468",
+        "repo": "wanjuan",
         "channel": "latest",
         "releaseType": "release",
         "publishAutoUpdate": true,
