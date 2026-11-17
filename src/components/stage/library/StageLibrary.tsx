@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { FileInput, FolderOpen, Plus } from 'lucide-react'
+import { FileInput, FolderOpen, Library, Plus } from 'lucide-react'
 import { ipc } from '../../../services/ipc-client'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useLocaleStore } from '../../../stores/locale-store'
@@ -47,6 +47,10 @@ function StartActions() {
         <span className="stage-start-icon"><FolderOpen size={16} aria-hidden="true" /></span>
         <span className="stage-start-text"><b>{text('打开作品', 'Open a book')}</b><span>{text('选择已有的作品文件夹', 'Choose an existing book folder')}</span></span>
       </button>
+      <button type="button" className="stage-start" aria-label={text('番茄书库', 'Fanqie library')} onClick={() => useLayoutStore.getState().openFanqie()}>
+        <span className="stage-start-icon"><Library size={16} aria-hidden="true" /></span>
+        <span className="stage-start-text"><b>{text('番茄书库', 'Fanqie library')}</b><span>{text('搜书选题，多本融合', 'Find books and fuse their structure')}</span></span>
+      </button>
       <Menu
         label={text('导入', 'Import')}
         trigger={{
@@ -79,14 +83,23 @@ function EmptyLibrary({ modelMissing }: { modelMissing: boolean }) {
   const legacyImportBusy = useProjectStore(s => s.legacyImportBusy)
   return (
     <div className="stage-library-empty">
-      <p className="stage-eyebrow">{text('书房', 'Library')}</p>
-      <h1 className="stage-library-title">{text('书架还是空的', 'Your shelf is empty')}</h1>
-      <p className="stage-library-lede">{text('新建一部作品，从设定开始写。已经有作品文件夹的话，直接打开。', 'Start a new book from its setup, or open a book folder you already have.')}</p>
-      <Button variant="primary" size="lg" onClick={() => useLayoutStore.getState().openNewProject()}>{text('新建作品', 'New book')}</Button>
+      <section className="stage-hero stage-hero--empty">
+        <div className="stage-hero-copy">
+          <p className="stage-eyebrow">{text('书房', 'Library')}</p>
+          <h1 className="stage-library-title">{text('书架还是空的', 'Your shelf is empty')}</h1>
+          <p className="stage-library-lede">{text('新建一部作品，从设定开始写。已经有作品文件夹的话，直接打开。', 'Start a new book from its setup, or open a book folder you already have.')}</p>
+        </div>
+        <p className="stage-hero-note">{text('作品存在你自己的电脑上', 'Your books stay on your own computer')}</p>
+      </section>
+      <div className="stage-library-empty-actions">
+        <Button variant="primary" size="lg" onClick={() => useLayoutStore.getState().openNewProject()}>{text('新建作品', 'New book')}</Button>
+      </div>
       <div className="stage-library-alt">
         <Button variant="text" size="sm" onClick={() => void openProjectFolder()}>{text('打开作品', 'Open a book')}</Button>
         <Button variant="text" size="sm" onClick={() => useLayoutStore.getState().openImportNovel()}>{text('小说拆解与仿写', 'Novel breakdown & imitation')}</Button>
+        <Button variant="text" size="sm" onClick={() => useLayoutStore.getState().openFanqie()}>{text('番茄书库选题', 'Fanqie library')}</Button>
         <Button variant="text" size="sm" disabled={legacyImportBusy} onClick={() => void useProjectStore.getState().importLegacyProject()}>{text('导入旧项目副本', 'Import an old project copy')}</Button>
+        <Button variant="text" size="sm" onClick={() => useLayoutStore.getState().openGuide()}>{text('看 30 秒上手', 'Take the 30-second tour')}</Button>
       </div>
       <div className="stage-library-empty-notes">
         <LegacyImportNotice />
@@ -185,9 +198,20 @@ export default function StageLibrary() {
   return (
     <div className="stage-lib">
       <section className="stage-lib-main">
-        <header>
-          <p className="stage-eyebrow">{text('书房', 'Library')}</p>
-          <h1 className="stage-library-title">{heading(now, text)}</h1>
+        <header className="stage-hero">
+          <div className="stage-hero-copy">
+            <p className="stage-eyebrow">{text('书房', 'Library')}</p>
+            <h1 className="stage-library-title">{heading(now, text)}</h1>
+            <p className="stage-library-lede">
+              {text(
+                '本地优先的长篇写作台：设定、蓝图、正文、审稿都在一部作品里。',
+                'A local-first desk for long fiction: setup, blueprints, prose, and review in one book.',
+              )}
+            </p>
+          </div>
+          <p className="stage-hero-note">
+            {text('作品存在你自己的电脑上', 'Your books stay on your own computer')}
+          </p>
         </header>
         <StartActions />
         <LegacyImportNotice />

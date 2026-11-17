@@ -25,8 +25,8 @@ export function stageNotice(
 ): StageNotice | null {
   if (run.status !== 'completed' && run.status !== 'failed') return null
   const text = (zh: string, en: string) => localize(locale, zh, en)
-  const done = text('回到书童查看结果。', 'Return to Pagekin to see the result.')
-  const why = text('回到书童查看原因。', 'Return to Pagekin to see why.')
+  const done = text('回到万卷查看结果。', 'Return to Wanjuan to see the result.')
+  const why = text('回到万卷查看原因。', 'Return to Wanjuan to see why.')
 
   if (notice.stage === 'batch') {
     const { startChapter, endChapter } = notice
@@ -43,8 +43,8 @@ export function stageNotice(
     return {
       title: text(`批量创作停在第 ${stoppedAt} 章`, `Batch writing stopped at chapter ${stoppedAt}`),
       body: finished === 0 ? why : text(
-        `已完成 ${finished} 章，回到书童查看原因。`,
-        `${finished} ${finished === 1 ? 'chapter is' : 'chapters are'} done. Return to Pagekin to see why.`,
+        `已完成 ${finished} 章，回到万卷查看原因。`,
+        `${finished} ${finished === 1 ? 'chapter is' : 'chapters are'} done. Return to Wanjuan to see why.`,
       ),
     }
   }
@@ -62,7 +62,7 @@ export function stageNotice(
         `第 ${chapterNumber} 章已定稿，有${unfinished === 1 ? '一' : ` ${unfinished} `}步没完成`,
         `Chapter ${chapterNumber} finalized, but ${unfinished} ${unfinished === 1 ? "step didn't" : "steps didn't"} finish`,
       ),
-      body: text('回到书童查看并重试。', 'Return to Pagekin to check and retry.'),
+      body: text('回到万卷查看并重试。', 'Return to Wanjuan to check and retry.'),
     }
   }
   return { title: text(`第 ${chapterNumber} 章${zh}完成`, `Chapter ${chapterNumber} ${en} finished`), body: done }

@@ -38,7 +38,7 @@ export function restoredMessage(result: Restored, text: Text): string {
           'Its manuscript file was not written. Choose “Write again” in the same place.'))
       }
       lines.push(text('如果删除前在软件外改过它的 txt，项目文件夹里会多一份，删掉不要的那份即可。',
-        'If you edited its manuscript file outside Pagekin before deleting it, the project folder now has an extra copy. Delete the one you don’t need.'))
+        'If you edited its manuscript file outside Wanjuan before deleting it, the project folder now has an extra copy. Delete the one you don’t need.'))
       return lines.join('\n')
     }
     case 'restored-as-history':

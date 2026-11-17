@@ -160,7 +160,7 @@ export const enUS = {
   'error.knowledgeCopyChanged': 'The project copy was changed elsewhere, so this save was skipped. Reopen the material, then edit again.',
   'error.knowledgeCopyEmpty': 'The project copy is empty, so search cannot be updated. Add text and save first.',
   'error.knowledgeTextEmpty': 'The material is empty; there is no text to import.',
-  'error.knowledgeVolumeUnsupported': "The material was not added to the knowledge base: this location does not support the hard links the knowledge base needs (common on exFAT and FAT32 drives). Quit Pagekin, move the book folder to a local NTFS drive (APFS on a Mac), open it from there, then import again.",
+  'error.knowledgeVolumeUnsupported': "The material was not added to the knowledge base: this location does not support the hard links the knowledge base needs (common on exFAT and FAT32 drives). Quit Wanjuan, move the book folder to a local NTFS drive (APFS on a Mac), open it from there, then import again.",
   'error.modelSettingsFileDamaged': 'The model settings file is damaged, so nothing was saved to avoid overwriting it. Repair or move the damaged settings file in your user configuration directory, then try again.',
   'error.stageModelUnavailable': 'That model was deleted or is no longer available for writing, so the stage keeps its current model. Choose another model in Models by stage.',
   'error.stageModelRequestInvalid': 'The stage setting was not saved because the request was not valid. Reopen Settings and choose again.',

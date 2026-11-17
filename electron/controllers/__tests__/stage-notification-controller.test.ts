@@ -41,7 +41,7 @@ class FakeWindow {
   readonly focus = vi.fn(() => { this.focused = true })
 }
 
-const notice = { title: '第 3 章审稿完成', body: '回到书童查看结果。' }
+const notice = { title: '第 3 章审稿完成', body: '回到万卷查看结果。' }
 
 function notify(win: FakeWindow) {
   const handler = mocks.handlers.get('window:notify-stage')

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Download, FileText, FolderOpen, Link2, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
+import { AlertTriangle, Download, FileText, FolderOpen, Link2, RefreshCw, ShieldCheck, Store, Trash2 } from 'lucide-react'
 import type { ProjectSessionContext } from '../../shared/ipc-channels'
 import { projectSessionContextFromProject } from '../../shared/project-session-context'
 import {
@@ -23,6 +23,7 @@ import { Input } from '../ui/Input'
 import { NativeSelect } from '../ui/NativeSelect'
 import { confirm as confirmAction } from '../ui/Confirm'
 import { useUnsavedSettings } from './unsaved-settings'
+import SkillMarketplaceDialog from './SkillMarketplaceDialog'
 import { displayedErrorMessage } from '../../i18n/app-errors'
 
 const STAGE_COPY: Record<WritingSkillStage, readonly [string, string]> = {
@@ -191,6 +192,7 @@ export default function SkillSettings() {
   const [candidate, setCandidate] = useState<SkillCandidate | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [marketOpen, setMarketOpen] = useState(false)
   useUnsavedSettings(sourceUrl.trim() !== '' || candidate !== null)
 
   const reload = async (session: ProjectSessionContext | null = projectSession) => {
@@ -327,16 +329,22 @@ export default function SkillSettings() {
   return (
     <div className="space-y-5">
       <section className="space-y-3" aria-labelledby="writing-skill-source-title">
-        <div>
-          <h3 id="writing-skill-source-title" className="text-sm font-semibold text-[var(--color-text)]">
-            {text('导入写作 Skill', 'Import a writing skill')}
-          </h3>
-          <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
-            {text(
-              '支持单个 SKILL.md，或根目录含 SKILL.md 的文件夹。只并入它和它引用的文本，脚本、hook、子代理和工具调用不会安装。',
-              'A single SKILL.md, or a folder with SKILL.md at its root. Only it and the text it references are merged into the prompt; scripts, hooks, subagents, and tool calls are not installed.',
-            )}
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 id="writing-skill-source-title" className="text-sm font-semibold text-[var(--color-text)]">
+              {text('导入写作 Skill', 'Import a writing skill')}
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
+              {text(
+                '支持单个 SKILL.md，或根目录含 SKILL.md 的文件夹。只并入它和它引用的文本，脚本、hook、子代理和工具调用不会安装。',
+                'A single SKILL.md, or a folder with SKILL.md at its root. Only it and the text it references are merged into the prompt; scripts, hooks, subagents, and tool calls are not installed.',
+              )}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setMarketOpen(true)} disabled={busy}>
+            <Store size={13} aria-hidden />
+            {text('Skill 超市', 'Skill marketplace')}
+          </Button>
         </div>
         <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-panel)]">
           <div className="flex flex-wrap items-center gap-3 p-4">
@@ -466,6 +474,13 @@ export default function SkillSettings() {
           )
         })}
       </section>
+
+      <SkillMarketplaceDialog
+        open={marketOpen}
+        onClose={() => setMarketOpen(false)}
+        installedNames={skills.map(skill => skill.metadata.name)}
+        onInstalled={async () => { await reload() }}
+      />
     </div>
   )
 }

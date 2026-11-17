@@ -458,14 +458,24 @@
 /* ---------- 空书房 ---------- */
 .stage-library-empty {
   width: 100%;
-  max-width: 560px;
+  max-width: 860px;
   box-sizing: border-box;
   margin: 0 auto;
-  padding: 14vh var(--s-8) var(--s-12);
+  padding: 8vh var(--s-8) var(--s-12);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
+  gap: var(--s-5);
   text-align: center;
+}
+
+.stage-hero--empty {
+  text-align: left;
+}
+
+.stage-library-empty-actions {
+  display: flex;
+  justify-content: center;
 }
 
 .stage-library-empty .stage-library-title {
@@ -651,4 +661,71 @@
       0 0 0 6px var(--surface),
       0 0 0 8px var(--accent);
   }
+}
+
+/* ---------- 英雄区与快捷入口 ---------- */
+/* 书房顶部的一条横幅：左侧问句与一句说明，右侧一句数据边界；下面紧接四个入口卡。 */
+.stage-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-6);
+  padding: var(--s-6) var(--s-6) var(--s-5);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-panel);
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%),
+    var(--paper);
+}
+
+.stage-hero-copy {
+  min-width: 0;
+}
+
+.stage-hero .stage-library-lede {
+  margin: var(--s-3) 0 0;
+  max-width: 38em;
+  line-height: 1.75;
+  color: var(--ink-2);
+}
+
+.stage-hero-note {
+  margin: 0;
+  flex: none;
+  font: 400 var(--fs-12)/1.5 var(--font-ui);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .stage-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-3);
+  }
+
+  .stage-hero-note {
+    white-space: normal;
+  }
+}
+
+/* 入口卡的图标放进浅色圆片，四张卡在一条线上视觉对齐。 */
+.stage-start-icon {
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.stage-library .stage-start:hover:not(:active, [aria-expanded='true'], :focus-visible) .stage-start-icon {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* 书架整体上移一点，和英雄区留出呼吸；封面网格略放大。 */
+.stage-shelf {
+  padding-top: var(--s-2);
+}
+
+.stage-shelf-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(158px, 100%), 1fr));
+  gap: 30px var(--s-5);
 }

@@ -29,6 +29,10 @@ export interface LayoutFields {
   exportOpen: boolean
   /** 导入小说对话框是否打开 */
   importNovelOpen: boolean
+  /** 番茄书库对话框是否打开 */
+  fanqieOpen: boolean
+  /** 新手引导是否打开 */
+  guideOpen: boolean
 }
 
 interface LayoutState extends LayoutFields {
@@ -40,6 +44,10 @@ interface LayoutState extends LayoutFields {
   closeExport: () => void
   openImportNovel: () => void
   closeImportNovel: () => void
+  openFanqie: () => void
+  closeFanqie: () => void
+  openGuide: () => void
+  closeGuide: () => void
 }
 
 export const useLayoutStore = create<LayoutState>()((set) => ({
@@ -49,6 +57,8 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
   newProjectOpen: false,
   exportOpen: false,
   importNovelOpen: false,
+  fanqieOpen: false,
+  guideOpen: false,
 
   setSidebarView: (view) => set({ sidebarView: view }),
   closeSettings: () => set({ settingsOpen: false }),
@@ -58,4 +68,8 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
   closeExport: () => set({ exportOpen: false }),
   openImportNovel: () => set({ importNovelOpen: true }),
   closeImportNovel: () => set({ importNovelOpen: false }),
+  openFanqie: () => set({ fanqieOpen: true }),
+  closeFanqie: () => set({ fanqieOpen: false }),
+  openGuide: () => set({ guideOpen: true }),
+  closeGuide: () => set({ guideOpen: false }),
 }))

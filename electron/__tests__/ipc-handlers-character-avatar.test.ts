@@ -48,6 +48,7 @@ vi.mock('../controllers/generation-controller', () => ({ registerGenerationContr
 vi.mock('../controllers/db-controller', () => ({ registerDatabaseController: vi.fn() }))
 vi.mock('../controllers/kb-controller', () => ({ registerKBController: vi.fn() }))
 vi.mock('../controllers/import-controller', () => ({ registerImportController: vi.fn() }))
+vi.mock('../controllers/fanqie-controller', () => ({ registerFanqieController: vi.fn() }))
 vi.mock('../controllers/window-controller', () => ({ registerWindowController: vi.fn() }))
 vi.mock('../controllers/stage-notification-controller', () => ({ registerStageNotificationController: vi.fn() }))
 vi.mock('../controllers/official-homepage-controller', () => ({ registerOfficialHomepageController: vi.fn() }))

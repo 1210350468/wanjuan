@@ -9,6 +9,9 @@ import { useLocaleStore } from './stores/locale-store'
 import { ipc } from './services/ipc-client'
 import { useWindowCloseGuard } from './components/layout/use-window-close-guard'
 import ImportNovelDialog from './components/dialogs/ImportNovelDialog'
+import FanqieLibraryDialog from './components/dialogs/FanqieLibraryDialog'
+import OnboardingGuide from './components/onboarding/OnboardingGuide'
+import { hasSeenOnboarding, markOnboardingSeen } from './components/onboarding/onboarding-state'
 import ExportDialog from './components/dialogs/ExportDialog'
 import { leaveSettingsThen, openProjectFolder } from './components/settings/unsaved-settings'
 import StageRoot from './components/stage/StageRoot'
@@ -31,9 +34,23 @@ export default function App() {
   const closeExport = useLayoutStore(s => s.closeExport)
   const importNovelOpen = useLayoutStore(s => s.importNovelOpen)
   const closeImportNovel = useLayoutStore(s => s.closeImportNovel)
+  const fanqieOpen = useLayoutStore(s => s.fanqieOpen)
+  const closeFanqie = useLayoutStore(s => s.closeFanqie)
   const initLLM = useLLMStore((s) => s.init)
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
   const exitGuard = useWindowCloseGuard()
+  const guideOpen = useLayoutStore(s => s.guideOpen)
+  const closeGuide = useLayoutStore(s => s.closeGuide)
+  const openGuide = useLayoutStore(s => s.openGuide)
+  const recentProjectsLoaded = useProjectStore(s => s.recentProjectsLoaded)
+
+  // 第一次打开且书架上没有作品时给出四步引导；看过一次就不再自动弹出。
+  useEffect(() => {
+    if (!recentProjectsLoaded || hasSeenOnboarding()) return
+    const state = useProjectStore.getState()
+    if (state.currentProject || state.recentProjects.length > 0) return
+    openGuide()
+  }, [recentProjectsLoaded, openGuide])
 
   // 初始化：主题 + LLM 模型 + 最近项目 + 缩放级别
   useEffect(() => {
@@ -164,6 +181,17 @@ export default function App() {
       <ImportNovelDialog
         open={importNovelOpen}
         onClose={closeImportNovel}
+      />
+      <FanqieLibraryDialog
+        open={fanqieOpen}
+        onClose={closeFanqie}
+      />
+      <OnboardingGuide
+        open={guideOpen}
+        onClose={() => {
+          markOnboardingSeen()
+          closeGuide()
+        }}
       />
       <ExportDialog
         isOpen={exportOpen}

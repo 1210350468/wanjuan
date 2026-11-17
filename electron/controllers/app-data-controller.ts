@@ -6,9 +6,6 @@ import { showOpenDialogInLastDirectory } from '../utils/remembered-dialog'
 import type { AppPromptLoadReceipt, AppPromptTemplate } from '../../src/shared/ipc-channels'
 import type { WritingLanguage } from '../../src/shared/writing-language'
 import {
-  inspectWritingSkillMarkdown,
-  MAX_WRITING_SKILL_BYTES,
-  parseGitHubWritingSkillUrl,
   WRITING_SKILL_NAME_PATTERN,
   type InstalledWritingSkill,
   type InstalledWritingSkillBundle,
@@ -19,6 +16,7 @@ import {
   type WritingSkillInspection,
   type WritingSkillPackageInspection,
 } from '../../src/shared/writing-skills'
+import { loadGitHubWritingSkill, scanGitHubSkillRepository, searchGitHubRepositories } from '../services/github-writing-skill'
 import { mainText } from '../i18n'
 import { VELA_HOME, writeJsonFile } from '../utils/config-utils'
 import { assertGlobalDataReady } from '../services/app-data-locator'
@@ -249,67 +247,6 @@ function withoutContent(inspection: WritingSkillPackageInspection): Omit<Writing
   return { metadata, compatible, reasons, suggestedStage, utf8Bytes, bundledFiles, unbundledReferences }
 }
 
-function githubRawUrl(owner: string, repo: string, ref: string, filePath: string): string {
-  const segments = [owner, repo, ref, ...filePath.split('/')].map(encodeURIComponent)
-  return `https://raw.githubusercontent.com/${segments.join('/')}`
-}
-
-async function fetchGitHubWritingSkill(sourceUrl: string): Promise<{
-  raw: string
-  inspection: RemoteWritingSkillInspection
-}> {
-  const location = parseGitHubWritingSkillUrl(sourceUrl)
-  let ref = location.ref
-  if (!ref) {
-    const repositoryResponse = await fetch(
-      `https://api.github.com/repos/${encodeURIComponent(location.owner)}/${encodeURIComponent(location.repo)}`,
-      {
-        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'AI-Novel-Writer' },
-        redirect: 'error',
-        signal: AbortSignal.timeout(10_000),
-      },
-    )
-    if (!repositoryResponse.ok) throw new Error(`GitHub repository lookup failed (${repositoryResponse.status})`)
-    const repository = await repositoryResponse.json() as { default_branch?: unknown }
-    if (typeof repository.default_branch !== 'string' || !WRITING_SKILL_NAME_PATTERN.test(repository.default_branch)) {
-      throw new Error('GitHub returned an unsupported default branch name')
-    }
-    ref = repository.default_branch
-  }
-
-  const resolvedUrl = githubRawUrl(location.owner, location.repo, ref, location.path)
-  const response = await fetch(resolvedUrl, {
-    headers: { Accept: 'text/plain', 'User-Agent': 'AI-Novel-Writer' },
-    redirect: 'error',
-    signal: AbortSignal.timeout(10_000),
-  })
-  if (!response.ok) throw new Error(`SKILL.md download failed (${response.status})`)
-  const declaredLength = Number(response.headers.get('content-length') ?? 0)
-  if (declaredLength > MAX_WRITING_SKILL_BYTES) throw new Error('SKILL.md is larger than 64 KiB')
-  const raw = await response.text()
-  if (Buffer.byteLength(raw, 'utf8') > MAX_WRITING_SKILL_BYTES) {
-    throw new Error('SKILL.md is larger than 64 KiB')
-  }
-  const inspected = inspectWritingSkillMarkdown(raw)
-  const contentSha256 = createHash('sha256').update(raw, 'utf8').digest('hex')
-  const publicInspection = {
-    metadata: inspected.metadata,
-    compatible: inspected.compatible,
-    reasons: inspected.reasons,
-    suggestedStage: inspected.suggestedStage,
-    utf8Bytes: inspected.utf8Bytes,
-  }
-  return {
-    raw,
-    inspection: {
-      ...publicInspection,
-      sourceUrl,
-      resolvedUrl,
-      contentSha256,
-    },
-  }
-}
-
 function promptFilename(template: AppPromptTemplate): string {
   return `${template.key}${template.writingLanguage ? `.${template.writingLanguage}` : ''}`
 }
@@ -442,11 +379,17 @@ export function registerAppDataController(): void {
       if (typeof sourceUrl !== 'string' || sourceUrl.length > 2_048) {
         throw new Error(text('GitHub 地址无效', 'The GitHub URL is invalid'))
       }
-      const { inspection } = await fetchGitHubWritingSkill(sourceUrl)
-      inspectedWritingSkills.set(sourceUrl, {
-        contentSha256: inspection.contentSha256,
-        resolvedUrl: inspection.resolvedUrl,
-      })
+      const loaded = await loadGitHubWritingSkill(sourceUrl)
+      const contentSha256 = createHash('sha256').update(loaded.raw, 'utf8').digest('hex')
+      inspectedWritingSkills.set(sourceUrl, { contentSha256, resolvedUrl: loaded.resolvedUrl })
+      const inspection: RemoteWritingSkillInspection = {
+        ...loaded.inspection,
+        sourceUrl,
+        resolvedUrl: loaded.resolvedUrl,
+        contentSha256,
+        bundledFiles: loaded.files.map(file => file.path),
+        unbundledReferences: loaded.unbundled,
+      }
       return { success: true, inspection }
     } catch (error) {
       if (typeof sourceUrl === 'string') inspectedWritingSkills.delete(sourceUrl)
@@ -468,17 +411,40 @@ export function registerAppDataController(): void {
       }
       inspectedWritingSkills.delete(sourceUrl)
       // Refetch after confirmation. Renderer-provided inspection data is never trusted as install input.
-      const { raw, inspection } = await fetchGitHubWritingSkill(sourceUrl)
-      if (
-        inspection.contentSha256 !== confirmedInspection.contentSha256
-        || inspection.resolvedUrl !== confirmedInspection.resolvedUrl
-      ) {
+      const loaded = await loadGitHubWritingSkill(sourceUrl)
+      const contentSha256 = createHash('sha256').update(loaded.raw, 'utf8').digest('hex')
+      if (contentSha256 !== confirmedInspection.contentSha256 || loaded.resolvedUrl !== confirmedInspection.resolvedUrl) {
         throw new Error(text(
           'Writing Skill 在检查后已发生变化，请重新检查',
           'The Writing Skill changed after inspection; inspect it again',
         ))
       }
-      return { success: true, skill: installUserWritingSkill(inspection, raw) }
+      return {
+        success: true,
+        skill: installUserWritingSkill(loaded.inspection, loaded.raw, loaded.files.length > 0 ? loaded.files : undefined),
+      }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+
+  ipcMain.handle('skills:scan-repo', async (_event, repository: string) => {
+    try {
+      if (typeof repository !== 'string' || repository.length > 2_048) {
+        throw new Error(text('GitHub 仓库地址无效', 'The GitHub repository address is invalid'))
+      }
+      return { success: true, scan: await scanGitHubSkillRepository(repository) }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+
+  ipcMain.handle('skills:search-repos', async (_event, query: string) => {
+    try {
+      if (typeof query !== 'string' || !query.trim() || query.length > 120) {
+        throw new Error(text('请输入要搜索的关键字', 'Enter a keyword to search'))
+      }
+      return { success: true, repositories: await searchGitHubRepositories(query) }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) }
     }

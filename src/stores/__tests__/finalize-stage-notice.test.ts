@@ -89,20 +89,20 @@ describe('定稿结束时的系统通知按后处理步骤结果写', () => {
     stubIpc(new Set())
     await useWorkflowStore.getState().startWorkflow(finalize())
     expect(useWorkflowStore.getState().history[0].status).toBe('completed')
-    expect(notices()).toEqual([{ title: '第 4 章定稿完成', body: '回到书童查看结果。' }])
+    expect(notices()).toEqual([{ title: '第 4 章定稿完成', body: '回到万卷查看结果。' }])
   })
 
   it('导入知识库失败时写「已定稿，有一步没完成」', async () => {
     stubIpc(new Set(['kb_import']))
     await useWorkflowStore.getState().startWorkflow(finalize())
     expect(useWorkflowStore.getState().history[0].status).toBe('completed')
-    expect(notices()).toEqual([{ title: '第 4 章已定稿，有一步没完成', body: '回到书童查看并重试。' }])
+    expect(notices()).toEqual([{ title: '第 4 章已定稿，有一步没完成', body: '回到万卷查看并重试。' }])
   })
 
   it('两步失败时写出步数，英文界面用英文', async () => {
     useLocaleStore.setState({ locale: 'en-US', initialized: true })
     stubIpc(new Set(['kb_import', 'chapter_notes']))
     await useWorkflowStore.getState().startWorkflow(finalize())
-    expect(notices()).toEqual([{ title: 'Chapter 4 finalized, but 2 steps didn\'t finish', body: 'Return to Pagekin to check and retry.' }])
+    expect(notices()).toEqual([{ title: 'Chapter 4 finalized, but 2 steps didn\'t finish', body: 'Return to Wanjuan to check and retry.' }])
   })
 })

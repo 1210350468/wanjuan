@@ -69,8 +69,8 @@ const FINALIZATION_STEP_ERRORS: { code: RegExp; zh: string; en: string; enMany?:
     en: "Chapter notes changed while this step was running. The change is kept. Select Retry failed steps to generate the notes again and update the character state. Your edited notes may be replaced by the new ones, so copy them first to keep them." },
   // 作品放在不支持硬链接的磁盘上，知识库每次提交都失败（#571）；搬到支持的磁盘后重试才有用。
   { code: /^KNOWLEDGE_BASE_VOLUME_UNSUPPORTED$/, retry: 'described',
-    zh: '正文定稿已保存，但没能收进知识库：作品所在位置不支持知识库要用的硬链接（常见于 exFAT、FAT32 磁盘）。请退出书童，把作品文件夹移到本地 NTFS 磁盘（Mac 用 APFS），从新位置打开后再点「重试」。',
-    en: "The finalized chapter text is saved, but it could not be added to the knowledge base: this location does not support the hard links the knowledge base needs (common on exFAT and FAT32 drives). Quit Pagekin, move the book folder to a local NTFS drive (APFS on a Mac), open it from there, then select Retry." },
+    zh: '正文定稿已保存，但没能收进知识库：作品所在位置不支持知识库要用的硬链接（常见于 exFAT、FAT32 磁盘）。请退出万卷，把作品文件夹移到本地 NTFS 磁盘（Mac 用 APFS），从新位置打开后再点「重试」。',
+    en: "The finalized chapter text is saved, but it could not be added to the knowledge base: this location does not support the hard links the knowledge base needs (common on exFAT and FAT32 drives). Quit Wanjuan, move the book folder to a local NTFS drive (APFS on a Mac), open it from there, then select Retry." },
   { code: /^GENERATION_FINALIZATION_PREDECESSOR_REQUIRED$/, retry: { after: 'chapter_notes', rerunIfSucceeded: true },
     zh: '需要先完成「章节剧情要点」。', en: 'Chapter plot notes must finish first.' },
   { code: /^FINALIZATION_REPLACED_KNOWLEDGE_IMPORT_REQUIRED$/, retry: { after: 'kb_import' },

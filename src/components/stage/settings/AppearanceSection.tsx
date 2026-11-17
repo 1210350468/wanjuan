@@ -123,7 +123,7 @@ export default function AppearanceSection() {
       </Row>
       <Row
         title={text('在后台时通知我', 'Notify me in the background')}
-        desc={text('书童不在前台时，写作、审稿、修稿或定稿结束会弹系统通知。', 'When Pagekin is in the background, get a system notification when drafting, review, revision or finalizing ends.')}
+        desc={text('万卷不在前台时，写作、审稿、修稿或定稿结束会弹系统通知。', 'When Wanjuan is in the background, get a system notification when drafting, review, revision or finalizing ends.')}
         control={<Check kind="switch" checked={notifyInBackground.enabled} disabled={notifyInBackground.saving} onChange={checked => void notifyInBackground.set(checked)}
           label={<span className="stage-visually-hidden">{text('在后台时通知我', 'Notify me in the background')}</span>} />}
       >

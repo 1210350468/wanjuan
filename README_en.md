@@ -5,36 +5,38 @@
 </div>
 
 <p align="center">
-  <img src="docs/assets/brand/pagekin-icon-256.png" width="112" height="112" alt="Pagekin logo: a sheet of paper with a curled corner and two round eyes" />
+  <img src="public/wanjuan-icon.svg" width="112" height="112" alt="Wanjuan logo: two open books with the name Wanjuan" />
 </p>
 
-<h1 align="center">Pagekin</h1>
+<h1 align="center">Wanjuan</h1>
 
-<p align="center"><sub>Formerly “AI Novel Writer” (AI 小说作家). Chinese name: 书童, “the scholar’s page”.</sub></p>
+<p align="center"><sub>A local-first long-form writing desk derived from Pagekin</sub></p>
 
 <p align="center">
-  <strong>Pagekin, free AI novel writing software</strong><br />
-  Go from setup, story architecture, and chapter blueprints to drafting, review, revision, and final chapters, one chapter at a time. You can also break down a reference novel to imitate its style, import your manuscript and continue it, or rewrite to your own instructions.<br />
-  Local-first: your books stay on your own computer. No model is bundled: use your own API key, or run a local model with Ollama.
+  <strong>Wanjuan, free and open-source AI novel writing software</strong><br />
+  Go from setup, architecture, chapter blueprints, drafting, review, revision, and finalization one chapter at a time. Pick a topic from Fanqie rankings, fuse several books into a new setup, break down reference novels for imitation, or install writing skills in bulk from GitHub.<br />
+  Local-first: your books stay on your own computer. No model is bundled: use your own API key or a local Ollama server.
 </p>
 
-Pagekin is maintained by EthanYoQ. The [official website](https://www.orz.md/en/ai-novel-writer/) provides the product overview, setup guide and official download links.
+Wanjuan is derived from [EthanYoQ/Pagekin](https://github.com/EthanYoQ/Pagekin). See [NOTICE.md](NOTICE.md) for attribution and licensing.
 
 <p align="center">
-  <a href="https://github.com/EthanYoQ/Pagekin/releases/latest"><img src="https://img.shields.io/badge/Download-Windows%20%7C%20macOS-2b4c8c?style=for-the-badge" alt="Download for Windows and macOS" /></a><br />
-  <a href="https://www.orz.md/en/ai-novel-writer/#demo">English first-use guide with real screenshots</a><br />
-  <sub>Manual project setup. Bring your own local or cloud model.</sub>
-</p>
-
-<p align="center">
-  <a href="https://github.com/EthanYoQ/Pagekin/releases"><img src="https://badgen.net/github/tag/EthanYoQ/AI-Novel-Writer?label=release" alt="Release" /></a>
-  <a href="https://github.com/EthanYoQ/AI-Novel-Writer/blob/master/LICENSE"><img src="https://badgen.net/badge/license/GPL-3.0/blue" alt="GPL-3.0 License" /></a>
-  <a href="https://github.com/EthanYoQ/AI-Novel-Writer/stargazers"><img src="https://badgen.net/github/stars/EthanYoQ/AI-Novel-Writer" alt="GitHub stars" /></a>
+  <a href="https://github.com/EthanYoQ/Pagekin"><img src="https://badgen.net/badge/license/GPL-3.0/blue" alt="GPL-3.0 License" /></a>
+  <a href="https://github.com/EthanYoQ/Pagekin"><img src="https://badgen.net/badge/upstream/Pagekin/blue" alt="Upstream project" /></a>
 </p>
 
 <p align="center">
-  <img src="docs/assets/readme/v130-hero-en.webp" alt="Pagekin 1.3.0: product summary on the left and real screenshots of the library, chapter view, blueprint, run sheet, architecture, and cast on the right" width="100%" />
+  <img src="docs/assets/readme/v130-hero-en.webp" alt="Real screenshots of the library, chapter view, blueprint, run sheet, architecture, and cast" width="100%" />
 </p>
+
+> ## What Wanjuan adds
+>
+> - **Fanqie library**: 19 male-lead and 18 female-lead genre rankings with covers, synopses, word counts, and serial status. Keyword search and direct book links are supported. Pick two to five books to fuse their genre and chapter rhythm into a new book setup.
+> - **Skill marketplace**: scan a GitHub repository for every SKILL.md and install the ones you select. Search repositories by keyword with their description, stars, and last update. Referenced text files come with the skill; scripts, hooks, and subagents are rejected with a visible reason.
+> - **Onboarding**: a four-step first-run guide. Reopen it from the empty library at any time.
+> - **Interface**: a cover wall and hero band on the library, and a cover-card grid in the Fanqie library.
+>
+> See [release notes](.release/notes/v2.0.0-wanjuan.md) for details.
 
 > ## What's new in 1.3.0
 >
@@ -48,7 +50,7 @@ Pagekin is maintained by EthanYoQ. The [official website](https://www.orz.md/en/
 
 ## What it does
 
-Pagekin works in the order a novel gets written: you are the author, it is your page. Each step is saved in the book and feeds the next one. AI drafts, and you confirm every step.
+Wanjuan works in the order a novel gets written: you are the author, it is your desk. Each step is saved in the book and feeds the next one. AI drafts, and you confirm every step.
 
 ### Library: all your books in one place
 
@@ -64,6 +66,14 @@ The library lists every book you have written. Select a cover to preview it: the
 - **Continue your manuscript**: choose "My manuscript". The chapters you already wrote are imported by chapter number as finalized text, and AI continues the following chapters from those characters and events.
 - **Continue a passage**: select text in the prose editor and choose Continue on the toolbar; AI writes on from that passage.
 - **Rewrite**: to rewrite a whole chapter, use Revise. Write the direction you want, optionally check review notes, and compare the result with the original paragraph by paragraph to choose which version to keep. For a short passage, select it and use Refine, Expand, or To dialogue on the toolbar.
+
+### Fanqie library: find books, fuse their structure
+
+The library's "Fanqie library" finds books on Fanqie by title, keyword, or book link, and also browses rankings by genre: 19 male-lead and 18 female-lead categories, each listing that category's ranked books with covers, synopses, word counts, and serial status. It reads public book pages only: cover, title, author, tags, synopsis, word count, serial status, and every chapter title. Chapter text is never fetched.
+
+Tick two to five books, describe the direction you want, pick a folder, and choose "Fuse and create book". The app creates the book, writes the total chapter count and words per chapter from the median of the references, then asks AI to generate the setup, architecture, and core outline. References supply genre and structure only; the result never reuses their characters, place names, or specific plot.
+
+Keyword search locates book IDs through Bing site search. When that is unavailable, the app falls back to ranking entries whose titles match, and you can always paste a book link.
 
 ### Setup and architecture: build the story first
 
@@ -110,6 +120,8 @@ Every generation run appears in the run sheet, with In progress, History, and Di
 
 On the "Writing skills" settings page, choose a local skill folder or a single SKILL.md, or enter the address of a skill on GitHub, to import a prompt-only writing skill, such as one that removes the typical AI tone, or one for a particular style or genre. Reference text files that SKILL.md cites are included. The app reads the skill and shows you its content before you install it. Bind it to the planning, drafting, review, or revision stage, and every generation in that stage includes it.
 
+Choose "Skill marketplace" to paste a GitHub repository, scan every SKILL.md it contains, and install the ones you pick in one go; a few writing-skill repositories are built in, and you can also search GitHub repositories by keyword and pick one. Repository results carry the description, stars, and last update, read live from GitHub. Each row shows the stage, language, number of bundled reference files, and the reason a skill cannot be installed (scripts, hooks, subagents, or more than 64 KiB after merging). Skills already installed from the same repository are marked as installed.
+
 Only self-contained SKILL.md prompts are supported. Scripts, hooks, subagents, and tool requirements are not installed, so a skill cannot run code on your computer.
 
 ### Dark theme and two interface languages
@@ -120,7 +132,7 @@ Appearance offers light and dark. The interface is available in Chinese and Engl
 
 ## Supported models and services
 
-Pagekin does not provide models or host quotas. In settings, enter your own service address, model name, and API key. Two request protocols are supported:
+Wanjuan does not provide models or host quotas. In settings, enter your own service address, model name, and API key. Two request protocols are supported:
 
 - **OpenAI-compatible**: any service compatible with the Chat Completions API.
 - **Native Gemini**: Google Gemini.
@@ -157,12 +169,12 @@ Embedding models also use the `/v1` address. Do not use `http://127.0.0.1:11434/
 
 ## Download and install
 
-Download official installers only from [GitHub Releases](https://github.com/EthanYoQ/Pagekin/releases/latest).
+Installers are published in this repository's [Releases](https://github.com/1210350468/wanjuan/releases/latest).
 
 ### Windows x64
 
 ```text
-ai-novel-writer-setup-<version>.exe
+wanjuan-setup-<version>.exe
 ```
 
 1. Run the installer. An upgrade updates only the application and does not delete books, character cards, or settings. Back up important work first anyway.
@@ -174,8 +186,8 @@ The installer is not code-signed at present. Windows may show an unknown-publish
 ### macOS (Apple Silicon and Intel)
 
 ```text
-ai-novel-writer-mac-arm64-<version>-installer.dmg
-ai-novel-writer-mac-x64-<version>-installer.dmg
+wanjuan-mac-arm64-<version>-installer.dmg
+wanjuan-mac-x64-<version>-installer.dmg
 ```
 
 1. `arm64` is for Apple Silicon Macs (M1, M2, M3, M4, and later). `x64` is for Intel Macs.
@@ -200,7 +212,7 @@ The app does not provide model accounts, cloud generation, or promotional messag
 
 ## FAQ
 
-**Is Pagekin free?**
+**Is Wanjuan free?**
 Yes. It is open source under the GPL-3.0 license. Any cost of calling a cloud model is between you and the model provider. A local model through Ollama needs no provider at all.
 
 **Which models do I need?**

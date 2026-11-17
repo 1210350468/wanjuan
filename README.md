@@ -5,41 +5,42 @@
 </div>
 
 <p align="center">
-  <img src="docs/assets/brand/pagekin-icon-256.png" width="112" height="112" alt="书童 Pagekin Logo：一张卷起页角的纸，两只圆眼睛" />
+  <img src="public/wanjuan-icon.svg" width="112" height="112" alt="万卷 Logo：两册摊开的书与万卷二字" />
 </p>
 
-<h1 align="center">书童 Pagekin</h1>
+<h1 align="center">万卷 Wanjuan</h1>
 
-<p align="center"><sub>原名「AI 小说作家 / AI Novel Writer」</sub></p>
+<p align="center"><sub>基于书童 Pagekin 的本地优先长篇写作工作台</sub></p>
 
 <p align="center">
-  <strong>Pagekin，免费 AI 小说写作软件</strong><br />
-  从设定、架构、章节蓝图到正文、审稿、修稿、定稿，一章一章把书写完；也能拆解参考小说来仿写、导入原稿接着续写，或按你的要求改写。<br />
+  <strong>万卷，免费开源 AI 小说写作软件</strong><br />
+  设定、架构、章节蓝图、正文、审稿、修稿、定稿，一章一章把书写完；也能从番茄书库选题、把多本书的结构融合成新作品、导入参考小说仿写，或从 GitHub 批量采集写作 Skill。<br />
   本地优先：作品存在你自己的电脑上。软件不带模型：接你自己的 API Key，或用 Ollama 跑本地模型。
 </p>
 
-书童 Pagekin 由 EthanYoQ 维护。[官方主页](https://www.orz.md/ai-novel-writer/)提供产品介绍、使用指南和正式下载入口。
+万卷由 Pagekin 派生，完整保留原有的写作流程，并加上番茄书库、Skill 超市、多书融合与新手引导。上游项目请见 [EthanYoQ/Pagekin](https://github.com/EthanYoQ/Pagekin)，版权与许可信息见 [NOTICE.md](NOTICE.md)。
 
 <p align="center">
-  <a href="https://github.com/EthanYoQ/Pagekin/releases/latest"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Windows%20%7C%20macOS-2b4c8c?style=for-the-badge" alt="下载 Windows 与 macOS 安装包" /></a><br />
-  <a href="https://www.orz.md/ai-novel-writer/demo/">观看 32 秒中文实录：选段续写与改成对话</a><br />
-  <sub>1.3.0 实录，模型等待段已剪短，AI 配音；32 秒是片长，不是生成耗时。</sub>
+  <a href="https://github.com/EthanYoQ/Pagekin/releases"><img src="https://badgen.net/badge/license/GPL-3.0/blue" alt="GPL-3.0 License" /></a>
+  <a href="https://github.com/EthanYoQ/Pagekin"><img src="https://badgen.net/badge/upstream/Pagekin/blue" alt="Upstream project" /></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/EthanYoQ/Pagekin/releases"><img src="https://badgen.net/github/tag/EthanYoQ/AI-Novel-Writer?label=release" alt="Release" /></a>
-  <a href="https://github.com/EthanYoQ/AI-Novel-Writer/blob/master/LICENSE"><img src="https://badgen.net/badge/license/GPL-3.0/blue" alt="GPL-3.0 License" /></a>
-  <a href="https://github.com/EthanYoQ/AI-Novel-Writer/stargazers"><img src="https://badgen.net/github/stars/EthanYoQ/AI-Novel-Writer" alt="GitHub stars" /></a>
+  <img src="docs/assets/readme/v130-hero-zh.webp" alt="书房、正文、蓝图、运行侧页、架构和角色名单的真实界面截图" width="100%" />
 </p>
 
-<p align="center">
-  <img src="docs/assets/readme/v130-hero-zh.webp" alt="书童 Pagekin 1.3.0：左侧是产品介绍，右侧是书房、正文、蓝图、运行侧页、架构和角色名单的真实界面截图" width="100%" />
-</p>
+## 万卷新增
 
+| 能力 | 说明 |
+|---|---|
+| **番茄书库** | 男频 19、女频 18 个题材榜单，带封面、简介、字数与连载状态；关键词搜书或直接贴书籍链接。勾选 2 到 5 本可把题材与章节结构融合成一部新作品的设定。章节正文受站点字体混淆保护，软件不读取也不还原。 |
+| **Skill 超市** | 扫描 GitHub 仓库里的全部 SKILL.md，勾选后批量安装；也可以按关键字找仓库，列表带简介、星标与更新时间。安装时连同引用的 references 一起下载，依赖脚本或子代理的 Skill 会被标出原因并拒绝安装。 |
+| **新手引导** | 首次打开且书架为空时走四步：产品边界、模型配置、参考来源、写作顺序。之后可以在空书架页随时重看。 |
+| **界面** | 书房改为封面墙与顶部横幅，番茄书库改成封面卡片网格，分类横排可点。 |
 
 ## 它能做什么
 
-书童按写一本小说的顺序工作：你是作者，它是书童。每一步的结果都存进作品，下一步接着用。AI 负责起草，每一步由你确认。
+万卷按写一本小说的顺序工作：你是作者，它是书童。每一步的结果都存进作品，下一步接着用。AI 负责起草，每一步由你确认。
 
 ### 书房：管理你的全部作品
 
@@ -55,6 +56,14 @@
 - **导入原稿续写**：选「我的原稿」，你已经写好的章节按章节号导入为定稿，AI 续写后面的章节时会接着前文的人物和情节走。
 - **段落续写**：正文里选中一段文字，点工具条上的「续写」，AI 接着这段往下写。
 - **改写**：整章改写用「修稿」，写下你要改的方向，也可以勾选审稿意见，修稿结果按段落和原稿对比，由你逐段决定用哪一版。改一小段时，选中文字后用工具条上的润色、扩写或改成对话。
+
+### 番茄书库：搜书选题与多书融合
+
+书房里的「番茄书库」按书名、关键词或书籍链接找番茄上的作品；也可以按男频女频的题材翻榜单，男频 19 个、女频 18 个分类，每个分类列出该题材榜单上的作品，带封面、简介、字数与连载状态。读的是公开的书籍详情页：封面、书名、作者、标签、简介、字数、状态与全部章节标题，章节正文不读取。
+
+勾选两到五本，写下融合取向，选好保存位置，点「融合并新建作品」，软件会新建作品、按参考作品的中位规模写好总章数与每章字数，再让 AI 生成设定、架构与核心大纲。参考作品只提供题材与结构依据，融合结果不复刻其中的人物、地名与具体情节。
+
+关键词检索用 Bing 的站内检索定位书号；检索服务不可用时自动退回榜单里书名匹配的作品，也可以直接粘贴书籍链接。
 
 ### 设定与架构：先把故事立起来
 
@@ -101,6 +110,8 @@
 
 在设置的「写作 Skills」页，可以从本机选一个 Skill 文件夹或单个 SKILL.md，也可以填 GitHub 上的 Skill 地址，导入提示词型的写作 Skill，比如「去 AI 味」、某种文风或某类题材的写法。SKILL.md 引用的 references 文本会一并装入。安装前软件会先读取并展示内容，由你检查后再安装。装好后把它绑定到规划、写稿、审稿或修稿阶段，之后这一阶段的生成都会带上它。
 
+点「Skill 超市」可以贴一个 GitHub 仓库地址，扫描出仓库里的全部 SKILL.md，勾选后一次装上；也可以直接用内置的几个写作 Skill 仓库，或者按关键字搜 GitHub 仓库再挑。仓库结果带简介、星标与最后更新时间，都是当场从 GitHub 读的。列表会标出每个 Skill 的阶段、语言、附带文本数量，以及不能安装的原因（依赖脚本、hook、子代理或合并后超过 64 KiB）。同一仓库里已安装的条目会直接标成已安装。
+
 只支持自包含的 SKILL.md 提示词。脚本、hook、子代理和工具调用这类内容不会被安装，Skill 不能在你的电脑上执行代码。
 
 ### 深色主题与中英文界面
@@ -111,7 +122,7 @@
 
 ## 支持的模型与服务
 
-书童不提供模型，也不代管额度。你在设置里填上自己的服务地址、模型名和 API Key。软件支持两种调用协议：
+万卷不提供模型，也不代管额度。你在设置里填上自己的服务地址、模型名和 API Key。软件支持两种调用协议：
 
 - **OpenAI 兼容协议**：Chat Completions 接口兼容的服务都可以用。
 - **Gemini 原生协议**：Google Gemini。
@@ -148,12 +159,12 @@ API Key：  可以留空；界面要求时填任意占位值
 
 ## 下载与安装
 
-请只从 [GitHub Releases](https://github.com/EthanYoQ/Pagekin/releases/latest) 下载正式安装包。
+安装包发布在本仓库的 [Releases](https://github.com/1210350468/wanjuan/releases/latest)。
 
 ### Windows x64
 
 ```text
-ai-novel-writer-setup-<版本号>.exe
+wanjuan-setup-<版本号>.exe
 ```
 
 1. 运行安装程序。升级时安装程序只更新应用本身，不会删除作品、角色卡或设置。重要作品仍建议先备份。
@@ -165,8 +176,8 @@ ai-novel-writer-setup-<版本号>.exe
 ### macOS（Apple Silicon 与 Intel）
 
 ```text
-ai-novel-writer-mac-arm64-<版本号>-installer.dmg
-ai-novel-writer-mac-x64-<版本号>-installer.dmg
+wanjuan-mac-arm64-<版本号>-installer.dmg
+wanjuan-mac-x64-<版本号>-installer.dmg
 ```
 
 1. `arm64` 适用于 Apple Silicon Mac（M1、M2、M3、M4 等）。`x64` 适用于 Intel Mac。
@@ -191,7 +202,7 @@ ai-novel-writer-mac-x64-<版本号>-installer.dmg
 
 ## 常见问题
 
-**书童免费吗？**
+**万卷免费吗？**
 免费。软件以 GPL-3.0 协议开源。调用云端模型产生的费用由你和模型服务商结算，与本软件无关。用 Ollama 跑本地模型则不需要付费给任何服务商。
 
 **需要什么模型？**

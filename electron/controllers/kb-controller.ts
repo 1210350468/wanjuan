@@ -126,8 +126,8 @@ const REFERENCE_IMPORT_FAILURES: Readonly<Record<string, readonly [zhCN: string,
   EMBEDDING_SPACE_UNREGISTERED_DATA: INDEX_DAMAGED,
   EMBEDDING_SPACE_BUSY: ['检索索引正在建立，请稍后再试。', 'The search index is being built. Try again in a moment.'],
   KNOWLEDGE_BASE_VOLUME_UNSUPPORTED: [
-    '资料没有收进知识库：作品所在位置不支持知识库要用的硬链接（常见于 exFAT、FAT32 磁盘）。请退出书童，把作品文件夹移到本地 NTFS 磁盘（Mac 用 APFS），从新位置打开后再导入。',
-    "The material was not added to the knowledge base: this location does not support the hard links the knowledge base needs (common on exFAT and FAT32 drives). Quit Pagekin, move the book folder to a local NTFS drive (APFS on a Mac), open it from there, then import again.",
+    '资料没有收进知识库：作品所在位置不支持知识库要用的硬链接（常见于 exFAT、FAT32 磁盘）。请退出万卷，把作品文件夹移到本地 NTFS 磁盘（Mac 用 APFS），从新位置打开后再导入。',
+    "The material was not added to the knowledge base: this location does not support the hard links the knowledge base needs (common on exFAT and FAT32 drives). Quit Wanjuan, move the book folder to a local NTFS drive (APFS on a Mac), open it from there, then import again.",
   ],
 }
 

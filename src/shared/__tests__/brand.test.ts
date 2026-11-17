@@ -21,20 +21,20 @@ const legacyPrefixPattern = new RegExp('ve' + 'la-', 'i')
 const formerNamePattern = /AI ?小说作家|AI Novel Writer/
 
 describe('APP_BRAND', () => {
-  it('uses 书童 / Pagekin visible product language', () => {
-    expect(APP_BRAND.zhName).toBe('书童')
-    expect(APP_BRAND.enName).toBe('Pagekin')
-    expect(APP_BRAND.shortName).toBe('书童')
+  it('uses 万卷 / Wanjuan visible product language', () => {
+    expect(APP_BRAND.zhName).toBe('万卷')
+    expect(APP_BRAND.enName).toBe('Wanjuan')
+    expect(APP_BRAND.shortName).toBe('万卷')
     expect(Object.values(APP_BRAND).join(' ')).not.toMatch(legacyNamePattern)
   })
 
-  it('原名与旧版实际发布的产品名逐字一致', () => {
-    // v1.3.0 正式安装包里 exe 的 VersionInfo ProductName（ADR-0022 取证）；1.3.0 之后 productName 改为书童。
-    const lastReleasedProductName = 'AI小说作家'
+  it('记下上一个公开名字，安装包沿用原有身份', () => {
     const legacyNames = readFileSync(resolve(process.cwd(), 'scripts/product-identity.mjs'), 'utf8')
 
-    expect(APP_BRAND.formerZhName).toBe(lastReleasedProductName)
-    expect(legacyNames).toContain(`const LEGACY_PRODUCT_NAME = '${lastReleasedProductName}'`)
+    expect(APP_BRAND.formerZhName).toBe('书童')
+    expect(APP_BRAND.formerEnName).toBe('Pagekin')
+    // 安装包的 ProductName 与 appId 由 scripts/product-identity.mjs 维护，改名不动它，老用户升级不掉数据。
+    expect(legacyNames).toContain("const LEGACY_PRODUCT_NAME = 'AI小说作家'")
   })
 
   it('does not expose legacy product naming in visible brand surfaces', () => {

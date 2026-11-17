@@ -430,6 +430,33 @@ describe('writing skill app-data boundary', () => {
       .toContain('Revise with concrete action')
   })
 
+  it('downloads the text a GitHub skill references and installs it together', async () => {
+    const body = `---
+name: ref-prose
+description: Keep the voice steady.
+language: zh-CN
+stage: refinement
+---
+Follow [the voice guide](references/voice.md).`
+    vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
+      const url = String(input)
+      if (url.endsWith('/references/voice.md')) return new Response('Keep the voice steady across scenes.', { status: 200 })
+      return new Response(body, { status: 200 })
+    }))
+    const url = 'https://github.com/acme/story-skill/blob/main/SKILL.md'
+    await expect(handler('skills:inspect-github')({}, url)).resolves.toMatchObject({
+      success: true,
+      inspection: { compatible: true, bundledFiles: ['references/voice.md'], unbundledReferences: [] },
+    })
+    await expect(handler('skills:install-github')({}, url)).resolves.toMatchObject({
+      success: true,
+      skill: { name: 'ref-prose' },
+    })
+    expect(fs.readFileSync(path.join(velaHome, 'skills', 'ref-prose', 'references', 'voice.md'), 'utf8'))
+      .toBe('Keep the voice steady across scenes.')
+    expect(fs.existsSync(path.join(velaHome, 'skills', 'ref-prose', '.pagekin-bundle.json'))).toBe(true)
+  })
+
   it('rejects incompatible content and never writes it', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => skillResponse(`---
 name: unsafe-prose

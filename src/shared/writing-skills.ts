@@ -81,6 +81,58 @@ export interface RemoteWritingSkillInspection extends Omit<WritingSkillInspectio
   sourceUrl: string
   resolvedUrl: string
   contentSha256: string
+  /** 随 SKILL.md 一起下载的附带文本，相对 Skill 根目录的 POSIX 路径。 */
+  bundledFiles?: string[]
+  /** 引用了、但没有随仓库提供的普通相对链接。 */
+  unbundledReferences?: string[]
+}
+
+/** 扫描一个仓库时找到的一个 Skill；sourceUrl 可直接交给 GitHub 导入。 */
+export interface GitHubSkillCandidate {
+  /** SKILL.md 在仓库里的路径。 */
+  path: string
+  sourceUrl: string
+  name: string
+  displayName?: string
+  description: string
+  language: WritingSkillLanguage
+  suggestedStage: WritingSkillStage
+  /** 仓库里找得到的附带文本数量。 */
+  bundledReferences: number
+  /** 正文引用了、但仓库里找不到的文件数量。 */
+  missingReferences: number
+  /** 按 SKILL.md 与仓库文件判断的阻断原因；为空表示可以尝试安装。 */
+  blockingReasons: WritingSkillCompatibilityReason[]
+  utf8Bytes: number
+}
+
+export interface GitHubSkillRepositoryScan {
+  owner: string
+  repo: string
+  ref: string
+  candidates: GitHubSkillCandidate[]
+  /** 仓库里的 SKILL.md 超过单次扫描上限。 */
+  truncated: boolean
+}
+
+/** 按关键字找到的仓库；简介与更新时间直接来自 GitHub。 */
+export interface GitHubRepositorySummary {
+  owner: string
+  repo: string
+  fullName: string
+  description: string
+  stars: number
+  /** ISO 时间：仓库最后一次推送。 */
+  updatedAt: string
+  defaultBranch: string
+}
+
+/** 仓库地址：owner/repo、仓库页链接，可带 /tree/{ref}/{path} 指定分支与子目录。 */
+export interface GitHubRepositoryTarget {
+  owner: string
+  repo: string
+  ref?: string
+  pathPrefix?: string
 }
 
 export type LocalWritingSkillSourceKind = 'file' | 'folder'
@@ -109,7 +161,19 @@ export const MAX_WRITING_SKILL_BYTES = 64 * 1024
 export const WRITING_SKILL_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 export const WRITING_SKILL_TEXT_EXTENSIONS = ['.md', '.markdown', '.txt'] as const
 export const MAX_WRITING_SKILL_BUNDLED_FILES = 16
-const SAFE_SEGMENT = /^[A-Za-z0-9._-]+$/
+/**
+ * 单个路径片段是否安全：允许中文等非 ASCII 文件名，拒绝空串、`.`、`..`、路径分隔符与控制字符。
+ * Skill 目录里可能带中文子目录，所以不能用只认 ASCII 的字符集。
+ */
+export function isSafeSkillPathSegment(segment: string): boolean {
+  if (!segment || segment === '.' || segment === '..') return false
+  for (const character of segment) {
+    const code = character.codePointAt(0) ?? 0
+    if (code < 0x20 || code === 0x7f) return false
+    if (character === '/' || character === '\\') return false
+  }
+  return true
+}
 
 function unquote(value: string): string {
   const trimmed = value.trim()
@@ -181,8 +245,7 @@ function referencedPaths(text: string): SkillReference[] {
 }
 
 /** 把引用解析成 Skill 根目录内的规范 POSIX 路径；越出根目录或含不安全片段时返回 null。${SKILL_DIR} 开头的引用总从根目录解析。 */
-function resolveReference(reference: string, baseSegments: string[]): string | null {
-  const fromRoot = /^\$\{skill_dir\}/i.test(reference)
+function resolveReference(reference: string, baseSegments: string[]): string | null {  const fromRoot = /^\$\{skill_dir\}/i.test(reference)
   // 路径只取开头的 ASCII 路径字符：中文句读、锚点或查询串在此截断，非 ASCII 文件名留下的残段解析不到文本文件。
   const cleaned = reference
     .replace(/^\$\{skill_dir\}[/\\]?/i, '')
@@ -198,11 +261,24 @@ function resolveReference(reference: string, baseSegments: string[]): string | n
       segments.pop()
       continue
     }
-    if (!SAFE_SEGMENT.test(part)) return null
+    if (!isSafeSkillPathSegment(part)) return null
     segments.push(part)
   }
   const resolved = segments.join('/')
   return WRITING_SKILL_TEXT_EXTENSIONS.some(extension => resolved.toLowerCase().endsWith(extension)) ? resolved : null
+}
+
+/** 按出现顺序列出正文里的相对引用路径；外链、锚点与绝对路径不在其中。 */
+export function collectReferencedPaths(text: string): string[] {
+  return [...new Set(referencedPaths(text).map(reference => reference.path))]
+}
+
+/**
+ * 供按需下载附带文本的调用方（例如从 GitHub 采集 Skill）把引用解析成 Skill 根目录内的路径。
+ * baseSegments 是引用所在文件相对 Skill 根目录的目录片段。
+ */
+export function resolveSkillReferencePath(reference: string, baseSegments: readonly string[] = []): string | null {
+  return resolveReference(reference, [...baseSegments])
 }
 
 /**
@@ -377,7 +453,7 @@ export function inspectInstalledWritingSkill(raw: string, bundle: InstalledWriti
 
 function safePart(value: string, label: string): string {
   const decoded = decodeURIComponent(value)
-  if (!SAFE_SEGMENT.test(decoded) || decoded === '.' || decoded === '..') {
+  if (!isSafeSkillPathSegment(decoded)) {
     throw new Error(`Invalid GitHub ${label}`)
   }
   return decoded

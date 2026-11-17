@@ -3,6 +3,7 @@ import path from 'node:path'
 import { createHash } from 'node:crypto'
 import {
   inspectLocalWritingSkill,
+  isSafeSkillPathSegment,
   MAX_WRITING_SKILL_BUNDLED_FILES,
   MAX_WRITING_SKILL_BYTES,
   WRITING_SKILL_TEXT_EXTENSIONS,
@@ -174,7 +175,11 @@ export function writingSkillBundleManifest(files: readonly WritingSkillBundledFi
   return `${JSON.stringify({ version: 1, files: entries }, null, 2)}\n`
 }
 
-const MANIFEST_PATH = /^(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+$/
+/** 清单里的相对路径允许中文等非 ASCII 文件名；每段都按 Skill 路径片段规则校验。 */
+function isManifestPath(value: string): boolean {
+  if (!value) return false
+  return value.split('/').every(part => isSafeSkillPathSegment(part))
+}
 
 /** 清单来自磁盘，按不可信输入解析；任何一项不合规都返回 null。 */
 function parseBundleManifest(bytes: Buffer): Array<{ path: string; sha256: string }> | null {
@@ -192,7 +197,7 @@ function parseBundleManifest(bytes: Buffer): Array<{ path: string; sha256: strin
   for (const entry of files) {
     const { path: relative, sha256: digest } = (entry ?? {}) as { path?: unknown; sha256?: unknown }
     if (typeof relative !== 'string' || typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest)) return null
-    if (!MANIFEST_PATH.test(relative) || relative.split('/').some(part => part === '.' || part === '..')) return null
+    if (!isManifestPath(relative)) return null
     if (!WRITING_SKILL_TEXT_EXTENSIONS.some(extension => relative.toLowerCase().endsWith(extension))) return null
     if (seen.has(relative.toLowerCase())) return null
     seen.add(relative.toLowerCase())

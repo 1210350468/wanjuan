@@ -11,6 +11,7 @@ import { registerGenerationController } from './controllers/generation-controlle
 import { registerDatabaseController } from './controllers/db-controller'
 import { registerKBController } from './controllers/kb-controller'
 import { registerImportController } from './controllers/import-controller'
+import { registerFanqieController } from './controllers/fanqie-controller'
 import { registerWindowController } from './controllers/window-controller'
 import { registerStageNotificationController } from './controllers/stage-notification-controller'
 import { registerOfficialHomepageController } from './controllers/official-homepage-controller'
@@ -67,6 +68,7 @@ export function registerIPCHandlers() {
   registerChapterLifecycleController()
   registerKBController()
   registerImportController()
+  registerFanqieController()
 
   console.log('[AI Novel IPC] 所有 Controller 已注册完成')
 }

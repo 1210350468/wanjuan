@@ -209,7 +209,7 @@ export interface GlobalConfig {
   stageModelIds?: StageModelIds
   /** 定稿与后处理成功后，打开下一章的创作窗口（默认关闭）。 */
   autoOpenNextChapterAfterFinalize?: boolean
-  /** 书童在后台时，阶段结束弹系统通知（缺省为开）。 */
+  /** 万卷在后台时，阶段结束弹系统通知（缺省为开）。 */
   backgroundStageNotifications?: boolean
   editorFontSize: number
   editorFontFamily: string
@@ -720,6 +720,16 @@ export interface AppDataChannels {
   'skills:install-github': {
     args: [sourceUrl: string]
     return: { success: boolean; skill?: import('./writing-skills').InstalledWritingSkill; error?: string }
+  }
+  /** 扫描一个 GitHub 仓库里的全部 SKILL.md；owner/repo 或仓库页链接都可以。 */
+  'skills:scan-repo': {
+    args: [repository: string]
+    return: { success: boolean; scan?: import('./writing-skills').GitHubSkillRepositoryScan; error?: string }
+  }
+  /** 按关键字搜 GitHub 仓库，用于超市里自己找技能来源。 */
+  'skills:search-repos': {
+    args: [query: string]
+    return: { success: boolean; repositories?: import('./writing-skills').GitHubRepositorySummary[]; error?: string }
   }
   /** 主进程弹出系统对话框选择本机 SKILL.md 或 Skill 文件夹，只读检查后返回候选。 */
   'skills:pick-local': {
@@ -1273,6 +1283,19 @@ export interface ImportChannels {
   }
 }
 
+// ===== 番茄书库 =====
+export interface FanqieChannels {
+  /** 关键词、书名或番茄书籍链接；只读公开的书籍详情页与榜单。 */
+  'fanqie:search': {
+    args: [keyword: string]
+    return: { success: boolean; result?: import('./fanqie').FanqieSearchResult; error?: string }
+  }
+  'fanqie:rank': {
+    args: [request?: import('./fanqie').FanqieRankRequest]
+    return: { success: boolean; result?: import('./fanqie').FanqieRankPage; error?: string }
+  }
+}
+
 // ===== 章节生命周期 =====
 export interface ChapterLifecycleChannels {
   'chapter:delete-finalized': {
@@ -1383,7 +1406,7 @@ export interface MCPChannels {
 }
 
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = LegacyRosterGenerationChannels & CharacterAvatarChannels & CloudBackupChannels & GraphGenerationChannels & FinalizationGenerationChannels & EditorInlineGenerationChannels & ImportGenerationChannels & AgentGenerationChannels & ReviewRevisionGenerationInvokeChannels & FinalizedCharacterGenerationChannels & CharacterProposalChannels & GenerationOwnerChannels & StartupChannels & WindowChannels & OfficialHomepageChannels & ModelProviderResourceChannels & ConfigChannels & UpdateChannels & ProjectChannels & FileChannels & AppDataChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ChapterLifecycleChannels & ImportChannels & MCPChannels
+export type AllInvokeChannels = LegacyRosterGenerationChannels & CharacterAvatarChannels & CloudBackupChannels & GraphGenerationChannels & FinalizationGenerationChannels & EditorInlineGenerationChannels & ImportGenerationChannels & AgentGenerationChannels & ReviewRevisionGenerationInvokeChannels & FinalizedCharacterGenerationChannels & CharacterProposalChannels & GenerationOwnerChannels & StartupChannels & WindowChannels & OfficialHomepageChannels & ModelProviderResourceChannels & ConfigChannels & UpdateChannels & ProjectChannels & FileChannels & AppDataChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ChapterLifecycleChannels & ImportChannels & FanqieChannels & MCPChannels
 export type AllEventChannels = GenerationOwnerEvents & UpdateStateEvents & WindowEvents
 
 /** 提取 invoke 频道名 */
