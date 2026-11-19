@@ -5,10 +5,12 @@ import {
   buildFanqieSelectionScore,
   FANQIE_FUSION_MAX_BOOKS,
   FANQIE_TITLE_SAMPLE_LIMIT,
+  parseFanqieAiPick,
   parseFanqieBookId,
   sampleChapterTitles,
   scoreFanqieBook,
   suggestFanqieBundle,
+  tagCoherence,
   type FanqieBookSummary,
 } from '../fanqie'
 
@@ -108,8 +110,8 @@ describe('buildFanqieSelectionInsight', () => {
     ])
     expect(insight.primaryTag).toBe('悬疑脑洞')
     expect(insight.sharedTags).toEqual(['悬疑脑洞'])
-    // 三本各 3、2、2 个标签，共同标签 1 个：分母取平均 2.33 个，重合 3/7。
-    expect(insight.overlap).toBeCloseTo(3 / 7, 5)
+    // 相干度是两两 Jaccard 的平均：三对分别是 1/4、1/4、1/3，平均 5/18。
+    expect(insight.overlap).toBeCloseTo(5 / 18, 5)
     expect(insight.totalChapters).toBe(300)
     expect(insight.wordsPerChapter).toBe(2000)
     expect(insight.medianReads).toBe(1_713_524)
@@ -160,11 +162,27 @@ describe('scoreFanqieBook', () => {
     expect(high.heat).toBe(100)
   })
 
-  it('单章字数落在主流区间给满分，明显偏短偏厚都扣分', () => {
-    expect(scoreFanqieBook(book({ chapterCount: 1000, wordNumber: 3_000_000 })).pace).toBe(100)
-    expect(scoreFanqieBook(book({ chapterCount: 1500, wordNumber: 3_000_000 })).pace).toBe(80)
-    expect(scoreFanqieBook(book({ chapterCount: 2000, wordNumber: 3_000_000 })).pace).toBe(60)
-    expect(scoreFanqieBook(book({ chapterCount: 200, wordNumber: 1_400_000 })).pace).toBe(40)
+  it('节奏按高斯核算相似度：贴着主流满分，偏得越远越低，没有硬分段', () => {
+    const pace = (chapters: number, words: number) => scoreFanqieBook(book({ chapterCount: chapters, wordNumber: words })).pace
+    expect(pace(1000, 3_000_000)).toBe(100)
+    // 每章 2000 字：偏离主流 1.5 倍，落在 70 分上下。
+    expect(pace(1500, 3_000_000)).toBeGreaterThan(65)
+    expect(pace(1500, 3_000_000)).toBeLessThan(75)
+    // 每章 7000 字：偏离 2.3 倍，明显掉下来。
+    expect(pace(200, 1_400_000)).toBeLessThan(30)
+    // 偏离越多分越低，中间没有台阶。
+    expect(pace(1200, 3_000_000)).toBeGreaterThan(pace(1500, 3_000_000))
+    expect(pace(1500, 3_000_000)).toBeGreaterThan(pace(2000, 3_000_000))
+  })
+
+  it('追读对样本量做收缩：刚开几章的书不会被少数读者顶到满分', () => {
+    // 同样 10 万在读：10 章的书每章 1 万人，1000 章的书每章 1 百人。
+    const short = scoreFanqieBook(book({ chapterCount: 10, wordNumber: 20_000, readCount: 100_000 }))
+    const long = scoreFanqieBook(book({ chapterCount: 1000, wordNumber: 3_000_000, readCount: 100_000 }))
+    expect(short.retention).toBeGreaterThan(long.retention)
+    // 收缩把它从「每章 1 万人」拉回平台先验附近，不会直接给 100。
+    expect(short.retention).toBeLessThan(90)
+    expect(long.retention).toBeGreaterThan(0)
   })
 
   it('完结的结构分高于连载，连载按已写章数递增', () => {
@@ -182,6 +200,21 @@ describe('scoreFanqieBook', () => {
     expect(unknown.pace).toBe(30)
     expect(unknown.total).toBeGreaterThanOrEqual(0)
     expect(unknown.total).toBeLessThanOrEqual(100)
+  })
+})
+
+describe('tagCoherence', () => {
+  it('单本视为完全相干，两本取 Jaccard，三本取两两平均', () => {
+    expect(tagCoherence([book()])).toBe(1)
+    expect(tagCoherence([])).toBe(0)
+    expect(tagCoherence([
+      book({ tags: ['悬疑脑洞', '推理'] }),
+      book({ bookId: '7000000000000000002', tags: ['悬疑脑洞', '规则怪谈'] }),
+    ])).toBeCloseTo(1 / 3, 5)
+    expect(tagCoherence([
+      book({ tags: ['悬疑脑洞', '推理'] }),
+      book({ bookId: '7000000000000000002', tags: ['都市日常', '种田'] }),
+    ])).toBe(0)
   })
 })
 
@@ -215,6 +248,43 @@ describe('buildFanqieSelectionScore', () => {
   it('选书诊断里带出这套组合的评分，且和单独调用一致', () => {
     const books = [book(), book({ bookId: '7000000000000000002', tags: ['悬疑脑洞', '刑侦'] })]
     expect(buildFanqieSelectionInsight(books).score).toEqual(buildFanqieSelectionScore(books))
+  })
+})
+
+describe('parseFanqieAiPick', () => {
+  const pool = [
+    book(),
+    book({ bookId: '7000000000000000002', bookName: '规则怪谈', tags: ['悬疑脑洞', '规则怪谈'] }),
+    book({ bookId: '7000000000000000003', bookName: '刑侦档案', tags: ['悬疑脑洞', '刑侦'] }),
+  ]
+
+  it('读出模型挑的书、融合取向与理由，围栏与寒暄都容忍', () => {
+    const json = '{"bookIds":["7143038691944959011","7000000000000000003"],"focus":"保留悬疑骨架，主角改成女刑警","summary":"一本给骨架，一本给刑侦细节"}'
+    const raw = ['好的：', '```json', json, '```'].join(String.fromCharCode(10))
+    const pick = parseFanqieAiPick(raw, pool)
+    expect(pick.books.map(entry => entry.bookName)).toEqual(['十日终焉', '刑侦档案'])
+    expect(pick.focus).toBe('保留悬疑骨架，主角改成女刑警')
+    expect(pick.summary).toBe('一本给骨架，一本给刑侦细节')
+  })
+
+  it('书号不在候选里、重复、或少于两本都直接报错', () => {
+    expect(() => parseFanqieAiPick('{"bookIds":["999"]}', pool)).toThrow('FANQIE_AI_PICK_TOO_FEW')
+    expect(() => parseFanqieAiPick('{"bookIds":["7143038691944959011"]}', pool)).toThrow('FANQIE_AI_PICK_TOO_FEW')
+    const duplicated = parseFanqieAiPick('{"bookIds":["7143038691944959011","7143038691944959011","7000000000000000002"]}', pool)
+    expect(duplicated.books).toHaveLength(2)
+  })
+
+  it('回复不是 JSON 时报格式错，不猜', () => {
+    expect(() => parseFanqieAiPick('我建议选《十日终焉》和《规则怪谈》', pool)).toThrow('FANQIE_AI_PICK_INVALID')
+    expect(() => parseFanqieAiPick('{"bookIds":"7143038691944959011"}', pool)).toThrow('FANQIE_AI_PICK_TOO_FEW')
+    expect(() => parseFanqieAiPick('{"bookIds":[]}', pool)).toThrow('FANQIE_AI_PICK_TOO_FEW')
+  })
+
+  it('挑多了按上限截断', () => {
+    const many = Array.from({ length: 8 }, (_, index) => book({ bookId: `70000000000000000${index}`, bookName: `书${index}` }))
+    const ids = many.map(entry => entry.bookId)
+    const pick = parseFanqieAiPick(`{"bookIds":${JSON.stringify(ids)}}`, many)
+    expect(pick.books).toHaveLength(FANQIE_FUSION_MAX_BOOKS)
   })
 })
 

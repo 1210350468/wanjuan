@@ -15,7 +15,10 @@ import { pluralEn } from '../../shared/plural-en'
 import {
   buildFanqieFusionBrief,
   buildFanqieSelectionInsight,
+  buildFanqieSelectionScore,
+  FANQIE_AI_PICK_CANDIDATE_LIMIT,
   FANQIE_FUSION_MAX_BOOKS,
+  parseFanqieAiPick,
   scoreFanqieBook,
   suggestFanqieBundle,
   type FanqieBookSummary,
@@ -109,6 +112,7 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
   const [directing, setDirecting] = useState(false)
   const [focusOptions, setFocusOptions] = useState<string[]>([])
   const [bundleNote, setBundleNote] = useState('')
+  const [aiPicking, setAiPicking] = useState(false)
 
   const suggestedTitle = useMemo(
     () => (selected.length >= 2 ? buildFanqieFusionBrief(selected).suggestedTitle : ''),
@@ -250,6 +254,59 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
       `配了 ${suggestion.books.length} 本：${names}，综合 ${suggestion.score.total} 分。${shared ? `共同 ${shared}` : '没有共同标签，只借节奏'}${added ? `，另外带来 ${added}` : ''}。${suggestion.alternatives > 0 ? `同题材还有 ${suggestion.alternatives} 本可换。` : ''}`,
       `Drafted ${suggestion.books.length}: ${suggestion.books.map(book => `"${book.bookName}"`).join(' ')}. Overall ${suggestion.score.total}. ${shared ? `Shared ${shared}` : 'No shared tag, borrowing pace only'}${added ? `, plus ${added}` : ''}. ${suggestion.alternatives > 0 ? `${suggestion.alternatives} more in the same genre are available.` : ''}`,
     ))
+  }
+
+  /**
+   * AI 帮我选：把当前候选的书名、标签、在读、规模、状态与评分交给模型，让它自己判断哪几本适合融合，
+   * 顺带给出理由与融合取向。模型没配、回复读不出来、或挑的书不在列表里，都直接报错，不替作者凑数。
+   */
+  const pickWithAi = async () => {
+    if (aiPicking || candidates.length < 2) return
+    setAiPicking(true)
+    setError('')
+    try {
+      const pool = candidates.slice(0, FANQIE_AI_PICK_CANDIDATE_LIMIT)
+      const catalog = pool.map((book, index) => {
+        const perChapter = book.chapterCount > 0 ? Math.round(book.wordNumber / book.chapterCount) : 0
+        return text(
+          `${index + 1}. bookId=${book.bookId}《${book.bookName}》标签：${book.tags.join('、') || '无'}｜在读 ${book.readCount.toLocaleString('zh-CN')}｜${book.chapterCount} 章${perChapter > 0 ? `，每章约 ${perChapter} 字` : ''}｜${book.status === 'completed' ? '完结' : book.status === 'ongoing' ? '连载中' : '状态未知'}｜评分 ${scoreFanqieBook(book).total}`,
+          `${index + 1}. bookId=${book.bookId} "${book.bookName}" tags: ${book.tags.join(', ') || 'none'} | ${book.readCount.toLocaleString('en-US')} reading | ${book.chapterCount} ${pluralEn(book.chapterCount, 'chapter')}${perChapter > 0 ? `, about ${perChapter} ${pluralEn(perChapter, 'word')} each` : ''} | ${book.status} | score ${scoreFanqieBook(book).total}`,
+        )
+      }).join('\n')
+      const raw = await completeOnce(
+        text(
+          '你是中文网文的选题策划，负责判断哪几本书适合融成一部新书。只输出 JSON，不要解释、不要代码围栏。',
+          'You are a Chinese web-fiction development editor deciding which books should be fused into one new novel. Output JSON only, with no commentary and no code fences.',
+        ),
+        text(
+          `下面是番茄上的候选作品。请从中挑 2 到 3 本适合融合的参考作品：要有一本当题材骨架，其余各带一个不同的卖点；不要挑题材完全重叠的组合。\n${catalog}\n\n只输出这个 JSON：{"bookIds":["书号","书号"],"focus":"60 到 90 字的融合取向，写清一句话卖点、目标读者、主角处境与优势","summary":"一两句话说明为什么挑这几本"}`,
+          `Here are candidate works from Fanqie. Pick 2 to 3 that suit a fusion: one should be the genre skeleton, the others should each add a different selling point. Do not pick a set where the genres fully overlap.\n${catalog}\n\nOutput only this JSON: {"bookIds":["id","id"],"focus":"40 to 60 words of fusion direction covering a one-line pitch, the target reader, and the lead's situation and edge","summary":"one or two sentences on why these books"}`,
+        ),
+        600,
+      )
+      if (!raw) return
+      const pick = parseFanqieAiPick(raw, pool)
+      setTitleOptions([])
+      setFocusOptions([])
+      setSelected(pick.books)
+      if (!bookName.trim()) setBookName(buildFanqieFusionBrief(pick.books).suggestedTitle)
+      if (!focus.trim() && pick.focus) setFocus(pick.focus)
+      const names = pick.books.map(book => `《${book.bookName}》`).join('')
+      const total = buildFanqieSelectionScore(pick.books).total
+      setBundleNote(pick.summary
+        ? text(
+          `AI 选了 ${pick.books.length} 本：${names}，综合 ${total} 分。${pick.summary}`,
+          `AI picked ${pick.books.length}: ${pick.books.map(book => `"${book.bookName}"`).join(' ')}. Overall ${total}. ${pick.summary}`,
+        )
+        : text(
+          `AI 选了 ${pick.books.length} 本：${names}，综合 ${total} 分。`,
+          `AI picked ${pick.books.length}: ${pick.books.map(book => `"${book.bookName}"`).join(' ')}. Overall ${total}.`,
+        ))
+    } catch (cause) {
+      setError(displayedErrorMessage(locale, cause))
+    } finally {
+      setAiPicking(false)
+    }
   }
 
   const pickFolder = async () => {
@@ -515,11 +572,16 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
           {candidates.length >= 2 && (
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                {text('不想一本本挑：按题材骨架和节奏自动配一单。', 'Rather not pick one by one: draft a set by genre skeleton and pace.')}
+                {text('不想一本本挑：按题材与节奏自动配一单，或者让模型自己判断。', 'Rather not pick one by one: draft a set from genre and pace, or let the model judge.')}
               </p>
-              <Button type="button" variant="text" size="sm" onClick={pickBundle}>
-                {text('帮我配一单', 'Suggest a bundle')}
-              </Button>
+              <div className="flex shrink-0 gap-1">
+                <Button type="button" variant="text" size="sm" disabled={aiPicking} onClick={pickBundle}>
+                  {text('帮我配一单', 'Suggest a bundle')}
+                </Button>
+                <Button type="button" variant="text" size="sm" disabled={aiPicking} onClick={() => void pickWithAi()}>
+                  {aiPicking ? text('正在挑…', 'Picking…') : text('AI 帮我选', 'AI picks')}
+                </Button>
+              </div>
             </div>
           )}
 

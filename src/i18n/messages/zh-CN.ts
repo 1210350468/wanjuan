@@ -9,6 +9,8 @@ export const zhCN = {
   'error.projectNotOpen': '请先打开项目。',
   'error.fanqieSelectionEmpty': '至少要有一部参考作品，先在番茄书库里勾选书籍。',
   'error.fanqieSelectionTooMany': '一次最多融合 5 部参考作品，去掉几本再试。',
+  'error.fanqieAiPickInvalid': '模型这次没按要求给出候选，回复读不出来。请再试一次。',
+  'error.fanqieAiPickTooFew': '模型挑出的作品不在当前列表里，或少于两本。请再试一次，或自己勾选。',
   'error.embeddingModelNotConfigured': '请先配置向量模型。',
   'error.projectStoragePathUnsupported': '项目路径过深，部分本地存储不可用。请把项目文件夹移到靠近磁盘根目录的位置（例如 D:\\Novels）后重试。',
   'error.projectLegacyImportRequired': '这是旧版项目，请通过“导入旧项目”创建新版副本后继续。旧项目会保留。',

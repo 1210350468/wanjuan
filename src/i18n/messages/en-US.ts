@@ -7,6 +7,8 @@ export const enUS = {
   'error.projectNotOpen': 'Open a project first.',
   'error.fanqieSelectionEmpty': 'At least one reference book is needed. Pick books in the Fanqie library first.',
   'error.fanqieSelectionTooMany': 'Up to 5 reference books can be fused at once. Remove some and try again.',
+  'error.fanqieAiPickInvalid': 'The model did not answer in the expected shape, so the reply could not be read. Try again.',
+  'error.fanqieAiPickTooFew': 'The model picked books that are not in the current list, or fewer than two. Try again, or tick books yourself.',
   'error.embeddingModelNotConfigured': 'Configure an embedding model first.',
   'error.projectStoragePathUnsupported': 'The project path is too deep for some local storage. Move the project folder closer to the drive root (for example, D:\\Novels), then try again.',
   'error.projectLegacyImportRequired': 'This is a legacy project. Use Import legacy project to create a new copy. The original is kept.',

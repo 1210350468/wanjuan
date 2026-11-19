@@ -139,13 +139,13 @@ describe('番茄书库', () => {
 
     await expect.element(page.getByText(/这套组合：悬疑脑洞/u)).toBeVisible()
     await expect.element(page.getByText(/规模：300 章 × 每章约 2,100 字/u)).toBeVisible()
-    await expect.element(page.getByText(/标签重合 50%，骨架一致，还能各带一点新意。/u)).toBeVisible()
+    await expect.element(page.getByText(/标签重合 33%，骨架一致，还能各带一点新意。/u)).toBeVisible()
     await expect.element(page.getByText(/每章 2,100 字，比平台主流短/u)).toBeVisible()
 
     // 多维度评分：综合分 + 五个分项，勾选之后就能看到。
     const scorePanel = page.getByLabelText('这套组合的评分')
     await expect.element(scorePanel.getByText('综合', { exact: true })).toBeVisible()
-    await expect.element(scorePanel.getByText('92', { exact: true })).toBeVisible()
+    await expect.element(scorePanel.getByText('89', { exact: true })).toBeVisible()
     for (const label of ['题材集中', '热度', '追读', '结构', '节奏']) {
       await expect.element(scorePanel.getByText(label, { exact: true })).toBeVisible()
     }
@@ -178,6 +178,55 @@ describe('番茄书库', () => {
     await act(async () => list.getByText('规则怪谈', { exact: true }).click())
     await expect.element(page.getByText('已选 1 本（最多 5 本）')).toBeVisible()
     expect(document.body.textContent).not.toContain('配了 2 本')
+  })
+
+  it('AI 帮我选：模型自己挑书，回填选中项、融合取向与理由', async () => {
+    useLLMStore.setState({
+      ...originalLLMState,
+      models: [{ id: 'model-1', name: '测试模型', purposes: ['generation'] }],
+      defaultModelId: 'model-1',
+      stageModelIds: {},
+    } as never)
+    invoke.mockImplementation(async (channel: string) => {
+      if (channel === 'fanqie:search') return { success: true, result: { source: 'keyword', candidates } }
+      if (channel === 'llm:complete-once') {
+        return {
+          success: true,
+          text: '{"bookIds":["7000000000000000002","7143038691944959011"],"focus":"保留悬疑骨架，主角改成女刑警","summary":"一本给骨架，一本带规则怪谈的卖点"}',
+        }
+      }
+      throw new Error(`Unexpected IPC channel ${channel}`)
+    })
+
+    await page.getByLabelText('书名、关键词或书籍链接').fill('十日终焉')
+    await act(async () => page.getByRole('button', { name: '搜索' }).click())
+    await act(async () => page.getByRole('button', { name: 'AI 帮我选' }).click())
+
+    await expect.element(page.getByText('已选 2 本（最多 5 本）')).toBeVisible()
+    await expect.element(page.getByText(/AI 选了 2 本：/u)).toBeVisible()
+    await expect.element(page.getByText(/一本给骨架，一本带规则怪谈的卖点/u)).toBeVisible()
+    await expect.element(page.getByLabelText('融合取向（可留空）')).toHaveValue('保留悬疑骨架，主角改成女刑警')
+  })
+
+  it('AI 挑的书不在候选里时直接报错，不替作者凑数', async () => {
+    useLLMStore.setState({
+      ...originalLLMState,
+      models: [{ id: 'model-1', name: '测试模型', purposes: ['generation'] }],
+      defaultModelId: 'model-1',
+      stageModelIds: {},
+    } as never)
+    invoke.mockImplementation(async (channel: string) => {
+      if (channel === 'fanqie:search') return { success: true, result: { source: 'keyword', candidates } }
+      if (channel === 'llm:complete-once') return { success: true, text: '{"bookIds":["999999999"]}' }
+      throw new Error(`Unexpected IPC channel ${channel}`)
+    })
+
+    await page.getByLabelText('书名、关键词或书籍链接').fill('十日终焉')
+    await act(async () => page.getByRole('button', { name: '搜索' }).click())
+    await act(async () => page.getByRole('button', { name: 'AI 帮我选' }).click())
+
+    await expect.element(page.getByText(/模型挑出的作品不在当前列表里/u)).toBeVisible()
+    await expect.element(page.getByText('已选 0 本（最多 5 本）')).toBeVisible()
   })
 
   it('AI 定方向把两条候选写出来，点一条填进融合取向', async () => {

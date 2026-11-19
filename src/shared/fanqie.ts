@@ -131,42 +131,54 @@ export type FanqieChapterDensity = 'thin' | 'normal' | 'thick'
 export type FanqieBlendRisk = 'scattered' | 'balanced' | 'identical'
 
 /**
- * 共同标签占「每本平均标签数」的比例，0 到 1。
- * 用平均标签数当分母而不是并集：每本各带一个独有的细分标签时，并集会把这些差异都算进分母，
- * 让本来同属一个题材的组合看起来像各不相干。
- */
-function overlapRatio(books: readonly FanqieBookSummary[]): number {
-  const total = books.reduce((sum, book) => sum + book.tags.length, 0)
-  if (total === 0) return 0
-  return clamp(sharedTags(books).length / (total / books.length), 0, 1)
-}
-
-/**
- * 单本参考作品的四维评分，0 到 100。
- * 维度与阈值取自番茄上常见的量级，只用书籍页的公开字段，同样的数据每次得分相同。
+ * 单本参考作品的多维评分，每一项 0 到 100。
+ * 只用书籍页公开字段，同样的数据每次得分相同；各项口径见下面每个函数的注释。
  */
 export interface FanqieBookScore {
-  /** 热度：在读人数，按 1 千到 1 千万的对数刻度铺满。 */
+  /** 热度：在读人数按对数刻度铺满分值。 */
   heat: number
-  /** 追读强度：在读人数除以章节数，看每章聚住多少读者。 */
+  /** 追读：贝叶斯收缩后的单章在读，样本少的书向平台先验靠拢。 */
   retention: number
-  /** 结构完整度：完结优于连载，连载按已写章数给分，越完整越能把节奏照下来。 */
+  /** 结构完整度：完结优于连载，连载按已写章数给分。 */
   structure: number
-  /** 单章节奏：单章字数是否落在平台主流的 2200 到 3800 字。 */
+  /** 节奏：单章字数离平台主流有多远，用高斯核换算成相似度。 */
   pace: number
   /** 加权总分。 */
   total: number
 }
 
+/** 平台先验：每章在读数，取榜单作品的中位量级。 */
+const PER_CHAPTER_PRIOR = 300
+/** 先验的等效章数：一本 300 章的作品才把先验权重压到一半。 */
+const PRIOR_CHAPTERS = 300
+/** 主流单章字数，节奏相似度的中心。 */
+const MAINSTREAM_WORDS_PER_CHAPTER = 3000
+/** 高斯核带宽：单章字数偏离主流 1.65 倍时降到 60 分左右。 */
+const PACE_KERNEL_SIGMA = 0.5
+
+/**
+ * 加权评分（IMDb Top 250 的口径）：把「每章在读」当作评分、章数当作票数，
+ * 向平台先验收缩，避免刚开几章的作品靠少数读者刷出高分。
+ * 公式 (v·R + m·C) / (v + m)，v 是章数，R 是每章在读，C 是先验，m 是先验的等效章数。
+ */
+function shrunkPerChapterReads(book: FanqieBookSummary): number {
+  if (book.chapterCount <= 0 || book.readCount <= 0) return 0
+  return (book.readCount + PRIOR_CHAPTERS * PER_CHAPTER_PRIOR) / (book.chapterCount + PRIOR_CHAPTERS)
+}
+
+/** 追读分：收缩后的每章在读，1 章 32 人到 3162 人铺满 0 到 100 的对数刻度。 */
+function retentionScore(book: FanqieBookSummary): number {
+  const perChapter = shrunkPerChapterReads(book)
+  if (perChapter <= 0) return 0
+  return clamp(Math.round((Math.log10(perChapter) - 1.5) / 2 * 100), 0, 100)
+}
+
+/** 热度分：在读人数取对数，1 千到 1 千万铺满 0 到 100。 */
 function heatScore(readCount: number): number {
   return clamp(Math.round((Math.log10(readCount + 1) - 3) / 4 * 100), 0, 100)
 }
 
-function retentionScore(book: FanqieBookSummary): number {
-  if (book.chapterCount <= 0 || book.readCount <= 0) return 0
-  return clamp(Math.round((Math.log10(book.readCount / book.chapterCount) - 1) / 2 * 100), 0, 100)
-}
-
+/** 结构分：完结给满分，连载按已写章数递增，没有章数信息时给低分。 */
 function structureScore(book: FanqieBookSummary): number {
   if (book.chapterCount <= 0) return 20
   if (book.status === 'completed') return 100
@@ -174,13 +186,14 @@ function structureScore(book: FanqieBookSummary): number {
   return 40
 }
 
+/**
+ * 节奏分：把单章字数取对数后与主流值比距离，用高斯核（RBF）换算成 0 到 100 的相似度。
+ * 核函数与推荐系统里按特征距离算相似度的做法一致，越接近主流越高，没有硬分段。
+ */
 function paceScore(book: FanqieBookSummary): number {
   if (book.chapterCount <= 0 || book.wordNumber <= 0) return 30
-  const perChapter = book.wordNumber / book.chapterCount
-  if (perChapter >= 2200 && perChapter <= 3800) return 100
-  if (perChapter >= 1800 && perChapter <= 4200) return 80
-  if (perChapter >= 1500 && perChapter <= 4800) return 60
-  return 40
+  const distance = Math.log((book.wordNumber / book.chapterCount) / MAINSTREAM_WORDS_PER_CHAPTER)
+  return clamp(Math.round(Math.exp(-(distance * distance) / (2 * PACE_KERNEL_SIGMA * PACE_KERNEL_SIGMA)) * 100), 0, 100)
 }
 
 export function scoreFanqieBook(book: FanqieBookSummary): FanqieBookScore {
@@ -197,19 +210,44 @@ export function scoreFanqieBook(book: FanqieBookSummary): FanqieBookScore {
   }
 }
 
+/** 两本书标签集合的 Jaccard 相似度：交集除以并集，0 到 1。 */
+function tagSimilarity(left: FanqieBookSummary, right: FanqieBookSummary): number {
+  const union = new Set([...left.tags, ...right.tags])
+  if (union.size === 0) return 0
+  return left.tags.filter(tag => right.tags.includes(tag)).length / union.size
+}
+
+/**
+ * 整单的题材相干度：所有书两两 Jaccard 相似度的平均。
+ * 两两平均是衡量一组条目「是不是同一类」的常用做法，比「共同标签 ÷ 全部标签」稳：
+ * 每本各带一个细分标签时，不会把同题材的组合算成各不相干。
+ */
+export function tagCoherence(books: readonly FanqieBookSummary[]): number {
+  if (books.length < 2) return books.length === 1 ? 1 : 0
+  let total = 0
+  let pairs = 0
+  for (let left = 0; left < books.length; left++) {
+    for (let right = left + 1; right < books.length; right++) {
+      total += tagSimilarity(books[left], books[right])
+      pairs++
+    }
+  }
+  return pairs === 0 ? 0 : total / pairs
+}
+
 export interface FanqieSelectionScore {
   /** 几本的中位分数，避免一本爆款把整单分数抬起来。 */
   heat: number
   retention: number
   structure: number
   pace: number
-  /** 题材集中度：标签太散扣分，几本几乎同质也扣分。 */
+  /** 题材集中度：两两相干度太散扣分，几本几乎同质也扣分。 */
   focus: number
   total: number
   books: FanqieBookScore[]
 }
 
-/** 这一单组合的评分：四维取中位数，再加上题材集中度。 */
+/** 这一单组合的评分：四维取中位数，再加题材集中度。 */
 export function buildFanqieSelectionScore(books: readonly FanqieBookSummary[]): FanqieSelectionScore {
   if (books.length === 0) throw new Error('FANQIE_SELECTION_EMPTY')
   if (books.length > FANQIE_FUSION_MAX_BOOKS) throw new Error('FANQIE_SELECTION_TOO_MANY')
@@ -219,10 +257,10 @@ export function buildFanqieSelectionScore(books: readonly FanqieBookSummary[]): 
   const retention = median(scores.map(score => score.retention))
   const structure = median(scores.map(score => score.structure))
   const pace = median(scores.map(score => score.pace))
-  const overlap = overlapRatio(books)
+  const coherence = tagCoherence(books)
   const focus = books.length < 2
     ? 100
-    : overlap < 0.2 ? 45 : overlap >= 0.8 ? 55 : 100
+    : coherence < 0.15 ? 45 : coherence >= 0.6 ? 55 : 100
 
   return {
     heat,
@@ -240,7 +278,7 @@ export interface FanqieSelectionInsight {
   /** 题材判断：优先用共同标签，没有共同标签时取出现次数最多的标签。 */
   primaryTag: string
   sharedTags: string[]
-  /** 共同标签占全部标签的比例，0 到 1。 */
+  /** 题材相干度：两两标签 Jaccard 相似度的平均，0 到 1。 */
   overlap: number
   totalChapters: number
   wordsPerChapter: number
@@ -261,7 +299,7 @@ export function buildFanqieSelectionInsight(books: readonly FanqieBookSummary[])
   if (books.length > FANQIE_FUSION_MAX_BOOKS) throw new Error('FANQIE_SELECTION_TOO_MANY')
 
   const shared = sharedTags(books)
-  const overlap = overlapRatio(books)
+  const overlap = tagCoherence(books)
   const { chapters, wordsPerChapter } = planScale(books)
   const density: FanqieChapterDensity = wordsPerChapter < 2200 ? 'thin' : wordsPerChapter > 3800 ? 'thick' : 'normal'
   const blend: FanqieBlendRisk = books.length < 2
@@ -440,6 +478,57 @@ export function buildFanqieFusionBrief(
     suggestedTitle: primaryTag ? `${primaryTag}融合` : '多书融合',
     totalChapters: suggestedTotalChapters,
     wordsPerChapter: suggestedWordsPerChapter,
+  }
+}
+
+/** 一次交给模型挑选的候选上限：再多也读不完，答案反而更散。 */
+export const FANQIE_AI_PICK_CANDIDATE_LIMIT = 12
+
+export interface FanqieAiPick {
+  books: FanqieBookSummary[]
+  /** 模型给出的融合取向。 */
+  focus: string
+  /** 模型说明为什么这么挑。 */
+  summary: string
+}
+
+/** 从模型的回复里取出 JSON 对象：容忍 ```json 围栏与前后寒暄，只认最外层第一对花括号。 */
+function extractJsonObject(raw: string): string {
+  const start = raw.indexOf('{')
+  const end = raw.lastIndexOf('}')
+  if (start < 0 || end <= start) throw new Error('FANQIE_AI_PICK_INVALID')
+  return raw.slice(start, end + 1)
+}
+
+/**
+ * 解析模型自己挑的融合组合。书号必须在当前候选里，挑不出两本就报错，
+ * 不做「随便凑两本」的兜底：凑出来的组合作者没法判断。
+ */
+export function parseFanqieAiPick(raw: string, candidates: readonly FanqieBookSummary[]): FanqieAiPick {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(extractJsonObject(raw))
+  } catch (cause) {
+    if (cause instanceof Error && cause.message === 'FANQIE_AI_PICK_INVALID') throw cause
+    throw new Error('FANQIE_AI_PICK_INVALID')
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('FANQIE_AI_PICK_INVALID')
+  const record = parsed as Record<string, unknown>
+
+  const ids = Array.isArray(record.bookIds)
+    ? record.bookIds.filter((id): id is string => typeof id === 'string')
+    : []
+  const books: FanqieBookSummary[] = []
+  for (const id of ids) {
+    const found = candidates.find(candidate => candidate.bookId === id.trim())
+    if (found && !books.includes(found)) books.push(found)
+  }
+  if (books.length < 2) throw new Error('FANQIE_AI_PICK_TOO_FEW')
+
+  return {
+    books: books.slice(0, FANQIE_FUSION_MAX_BOOKS),
+    focus: typeof record.focus === 'string' ? record.focus.trim() : '',
+    summary: typeof record.summary === 'string' ? record.summary.trim() : '',
   }
 }
 

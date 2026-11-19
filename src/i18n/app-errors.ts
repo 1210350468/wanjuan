@@ -347,6 +347,8 @@ const ERROR_KEYS = {
   // 番茄书库的融合简报与选书诊断是纯函数，参数不对时抛码，由显示处翻译。
   FANQIE_SELECTION_EMPTY: 'error.fanqieSelectionEmpty',
   FANQIE_SELECTION_TOO_MANY: 'error.fanqieSelectionTooMany',
+  FANQIE_AI_PICK_INVALID: 'error.fanqieAiPickInvalid',
+  FANQIE_AI_PICK_TOO_FEW: 'error.fanqieAiPickTooFew',
 } as const
 
 type KnownErrorCode = keyof typeof ERROR_KEYS
