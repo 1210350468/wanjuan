@@ -64,11 +64,11 @@ A route you can actually start on:
 Whether you make money depends on the work itself and on platform rules. Wanjuan raises output and the odds of picking a topic that lands; it promises no income. Policies on AI-generated content differ by platform, so check the author agreement of your target platform before publishing.
 
 <p align="center">
-  <img src="docs/assets/readme/retro-en/fanqie-rank.png" alt="Fanqie library: 37 genre rankings across male-lead and female-lead fiction, with covers, word counts, and serial status" width="100%" />
+  <img src="docs/assets/readme/retro-en/fanqie-rank.png" alt="Fanqie rankings: every card carries its own overall score in the corner, with Suggest a bundle and AI picks above" width="100%" />
 </p>
 
 <p align="center">
-  <img src="docs/assets/readme/retro-en/fanqie-fusion.png" alt="After ticking two books, the selected titles are listed on the left and the fusion direction and new book name are filled in on the right" width="100%" />
+  <img src="docs/assets/readme/retro-en/fanqie-fusion.png" alt="A drafted set: three books ticked, six scores for the set (overall 64, focus 100, heat 46, retention 54, structure 27, pace 89), then the fusion direction and new book name" width="100%" />
 </p>
 
 ## The library: every book in one place
@@ -100,6 +100,18 @@ Wanjuan works in the order a novel gets written: you are the author, it is your 
 Find books on Fanqie by title, keyword, or book link, or browse rankings by genre: 19 male-lead and 18 female-lead categories, each listing that category's ranked books with covers, synopses, word counts, and serial status. It reads public book pages only: cover, title, author, tags, synopsis, word count, serial status, and every chapter title. Chapter text is never fetched.
 
 Rather not pick one by one? Choose "Suggest a bundle": the app drafts three books from the current results by genre skeleton, chapter pace, and readership, and explains the shared genre plus what each book adds. Once you tick two to five books, a diagnosis panel shows the genre, the scale to plan for (chapters x words per chapter), how much the tags overlap, and whether the pace runs faster or slower than the platform norm. It also scores the set from 0 to 100: an overall figure plus genre focus, heat, retention, structure, and pace. Every candidate card carries its own overall score in the corner, so you can compare before ticking. You can also choose "AI picks": the candidate tags, readership, scale, status, and scores go to the model, which decides which two or three books to fuse, why, and in what direction. When it cannot pick, you get an explicit error instead of a made-up set. Write the direction yourself, or choose "AI set the direction" to get two directions from the model and click one to fill it in; titles work the same way through "AI title". Pick a folder, confirm the name, then choose "Fuse and create book": the app creates the book, writes the total chapter count and words per chapter from the median of the references, and asks AI to generate the setup, architecture, and core outline. References supply genre and structure only; the fused result never reuses their characters, place names, or specific plot.
+
+The scores are not ad-hoc weights; each one has a reason:
+
+| Score | Book weight | Set weight | How it is computed | Why |
+| --- | --- | --- | --- | --- |
+| Heat | 30% | 22% | `log10(readers)` mapped from 10³ to 10⁷ onto 0–100 | Readership is long-tailed, so only a log scale matches how it feels |
+| Retention | 20% | 16% | Per-chapter readers shrunk with `(v·R + m·C)/(v+m)`, then log-mapped to 0–100 | IMDb weighted rating: 1M readers over 10 chapters should not beat 1M over 1000 |
+| Structure | 25% | 20% | Completed 100; serial by chapter count 20–90; unknown 40 | Length and completion decide how much a book can actually lend |
+| Pace | 25% | 20% | `exp(−δ²/2σ²)`, δ the log distance of words-per-chapter from 3000, σ=0.5 | Gaussian kernel: deviating from the norm decays smoothly, not as a cliff |
+| Genre focus | — | 22% | Mean pairwise Jaccard of tags; below 0.15 drops to 45, above 0.6 drops to 55 | Set coherence: too scattered reads as no theme, too identical adds nothing |
+
+Heat, retention, structure, and pace for a set are the **median** of its books, so one weak pick does not sink the set. The shrinkage prior is 300 chapters at 300 readers each: the usual "pull small samples toward the platform mean" move, not a fitted optimum, but every number can be explained to you.
 
 Keyword search locates book IDs through Bing site search. When that service is unavailable, the app falls back to ranking entries whose titles match, and you can always paste a book link.
 
@@ -175,9 +187,10 @@ Settings include presets for these providers:
 | Google Gemini | Native Gemini | Preset address `https://generativelanguage.googleapis.com` |
 | Ollama (local) | OpenAI-compatible | The model runs on your own computer |
 | NovelAI | OpenAI-compatible | Minimal compatibility, not fully verified with a real account |
+| Local harness (CLI) | CLI | Calls the `codex`, `gemini`, or `claude` you already signed in to, with no API key |
 | Custom | OpenAI-compatible | Any compatible service address |
 
-"Custom" only changes the address, model name, and credentials within the two protocols above. It is not an arbitrary HTTP interface. Anthropic, Azure, native KoboldAI, and similar interfaces need dedicated adapters, and a URL swap does not make them work.
+"Custom" only changes the address, model name, and credentials within the OpenAI-compatible or native Gemini protocols. It is not an arbitrary HTTP interface. Anthropic, Azure, native KoboldAI, and similar interfaces need dedicated adapters, and a URL swap does not make them work.
 
 Semantic search in the knowledge base needs a separate embedding model, configured under "Retrieval model" in settings.
 
@@ -193,6 +206,10 @@ Arguments: exec {{prompt}}
 ```
 
 Put `{{prompt}}` where the prompt should go in the arguments; leave it out and the prompt is written to standard input. A harness has no system role, so messages are joined in order. It reports no token usage, so generation accounting misses that part; it suits small tasks such as topic picking, titles, and directions.
+
+<p align="center">
+  <img src="docs/assets/readme/retro-en/settings-harness.png" alt="The harness settings page: provider Local harness (CLI) with the Codex preset filling in command codex and arguments exec {{prompt}}" width="100%" />
+</p>
 
 ### Run a local model with Ollama
 

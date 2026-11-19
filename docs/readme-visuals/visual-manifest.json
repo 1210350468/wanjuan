@@ -51,13 +51,15 @@
     "note": "GitHub 仓库设置里的 Social preview，仓库内不引用。"
   },
   "screenshots": {
+    "note": "2026-11-19 重拍 fanqie-rank / fanqie-fusion 与新增 settings-harness：应用以 --remote-debugging-port=9222 启动，Playwright 连 CDP 直接 Page.captureScreenshot，1440x900、1x；页面读的是线上番茄榜单，不是假数据。配单截图滚到面板区，因为对话框正文区是 max-h-[60vh] 的滚动容器。",
     "zh-CN": [
       "docs/assets/readme/retro/library.png",
       "docs/assets/readme/retro/guide.png",
       "docs/assets/readme/retro/settings.png",
       "docs/assets/readme/retro/fanqie.png",
       "docs/assets/readme/retro/fanqie-rank.png",
-      "docs/assets/readme/retro/fanqie-fusion.png"
+      "docs/assets/readme/retro/fanqie-fusion.png",
+      "docs/assets/readme/retro/settings-harness.png"
     ],
     "en-US": [
       "docs/assets/readme/retro-en/library.png",
@@ -65,7 +67,8 @@
       "docs/assets/readme/retro-en/settings.png",
       "docs/assets/readme/retro-en/fanqie.png",
       "docs/assets/readme/retro-en/fanqie-rank.png",
-      "docs/assets/readme/retro-en/fanqie-fusion.png"
+      "docs/assets/readme/retro-en/fanqie-fusion.png",
+      "docs/assets/readme/retro-en/settings-harness.png"
     ]
   },
   "legacy": {
