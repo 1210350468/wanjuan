@@ -93,8 +93,9 @@ export default function StageTopBar({ crumbs, library, focus, focusTitle, workMe
       </div>
       <RunCapsule />
       {library && (
-        <Button variant="icon" size="sm" aria-label={text('设置', 'Settings')} onClick={() => navigate({ kind: 'settings', section: 'llm' })}>
-          <Settings size={16} aria-hidden="true" />
+        <Button variant="secondary" size="sm" className="stage-topbar-settings" onClick={() => navigate({ kind: 'settings', section: 'llm' })}>
+          <Settings size={15} aria-hidden="true" />
+          {text('设置', 'Settings')}
         </Button>
       )}
       {!library && (

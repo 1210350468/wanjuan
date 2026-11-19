@@ -151,7 +151,7 @@ export default function StageSpine({ stages, chapters, location: activeLocation,
         <strong>{stages.filter(status => status.progress.state === 'done').length} / {stages.length}</strong>
       </div>
       <div className="stage-spine-foot">
-        <button type="button" className="stage-row" aria-current={settingsOpen ? 'page' : undefined} onClick={onSettings}>
+        <button type="button" className="stage-row stage-row--settings" aria-current={settingsOpen ? 'page' : undefined} onClick={onSettings}>
           <Settings className="stage-row-icon" size={16} strokeWidth={1.75} aria-hidden="true" />
           <span className="stage-row-label">{text('设置', 'Settings')}</span>
         </button>

@@ -153,6 +153,28 @@
   padding-top: 8px;
 }
 
+/* 侧栏底部的设置入口不再缩进成普通资料行：纸色小块 + 朱印图标，区别于上面的导航。 */
+.stage-spine-foot .stage-row--settings {
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--rule), 0 1px 2px var(--rule);
+}
+
+.stage-spine-foot .stage-row--settings .stage-row-icon {
+  color: var(--accent);
+}
+
+.stage-spine-foot .stage-row--settings:hover {
+  background: var(--wash);
+  box-shadow: inset 0 0 0 1px var(--accent-line), 0 1px 2px var(--rule);
+}
+
+.stage-spine-foot .stage-row--settings[aria-current='page'] {
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-line), 0 1px 2px var(--rule);
+}
+
 /* 章节列表底部的回收站入口：和章节行同一缩进，图标占章号那一列。 */
 .stage-spine-trash {
   margin: 2px 0 0 21px;
