@@ -35,7 +35,7 @@ Key facts:
 ## Downloads
 
 - [Latest release](https://github.com/1210350468/wanjuan/releases/latest): Windows and macOS installers
-- [1.4.0 release notes](https://github.com/1210350468/wanjuan/releases/tag/v1.4.0): the paper-and-ink restyle, with the Windows package published first
+- [1.4.1 release notes](https://github.com/1210350468/wanjuan/releases/tag/v1.4.1): explainable book scoring, AI pick, and local CLI harnesses; the Windows package is published first
 - [All releases](https://github.com/1210350468/wanjuan/releases): release history
 
 ## Optional
