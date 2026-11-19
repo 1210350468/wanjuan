@@ -1,6 +1,6 @@
 # 万卷 Wanjuan — 发布清单
 
-本机没有预装 `gh`，已安装到 `C:\Users\12103\.local\bin\gh.exe`。仓库 `1210350468/wanjuan` 已创建，源码已推送到 `master`。下面的步骤保留为换账号或重建仓库时的参考。
+仓库 `1210350468/wanjuan`，默认分支 `master`。`gh` 在 `C:\Users\12103\.local\bin\gh.exe`，已登录账号 1210350468。
 
 ## 一、推送前检查
 
@@ -8,25 +8,20 @@
    - `grep -rn "sk-[A-Za-z0-9]\{20,\}\|api_key\|API_KEY" . --exclude-dir=node_modules --exclude-dir=.git`
    - 检查 `src`、`electron`、`docs` 里没有 `C:\Users\`、`D:\coding` 之类本机路径。
 2. 许可文件齐全：`LICENSE`（GPL-3.0）、`NOTICE.md`（上游署名与改动说明）。
-3. README 里的下载占位地址 `<你的账号>` 已替换成真实账号名。
+3. README 里的下载地址指向本仓库 `releases/latest`，版本号与 `package.json` 一致。
 4. `pnpm typecheck && pnpm lint && pnpm test && pnpm build` 全部通过。
 5. 界面冒烟：从源码启动一次，走完新手引导、番茄书库分类切换、Skill 超市仓库搜索。
 
-## 二、建仓库并推送
-
-在 GitHub 网页新建一个空仓库，建议名字 `wanjuan`，不要勾选 README / LICENSE / .gitignore（本地已经有）。然后：
+## 二、提交与推送
 
 ```bash
 cd D:/coding/ai项目发掘/ai小说
-git remote remove origin
-git remote add origin https://github.com/<你的账号>/wanjuan.git
 git add -A
-git commit -m "Rename to Wanjuan and add Fanqie library, skill marketplace, onboarding"
-git branch -M main
-git push -u origin main
+git commit -m "<改动摘要>"
+git push origin master
 ```
 
-更新检查与「官方主页」入口已指向 `1210350468/wanjuan`（`electron/services/github-release-update-backend.ts`、`src/shared/official-homepage.ts`、`electron-builder.json5`），不再读上游 Release。换账号时这三处要一起改，测试里的断言也要同步。
+更新检查与「官方主页」入口指向 `1210350468/wanjuan`（`electron/services/github-release-update-backend.ts`、`src/shared/official-homepage.ts`、`electron-builder.json5`），不读上游 Release。换账号时这三处要一起改，测试里的断言也要同步。
 
 ## 三、构建与上传安装包
 
@@ -47,11 +42,33 @@ Windows 安装包未做代码签名，macOS 安装包只有 ad-hoc 签名；发�
 
 ## 四、发布 Release
 
-1. 在 GitHub 仓库点 Releases → Draft a new release。
-2. Tag 建议 `v2.0.0-wanjuan`，标题 `万卷 Wanjuan v2.0.0`。
-3. 说明用 `.release/notes/v2.0.0-wanjuan.md`。
-4. 上传上一步的安装包。
-5. 发布后把 README 里的 `<你的账号>` 全部替换并提交。
+Windows 的安装包、blockmap 与 `latest.yml` 必须一起上传：应用内更新读 `latest.yml` 判断版本号和摘要，缺了它更新提示不会出现。
+
+```bash
+VERSION=$(node -p "require('./package.json').version")
+gh release create "v$VERSION" \
+  "release/$VERSION/wanjuan-setup-$VERSION.exe" \
+  "release/$VERSION/wanjuan-setup-$VERSION.exe.blockmap" \
+  "release/$VERSION/latest.yml" \
+  --title "万卷 Wanjuan $VERSION" \
+  --notes-file ".release/notes/v$VERSION.md" \
+  --latest
+```
+
+发布后核对附件与标记：
+
+```bash
+gh api repos/1210350468/wanjuan/releases/latest \
+  --jq '.tag_name + " " + ([.assets[].name] | join(", "))'
+```
+
+`latest.yml` 里的 `sha512` 与 `size` 要与 exe 一致，先在本地算一遍再上传：
+
+```bash
+P="release/$VERSION/wanjuan-setup-$VERSION.exe" node -e "const{createHash}=require('crypto'),fs=require('fs');const p=process.env.P;const h=createHash('sha512');fs.createReadStream(p).on('data',d=>h.update(d)).on('end',()=>console.log(h.digest('base64'),fs.statSync(p).size))"
+```
+
+macOS 两个架构的 dmg 构建好后一同挂到同一个 Release；macOS 的应用内更新只提示新版本并打开本页，不自动替换程序。
 
 ## 五、宣传顺序
 
@@ -62,10 +79,17 @@ Windows 安装包未做代码签名，macOS 安装包只有 ad-hoc 签名；发�
 
 ## 六、回滚点
 
-发布前给当前提交打本地标签：
+发布前把当前全部历史打包成一份备份，放在仓库外面：
 
 ```bash
-git tag -a v2.0.0-wanjuan-prepush -m "Before first public push"
+git bundle create "../wanjuan-history-$(date +%F).bundle" --all
+git bundle verify "../wanjuan-history-$(date +%F).bundle"
 ```
 
-后续改名或改配置出现问题时，用文件编辑工具恢复到这个提交对应的状态；不要用 Git 重置覆盖工作区。
+需要回到备份里的某个状态时，从 bundle 克隆出一份对照工作区：
+
+```bash
+git clone "../wanjuan-history-2026-11-19.bundle" ../wanjuan-restore
+```
+
+代码要恢复时用文件编辑工具写回，不要用 Git 重置覆盖工作区。
