@@ -5,7 +5,9 @@ import { useLocaleStore } from '../../../stores/locale-store'
 import { Button } from '../../ui/Button'
 import { Menu } from '../../ui/Menu'
 
-function providerName(model: ModelProfile): string {
+/** 本机执行器没有服务商预设，直接用「本机执行器 · 命令」说明这一条。 */
+function providerName(model: ModelProfile, text: (zhCN: string, enUS: string) => string): string {
+  if (model.provider === 'harness') return text('本机执行器', 'Local harness')
   const preset = BUILTIN_PRESETS.find(candidate => candidate.provider === model.provider)
   return preset?.displayName ?? model.provider
 }
@@ -32,7 +34,9 @@ export default function ModelProfileList({ models, defaultId, label, onEdit, onS
                 <span>{name}</span>
                 {isDefault && <span className="stage-badge">{text('默认', 'Default')}</span>}
               </div>
-              <p className="stage-set-model-meta">{providerName(model)} · {model.modelName}</p>
+              <p className="stage-set-model-meta">
+                {providerName(model, text)} · {model.provider === 'harness' ? model.harness?.command ?? model.modelName : model.modelName}
+              </p>
             </div>
             <Button variant="text" size="sm" onClick={() => onEdit(model)} aria-label={text(`编辑「${name}」`, `Edit “${name}”`)}>{text('编辑', 'Edit')}</Button>
             <Menu

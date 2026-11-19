@@ -36,6 +36,20 @@ type ModelDiscoveryState =
   | { status: 'loaded', models: DiscoveredModel[] }
   | { status: 'failed', errorCode: ModelDiscoveryErrorCode }
 
+/** 本机执行器的常见来源：命令按官方 CLI 的用法预填，参数可以随时改。 */
+const HARNESS_PRESETS: ReadonlyArray<{
+  id: string
+  label: readonly [string, string]
+  command: string
+  args: string[]
+}> = [
+  { id: 'codex', label: ['Codex（ChatGPT 订阅）', 'Codex (ChatGPT subscription)'], command: 'codex', args: ['exec', '{{prompt}}'] },
+  { id: 'gemini', label: ['Gemini CLI（Google 账号）', 'Gemini CLI (Google account)'], command: 'gemini', args: ['-p', '{{prompt}}'] },
+  { id: 'claude', label: ['Claude Code（Claude 订阅）', 'Claude Code (Claude subscription)'], command: 'claude', args: ['-p', '{{prompt}}'] },
+  { id: 'agy', label: ['agy', 'agy'], command: 'agy', args: [] },
+  { id: 'custom', label: ['自定义命令', 'Custom command'], command: '', args: [] },
+]
+
 const PROVIDER_OPTIONS: ReadonlyArray<{ provider: ModelProfile['provider'], label: readonly [string, string] }> = [
   { provider: 'openai', label: ['OpenAI', 'OpenAI'] },
   { provider: 'novelai', label: ['NovelAI', 'NovelAI'] },
@@ -44,6 +58,7 @@ const PROVIDER_OPTIONS: ReadonlyArray<{ provider: ModelProfile['provider'], labe
   { provider: 'xai', label: ['xAI(Grok)', 'xAI(Grok)'] },
   { provider: 'siliconflow', label: ['SiliconFlow', 'SiliconFlow'] },
   { provider: 'ollama', label: ['Ollama（本地）', 'Ollama (local)'] },
+  { provider: 'harness', label: ['本机执行器（CLI）', 'Local harness (CLI)'] },
   { provider: 'bigmodel', label: ['BigModel（智谱）', 'BigModel (Zhipu)'] },
   { provider: 'bigmodel-anthropic', label: ['BigModel（智谱 Anthropic）', 'BigModel (Zhipu Anthropic)'] },
   { provider: 'custom', label: ['自定义', 'Custom'] },
@@ -172,6 +187,41 @@ export function ModelForm({
   const providerOptions = PROVIDER_OPTIONS.filter(({ provider }) => usage === 'rerank'
     ? provider === 'custom' || Boolean(presetMap.get(provider)?.rerankModels?.length)
     : usage === 'generation' || provider !== 'bigmodel-anthropic')
+    .filter(({ provider }) => provider !== 'harness' || usage === 'generation')
+
+  const isHarness = model.provider === 'harness'
+  const harnessCommand = model.harness?.command ?? ''
+  const harnessArgs = model.harness?.args ?? []
+  const harnessPresetId = HARNESS_PRESETS.find(preset => preset.id !== 'custom' && preset.command === harnessCommand && harnessCommand !== '')?.id ?? 'custom'
+
+  /** 执行器只有命令与参数两个字段；模型名跟着命令走，供日志与身份判定使用。 */
+  const setHarness = (next: { command?: string, args?: string[] }) => {
+    const command = next.command ?? harnessCommand
+    const args = next.args ?? harnessArgs
+    onChange({
+      ...model,
+      provider: 'harness',
+      protocol: 'cli',
+      baseUrl: '',
+      apiKey: '',
+      harness: { command, args },
+      modelName: model.modelName.trim() || command.trim(),
+    })
+  }
+
+  const applyHarnessPreset = (id: string) => {
+    const preset = HARNESS_PRESETS.find(candidate => candidate.id === id)
+    if (!preset) return
+    onChange({
+      ...model,
+      provider: 'harness',
+      protocol: 'cli',
+      baseUrl: '',
+      apiKey: '',
+      harness: { command: preset.command, args: preset.args },
+      modelName: preset.command.trim(),
+    })
+  }
 
   const setRetrievalModelName = (modelName: string) => {
     if (modelName === model.modelName) return
@@ -236,6 +286,18 @@ export function ModelForm({
   const handleProviderChange = (provider: ModelProfile['provider']) => {
     const p = presetMap.get(provider)
     invalidateDiscovery()
+    if (provider === 'harness') {
+      onChange({
+        ...model,
+        provider: 'harness',
+        protocol: 'cli',
+        baseUrl: '',
+        apiKey: '',
+        modelName: '',
+        harness: { command: '', args: [] },
+      })
+      return
+    }
     const selection = {
       provider,
       protocol: (p?.protocol ?? 'openai') as ModelProfile['protocol'],
@@ -379,11 +441,14 @@ export function ModelForm({
 
   const contextWindow = isGeneration ? resolveContextWindow(model) : null
   const keyMissing = !hasRequiredApiKey(model)
-  const missingForSave = [
-    !model.baseUrl.trim() && 'base_url',
-    keyMissing && 'API Key',
-    !model.modelName.trim() && text('模型名称', 'model name'),
-  ].filter((field): field is string => Boolean(field))
+  const missingForSave = model.provider === 'harness'
+    ? [!(model.harness?.command ?? '').trim() && text('执行器命令', 'harness command')]
+      .filter((field): field is string => Boolean(field))
+    : [
+      !model.baseUrl.trim() && 'base_url',
+      keyMissing && 'API Key',
+      !model.modelName.trim() && text('模型名称', 'model name'),
+    ].filter((field): field is string => Boolean(field))
 
   return (
     <div
@@ -415,7 +480,7 @@ export function ModelForm({
             {providerOptions.map(({ provider, label }) => <option key={provider} value={provider}>{text(...label)}</option>)}
           </NativeSelect>
         </div>
-        {usage !== 'rerank' && (
+        {usage !== 'rerank' && !isHarness && (
           <div>
             <Label>{text('调用协议', 'Protocol')}</Label>
             <NativeSelect
@@ -431,7 +496,7 @@ export function ModelForm({
       </div>
 
       {/* Base URL */}
-      <div>
+      {!isHarness && (<div>
         <Label>{text('base_url', 'base_url')}</Label>
         <Input
           value={model.baseUrl}
@@ -443,10 +508,9 @@ export function ModelForm({
             {text(`已自动填入 ${model.provider} 官方地址，如使用中转地址可手动修改`, `The official ${model.provider} URL was filled automatically. Edit it when using a gateway.`)}
           </p>
         )}
-      </div>
+      </div>)}
 
-      {/* API Key */}
-      <div>
+      {!isHarness && (<div>
         <Label>{text('API Key', 'API Key')}</Label>
         <div className="relative">
           <Input
@@ -464,9 +528,54 @@ export function ModelForm({
             {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
         </div>
-      </div>
+      </div>)}
 
-      <ModelNameField
+      {isHarness && (
+        <div className="space-y-3 rounded-lg p-3" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-hover)' }}>
+          <div>
+            <Label htmlFor="model-harness-preset">{text('执行器', 'Harness')}</Label>
+            <NativeSelect
+              id="model-harness-preset"
+              value={harnessPresetId}
+              onChange={(e) => applyHarnessPreset(e.target.value)}
+            >
+              {HARNESS_PRESETS.map(preset => <option key={preset.id} value={preset.id}>{text(...preset.label)}</option>)}
+            </NativeSelect>
+          </div>
+          <div>
+            <Label htmlFor="model-harness-command">{text('命令', 'Command')}</Label>
+            <Input
+              id="model-harness-command"
+              value={harnessCommand}
+              placeholder="codex"
+              onChange={(e) => setHarness({ command: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label htmlFor="model-harness-args">{text('参数', 'Arguments')}</Label>
+            <Input
+              id="model-harness-args"
+              value={harnessArgs.join(' ')}
+              placeholder="exec {{prompt}}"
+              onChange={(e) => setHarness({ args: e.target.value.split(/\s+/).filter(Boolean) })}
+            />
+            <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+              {text(
+                '参数里写 {{prompt}} 表示把提示词放在这个位置；不写则提示词从标准输入送进去。正文很长时只能走标准输入，写进命令行的参数会超过系统长度上限。',
+                'Put {{prompt}} where the prompt should go in the arguments; leave it out to send the prompt through standard input. Long prompts can only use standard input, because command-line arguments hit the system length limit.',
+              )}
+            </p>
+          </div>
+          <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+            {text(
+              '用本机已经登录的 CLI 执行，不需要 API Key。适合选题、起名、定方向这类小任务；执行器不返回 token 用量，正文生成的用量统计会缺这一段。',
+              'Runs your already signed-in local CLI, so no API key is needed. Best for small tasks such as topic picking, titles, and directions; the harness reports no token usage, so generation accounting misses this part.',
+            )}
+          </p>
+        </div>
+      )}
+
+      {!isHarness && (<ModelNameField
         value={model.modelName}
         placeholder={text('从列表选择，或直接输入模型名称', 'Pick from the list or type a model name')}
         candidates={shownModels(discovery)}
@@ -476,7 +585,7 @@ export function ModelForm({
         onSelect={handleModelSelect}
         onOpen={handleModelListOpen}
         onRefresh={() => { if (canDiscover(model)) void handleDiscoverModels() }}
-      />
+      />)}
 
       {usage === 'embedding' && model.provider === 'siliconflow' && model.modelName === 'BAAI/bge-m3' && (
         <div className="rounded-lg p-3 space-y-2" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-hover)' }}>
@@ -497,7 +606,7 @@ export function ModelForm({
         </div>
       )}
 
-      {usage !== 'rerank' && (
+      {usage !== 'rerank' && !isHarness && (
         <div>
           <div className="flex items-baseline justify-between gap-3">
             <Label>{text('上下文窗口', 'Context Window')}</Label>
@@ -521,9 +630,9 @@ export function ModelForm({
       {isGeneration && (
         <ProjectCreativeStrategySettings />
       )}
-      {isGeneration && <ModelCapabilitySources model={model} />}
+      {isGeneration && !isHarness && <ModelCapabilitySources model={model} />}
 
-      {isGeneration && (
+      {isGeneration && !isHarness && (
         <div className="rounded-lg border border-[var(--color-border)]" data-model-advanced-settings>
           <button
             type="button"

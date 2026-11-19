@@ -99,7 +99,7 @@ Wanjuan works in the order a novel gets written: you are the author, it is your 
 
 Find books on Fanqie by title, keyword, or book link, or browse rankings by genre: 19 male-lead and 18 female-lead categories, each listing that category's ranked books with covers, synopses, word counts, and serial status. It reads public book pages only: cover, title, author, tags, synopsis, word count, serial status, and every chapter title. Chapter text is never fetched.
 
-Rather not pick one by one? Choose "Suggest a bundle": the app drafts three books from the current results by genre skeleton, chapter pace, and readership, and explains the shared genre plus what each book adds. Once you tick two to five books, a diagnosis panel shows the genre, the scale to plan for (chapters x words per chapter), how much the tags overlap, and whether the pace runs faster or slower than the platform norm. It also scores the set from 0 to 100: an overall figure plus genre focus, heat, retention, structure, and pace. Every candidate card carries its own overall score in the corner, so you can compare before ticking. Write the direction yourself, or choose "AI set the direction" to get two directions from the model and click one to fill it in; titles work the same way through "AI title". Pick a folder, confirm the name, then choose "Fuse and create book": the app creates the book, writes the total chapter count and words per chapter from the median of the references, and asks AI to generate the setup, architecture, and core outline. References supply genre and structure only; the fused result never reuses their characters, place names, or specific plot.
+Rather not pick one by one? Choose "Suggest a bundle": the app drafts three books from the current results by genre skeleton, chapter pace, and readership, and explains the shared genre plus what each book adds. Once you tick two to five books, a diagnosis panel shows the genre, the scale to plan for (chapters x words per chapter), how much the tags overlap, and whether the pace runs faster or slower than the platform norm. It also scores the set from 0 to 100: an overall figure plus genre focus, heat, retention, structure, and pace. Every candidate card carries its own overall score in the corner, so you can compare before ticking. You can also choose "AI picks": the candidate tags, readership, scale, status, and scores go to the model, which decides which two or three books to fuse, why, and in what direction. When it cannot pick, you get an explicit error instead of a made-up set. Write the direction yourself, or choose "AI set the direction" to get two directions from the model and click one to fill it in; titles work the same way through "AI title". Pick a folder, confirm the name, then choose "Fuse and create book": the app creates the book, writes the total chapter count and words per chapter from the median of the references, and asks AI to generate the setup, architecture, and core outline. References supply genre and structure only; the fused result never reuses their characters, place names, or specific plot.
 
 Keyword search locates book IDs through Bing site search. When that service is unavailable, the app falls back to ranking entries whose titles match, and you can always paste a book link.
 
@@ -157,10 +157,11 @@ Appearance offers a light "aged paper" theme and a dark "reading at night" theme
 
 ## Supported models and services
 
-Wanjuan does not provide models or host quotas. In settings, enter your own service address, model name, and API key. Two request protocols are supported:
+Wanjuan does not provide models or host quotas. In settings, enter your own service address, model name, and API key. Three request paths are supported:
 
 - **OpenAI-compatible**: any service compatible with the Chat Completions API.
 - **Native Gemini**: Google Gemini.
+- **Local harness (CLI)**: calls a command-line agent you already signed in to, such as `codex`, `gemini`, or `claude`.
 
 Settings include presets for these providers:
 
@@ -179,6 +180,19 @@ Settings include presets for these providers:
 "Custom" only changes the address, model name, and credentials within the two protocols above. It is not an arbitrary HTTP interface. Anthropic, Azure, native KoboldAI, and similar interfaces need dedicated adapters, and a URL swap does not make them work.
 
 Semantic search in the knowledge base needs a separate embedding model, configured under "Retrieval model" in settings.
+
+### Use the CLI that comes with your subscription
+
+Besides an API key, Wanjuan can call an agent CLI you are already signed in to: with a ChatGPT subscription use `codex`, with a Google account use `gemini`, with Claude use `claude`. Those tools spend your own subscription quota, so no separate key is needed.
+
+```text
+Settings -> AI models -> New -> Provider: Local harness (CLI)
+Harness:  Codex / Gemini CLI / Claude Code / agy / Custom
+Command:  codex
+Arguments: exec {{prompt}}
+```
+
+Put `{{prompt}}` where the prompt should go in the arguments; leave it out and the prompt is written to standard input. A harness has no system role, so messages are joined in order. It reports no token usage, so generation accounting misses that part; it suits small tasks such as topic picking, titles, and directions.
 
 ### Run a local model with Ollama
 

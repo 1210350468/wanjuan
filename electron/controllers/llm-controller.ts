@@ -348,6 +348,14 @@ export function registerLLMController() {
 
       let result = { success: true, error: undefined as undefined | string }
       if (model.purposes?.includes('embedding')) {
+        if (model.protocol === 'cli') {
+          return {
+            success: false,
+            error: mainText(app.getLocale(),
+              '本机执行器不能做向量计算，请改用 OpenAI 兼容或 Gemini 协议的向量模型。',
+              'A local harness cannot compute embeddings. Use an OpenAI-compatible or Gemini embedding model.'),
+          }
+        }
         if (model.protocol === 'anthropic') {
           return {
             success: false,

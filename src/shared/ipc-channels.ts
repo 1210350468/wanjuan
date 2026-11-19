@@ -855,11 +855,19 @@ export interface TokenUsage {
   totalTokens: number | null
 }
 
+/** 本机已登录的 agent 执行器（Codex、Gemini CLI、Claude Code 等）：用订阅本身执行，不走 HTTP 接口。 */
+export interface HarnessCommand {
+  /** 可执行文件或命令名，例如 `codex`。 */
+  command: string
+  /** 参数；其中出现 `{{prompt}}` 时提示词替换到该处，否则提示词从 stdin 送进去。 */
+  args: string[]
+}
+
 export interface ModelProfile {
   id: string
   name: string
-  provider: 'openai' | 'gemini' | 'deepseek' | 'ollama' | 'bigmodel' | 'bigmodel-anthropic' | 'novelai' | 'xai' | 'siliconflow' | 'custom'
-  protocol: 'openai' | 'gemini' | 'anthropic'
+  provider: 'openai' | 'gemini' | 'deepseek' | 'ollama' | 'bigmodel' | 'bigmodel-anthropic' | 'novelai' | 'xai' | 'siliconflow' | 'harness' | 'custom'
+  protocol: 'openai' | 'gemini' | 'anthropic' | 'cli'
   modelName: string
   apiKey: string
   baseUrl: string
@@ -879,6 +887,8 @@ export interface ModelProfile {
   reasoningMapping?: VerifiedReasoningMapping
   /** 仅用于 Embedding 模型；旧配置省略时沿用原有默认行为。 */
   embeddingOptions?: EmbeddingOptions
+  /** 仅 provider 为 `harness` 时使用：要执行的本地命令与参数。 */
+  harness?: HarnessCommand
 }
 
 export interface ProjectClearOptions {
