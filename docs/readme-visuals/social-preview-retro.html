@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<style>
+  @font-face { font-family: 'WenKai'; src: url('../../public/fonts/LXGWWenKai-Medium.ttf') format('truetype'); }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 640px; overflow: hidden; }
+  body {
+    font-family: 'WenKai', 'KaiTi', 'STKaiti', serif;
+    background: #FAF3E3; color: #2E2418;
+    display: grid; place-items: center; position: relative;
+  }
+  body::before {
+    content: ''; position: absolute; inset: 0;
+    background-image: repeating-linear-gradient(0deg, rgba(46,36,24,.035) 0 1px, transparent 1px 3px);
+  }
+  .frame { position: absolute; inset: 30px; border: 2px solid rgba(46,36,24,.55); border-radius: 4px; }
+  .frame::after { content: ''; position: absolute; inset: 8px; border: 1px solid rgba(162,53,42,.5); border-radius: 2px; }
+  .content { position: relative; text-align: center; display: flex; flex-direction: column; align-items: center; }
+  .seal {
+    width: 118px; height: 118px; background: #A2352A; border-radius: 12px;
+    color: #FAF3E3; display: grid; place-items: center;
+    font-size: 40px; line-height: 1.05; letter-spacing: .08em; writing-mode: vertical-rl; padding: 12px 0;
+    box-shadow: inset 0 0 0 4px #A2352A, inset 0 0 0 6px rgba(250,243,227,.55);
+  }
+  h1 { font-size: 76px; font-weight: 500; letter-spacing: .14em; margin-top: 26px; }
+  .latin { font-family: Georgia, 'Times New Roman', serif; font-size: 18px; letter-spacing: .55em; color: #5A4C38; margin-top: 12px; }
+  .lede { font-size: 26px; color: #2E2418; margin-top: 26px; letter-spacing: .06em; }
+  .lede b { color: #A2352A; font-weight: 500; }
+  .flow { margin-top: 30px; display: flex; align-items: center; gap: 18px; font-size: 17px; color: #5A4C38; letter-spacing: .18em; }
+  .flow i { display: block; width: 26px; height: 1px; background: rgba(46,36,24,.4); }
+  .foot { position: absolute; bottom: 58px; left: 0; right: 0; text-align: center; font-size: 15px; letter-spacing: .3em; color: #6A5B48; }
+</style>
+</head>
+<body>
+  <div class="frame"></div>
+  <div class="content">
+    <div class="seal">万卷</div>
+    <h1>万卷 Wanjuan</h1>
+    <div class="latin">W A N J U A N</div>
+    <p class="lede">本地优先的 <b>AI 网文写作台</b>，从选题写到定稿</p>
+    <div class="flow">
+      <span>番茄选题</span><i></i><span>设定</span><i></i><span>架构</span><i></i><span>蓝图</span><i></i><span>正文</span><i></i><span>定稿</span>
+    </div>
+  </div>
+  <div class="foot">github.com/1210350468/wanjuan</div>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<style>
+  @font-face { font-family: 'WenKai'; src: url('../../public/fonts/LXGWWenKai-Medium.ttf') format('truetype'); }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 460px; overflow: hidden; }
+  body {
+    font-family: 'WenKai', 'KaiTi', 'STKaiti', serif;
+    background: #FAF3E3;
+    color: #2E2418;
+    display: flex; align-items: stretch;
+    position: relative;
+  }
+  /* 纸纹 */
+  body::before {
+    content: ''; position: absolute; inset: 0;
+    background-image: repeating-linear-gradient(0deg, rgba(46,36,24,.035) 0 1px, transparent 1px 3px);
+    pointer-events: none;
+  }
+  .left { width: 640px; padding: 42px 0 30px 62px; display: flex; flex-direction: column; position: relative; }
+  .eyebrow {
+    font-size: 14px; letter-spacing: .34em; color: #6A5B48;
+    display: flex; align-items: center; gap: 13px; margin-bottom: 22px;
+  }
+  .eyebrow i { display: block; width: 44px; height: 5px; background: #A2352A; border-radius: 1px; }
+  .title-row { display: flex; align-items: flex-start; gap: 24px; }
+  h1 { font-size: 82px; line-height: 1; letter-spacing: .06em; font-weight: 500; }
+  .seal {
+    width: 66px; height: 66px; margin-top: 6px;
+    background: #A2352A; border-radius: 8px;
+    color: #FAF3E3;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 24px; line-height: 1.02;
+    box-shadow: inset 0 0 0 3px #A2352A, inset 0 0 0 4.5px rgba(250,243,227,.55);
+  }
+  .latin { font-family: Georgia, 'Times New Roman', serif; font-size: 18px; letter-spacing: .42em; color: #5A4C38; margin: 14px 0 0 4px; }
+  .lede { font-size: 22px; line-height: 1.55; color: #2E2418; margin-top: 20px; }
+  .lede b { color: #A2352A; font-weight: 500; }
+  .points { margin-top: auto; display: flex; gap: 26px; padding-top: 20px; border-top: 1px solid rgba(46,36,24,.22); }
+  .point b { display: block; font-size: 17px; color: #2E2418; margin-bottom: 5px; font-weight: 500; }
+  .point span { font-size: 13px; color: #6A5B48; line-height: 1.5; display: block; }
+  .right { flex: 1; position: relative; overflow: hidden; }
+  .right::before {
+    content: ''; position: absolute; right: 68px; top: 0; bottom: 0; width: 1px; background: rgba(162,53,42,.45);
+  }
+  /* 截图取整窗，四周留白，不再切掉底部 */
+  .shot {
+    position: absolute; left: 36px; top: 36px; width: 590px;
+    border: 1px solid rgba(46,36,24,.35); border-radius: 4px;
+    box-shadow: 0 20px 44px rgba(46,36,24,.22), 0 2px 0 rgba(46,36,24,.15);
+    transform: rotate(-1.1deg);
+    overflow: hidden; background: #FAF3E3;
+  }
+  .shot img { display: block; width: 100%; }
+  .stamp {
+    position: absolute; right: 18px; bottom: 34px;
+    writing-mode: vertical-rl; font-size: 13px; letter-spacing: .3em; color: #6A5B48;
+  }
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="eyebrow"><i></i>本地优先 · 开源免费 · 自带模型</div>
+    <div class="title-row">
+      <h1>万卷</h1>
+      <div class="seal"><span>万</span><span>卷</span></div>
+    </div>
+    <div class="latin">W A N J U A N</div>
+    <p class="lede">把一本网文从<b>设定</b>一路写到<b>定稿</b>。<br />选题、拆解、蓝图、正文、审稿，都在一部作品里。</p>
+    <div class="points">
+      <div class="point"><b>番茄书库选题</b><span>按榜单挑书，多本融合成新设定</span></div>
+      <div class="point"><b>四步写成稿</b><span>设定 → 架构 → 蓝图 → 正文</span></div>
+      <div class="point"><b>作品只存本地</b><span>接自己的 API Key 或 Ollama</span></div>
+    </div>
+  </div>
+  <div class="right">
+    <div class="shot"><img src="../assets/readme/retro/library.png" alt="" /></div>
+    <div class="stamp">一 卷 一 卷 写 下 去</div>
+  </div>
+</body>
+</html>

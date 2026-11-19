@@ -1,0 +1,386 @@
+/* ================= 外框与流程脊 ================= */
+.stage-frame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.stage-spine {
+  width: 276px;
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px 14px;
+}
+
+.stage-spine-label {
+  padding: 4px 10px 8px;
+  font-size: 11px;
+  letter-spacing: .16em;
+  color: var(--ink-3);
+}
+
+.stage-spine-label--resources {
+  margin-top: 18px;
+  padding-bottom: 6px;
+}
+
+.stage-stages,
+.stage-resources,
+.stage-chapters {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stage-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.stage-row:hover {
+  background: var(--sunken);
+}
+
+.stage-row[aria-current='page'] {
+  background: var(--paper);
+  box-shadow: 0 1px 2px var(--rule), 0 0 0 1px var(--rule);
+}
+
+.stage-row[aria-current='page']:focus-visible {
+  box-shadow: var(--focus-ring), 0 1px 2px var(--rule);
+}
+
+.stage-row-name {
+  font: 500 14.5px/1.55 var(--font-display);
+}
+
+.stage-row-meta {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.stage-row[aria-current='page'] .stage-row-name {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.stage-row[aria-current='page'] .stage-row-meta {
+  color: var(--ink-2);
+}
+
+/* 未开始的阶段整行退后；名称是正文类文字，取 ink-2 保证 4.5:1（画板的 ink-3 在外框上只有 3.16:1） */
+.stage-row[data-state='todo'] {
+  color: var(--ink-2);
+}
+
+/* 说明放到名称下一行：未开始时说明较长，设定进行中时写「还差 N 项」，与设定画板一致 */
+.stage-row:is([data-state='todo'], [data-stage='setup'][data-state='active']) .stage-row-meta {
+  grid-column: 2 / 4;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.stage-mark {
+  justify-self: center;
+}
+
+.stage-mark--done {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ok);
+  color: var(--paper);
+}
+
+.stage-mark--todo {
+  color: var(--rule-strong);
+}
+
+.stage-ring {
+  flex: none;
+  fill: none;
+}
+
+.stage-ring-track {
+  stroke: var(--accent-track);
+}
+
+.stage-ring-fill {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transition: stroke-dasharray var(--dur) var(--ease);
+}
+
+.stage-row-icon {
+  justify-self: center;
+}
+
+.stage-resources .stage-row,
+.stage-spine-foot .stage-row {
+  color: color-mix(in srgb, var(--ink) 62%, var(--ink-2));
+}
+
+.stage-spine-foot .stage-row {
+  color: var(--ink-2);
+}
+
+.stage-resources .stage-row[aria-current='page'] {
+  color: var(--accent);
+}
+
+.stage-spine-foot {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+/* 章节列表底部的回收站入口：和章节行同一缩进，图标占章号那一列。 */
+.stage-spine-trash {
+  margin: 2px 0 0 21px;
+  padding-left: 12px;
+  border-left: 1px solid var(--track);
+}
+
+.stage-spine-trash .stage-chapter {
+  color: var(--ink-3);
+}
+
+.stage-spine-trash svg {
+  justify-self: center;
+}
+
+.stage-chapters {
+  flex: 0 1 auto;
+  min-height: 0;
+  margin: 6px 0 0 21px;
+  padding-left: 12px;
+  border-left: 1px solid var(--track);
+  gap: 1px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.stage-chapter {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: color-mix(in srgb, var(--ink) 62%, var(--ink-2));
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stage-chapter:hover {
+  background: var(--sunken);
+}
+
+.stage-chapter[data-phase='todo'] {
+  color: var(--ink-3);
+}
+
+.stage-chapter[aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.stage-chapter-no {
+  font: italic 14px/1 var(--font-num);
+  color: var(--ink-3);
+}
+
+.stage-chapter[aria-current='page'] .stage-chapter-no {
+  color: var(--accent);
+}
+
+.stage-chapter-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stage-chapter-status {
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.stage-chapter-status[data-tone='accent'],
+.stage-chapter[aria-current='page'] .stage-chapter-status {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.stage-chapter-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+/* ================= 万卷侧栏：品牌头 + 阶段卡片 ================= */
+.stage-spine {
+  width: 304px;
+  padding: 18px 16px 14px;
+  gap: 3px;
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+  border-right: 1px solid var(--rule);
+}
+
+.stage-spine-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 2px 6px 15px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.stage-spine-brand img {
+  flex: none;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px var(--rule);
+}
+
+.stage-spine-brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stage-spine-brand-text strong {
+  font: 600 15px/1.2 var(--font-display);
+  letter-spacing: .06em;
+  color: var(--ink);
+}
+
+.stage-spine-brand-text small {
+  font: 400 11px/1.3 var(--font-ui);
+  color: var(--ink-3);
+}
+
+.stage-spine .stage-stages .stage-row {
+  min-height: 54px;
+  padding: 9px 12px;
+  column-gap: 12px;
+  border-radius: 8px;
+}
+
+.stage-spine .stage-stages .stage-row[aria-current='page'] {
+  background: var(--paper);
+  box-shadow: inset 3px 0 0 var(--accent), 0 1px 3px var(--rule);
+}
+
+.stage-spine .stage-stages .stage-row[aria-current='page']:focus-visible {
+  box-shadow: var(--focus-ring), 0 1px 3px var(--rule);
+}
+
+.stage-spine .stage-stages .stage-row-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.stage-spine-summary {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-top: 1px solid var(--rule);
+  font: 400 11px/1.4 var(--font-ui);
+  color: var(--ink-3);
+}
+
+.stage-spine-summary strong {
+  font: 600 12px/1.4 var(--font-ui);
+  color: var(--accent);
+}
+
+/* ================= 复古：印章字标与界栏 =================
+   阶段与资料页用单字小印替代线性图标：描边印是没做的，实印是完成的，
+   进行中仍走进度环。流程脊右缘立一道朱砂界栏。 */
+.stage-mark--done {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 500 12px/1 var(--font-display);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-ink) 40%, transparent);
+}
+
+.stage-mark--todo {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  background: transparent;
+  font: 500 12px/1 var(--font-display);
+}
+
+.stage-char-mark {
+  justify-self: center;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-control);
+  font: 500 12px/1 var(--font-display);
+  color: var(--ink-2);
+  background: var(--paper);
+}
+
+.stage-row[aria-current='page'] .stage-char-mark {
+  border-color: var(--accent-line);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.stage-spine {
+  position: relative;
+}
+
+.stage-spine::after {
+  content: "";
+  position: absolute;
+  top: 20px;
+  bottom: 20px;
+  right: -1px;
+  width: 1px;
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  pointer-events: none;
+}
