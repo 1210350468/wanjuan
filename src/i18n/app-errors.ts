@@ -344,6 +344,9 @@ const ERROR_KEYS = {
   IMPORT_INSPECTION_LIMIT: 'error.importInspectionLimit',
   FINALIZED_IMPORT_PREVIEW_STALE: 'error.finalizedImportPreviewStale',
   FINALIZED_IMPORT_CHAPTER_ALREADY_FINALIZED: 'error.finalizedImportChapterAlreadyFinalized',
+  // 番茄书库的融合简报与选书诊断是纯函数，参数不对时抛码，由显示处翻译。
+  FANQIE_SELECTION_EMPTY: 'error.fanqieSelectionEmpty',
+  FANQIE_SELECTION_TOO_MANY: 'error.fanqieSelectionTooMany',
 } as const
 
 type KnownErrorCode = keyof typeof ERROR_KEYS

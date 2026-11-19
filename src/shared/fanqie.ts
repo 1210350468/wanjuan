@@ -76,7 +76,7 @@ export interface FanqieFusionBrief {
 }
 
 function median(values: number[]): number {
-  if (values.length === 0) throw new Error('融合简报需要至少一部参考作品')
+  if (values.length === 0) throw new Error('FANQIE_SELECTION_EMPTY')
   const sorted = [...values].sort((left, right) => left - right)
   const middle = Math.floor(sorted.length / 2)
   return sorted.length % 2 === 1 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2)
@@ -91,6 +91,172 @@ function sharedTags(books: readonly FanqieBookSummary[]): string[] {
   if (books.length === 0) return []
   const [first, ...rest] = books
   return first.tags.filter(tag => rest.every(book => book.tags.includes(tag)))
+}
+
+/** 频次最高的标签，用来在没有共同标签时给出一个题材判断。 */
+function mostFrequentTag(books: readonly FanqieBookSummary[]): string {
+  const counts = new Map<string, { tag: string; count: number }>()
+  for (const book of books) {
+    for (const tag of book.tags) {
+      const entry = counts.get(tag)
+      counts.set(tag, { tag, count: (entry?.count ?? 0) + 1 })
+    }
+  }
+  let best = ''
+  let bestCount = 0
+  for (const entry of counts.values()) {
+    if (entry.count > bestCount) {
+      best = entry.tag
+      bestCount = entry.count
+    }
+  }
+  return best
+}
+
+/** 参考作品的中位规模，限制在能写完的长篇范围内。融合简报与选书诊断共用这一份判断。 */
+function planScale(books: readonly FanqieBookSummary[]): { chapters: number; wordsPerChapter: number } {
+  const chapters = clamp(median(books.map(book => book.chapterCount).filter(count => count > 0)), 30, 300)
+  const perChapterSamples = books
+    .filter(book => book.chapterCount > 0 && book.wordNumber > 0)
+    .map(book => book.wordNumber / book.chapterCount)
+  const wordsPerChapter = perChapterSamples.length > 0
+    ? clamp(Math.round(median(perChapterSamples) / 100) * 100, 1500, 6000)
+    : 3000
+  return { chapters, wordsPerChapter }
+}
+
+/** 每章字数相对平台常见的 2000 到 4000 字区间的位置。 */
+export type FanqieChapterDensity = 'thin' | 'normal' | 'thick'
+/** 几本书叠在一起之后的题材重合程度：分散、正常、几乎同类。 */
+export type FanqieBlendRisk = 'scattered' | 'balanced' | 'identical'
+
+export interface FanqieSelectionInsight {
+  bookCount: number
+  /** 题材判断：优先用共同标签，没有共同标签时取出现次数最多的标签。 */
+  primaryTag: string
+  sharedTags: string[]
+  /** 共同标签占全部标签的比例，0 到 1。 */
+  overlap: number
+  totalChapters: number
+  wordsPerChapter: number
+  medianReads: number
+  completedCount: number
+  density: FanqieChapterDensity
+  blend: FanqieBlendRisk
+}
+
+/**
+ * 选书诊断：只根据书籍页的公开字段算，不调模型。
+ * 给作者回答三个问题：这算哪个题材、要写多大的规模、这几本叠在一起有没有风险。
+ */
+export function buildFanqieSelectionInsight(books: readonly FanqieBookSummary[]): FanqieSelectionInsight {
+  if (books.length === 0) throw new Error('FANQIE_SELECTION_EMPTY')
+  if (books.length > FANQIE_FUSION_MAX_BOOKS) throw new Error('FANQIE_SELECTION_TOO_MANY')
+
+  const shared = sharedTags(books)
+  const union = new Set(books.flatMap(book => book.tags))
+  const overlap = union.size === 0 ? 0 : shared.length / union.size
+  const { chapters, wordsPerChapter } = planScale(books)
+  const density: FanqieChapterDensity = wordsPerChapter < 2200 ? 'thin' : wordsPerChapter > 3800 ? 'thick' : 'normal'
+  const blend: FanqieBlendRisk = books.length < 2
+    ? 'balanced'
+    : overlap < 0.2 ? 'scattered' : overlap >= 0.8 ? 'identical' : 'balanced'
+
+  return {
+    bookCount: books.length,
+    primaryTag: shared[0] ?? mostFrequentTag(books),
+    sharedTags: shared,
+    overlap,
+    totalChapters: chapters,
+    wordsPerChapter,
+    medianReads: median(books.map(book => book.readCount)),
+    completedCount: books.filter(book => book.status === 'completed').length,
+    density,
+    blend,
+  }
+}
+
+export interface FanqieBundleSuggestion {
+  books: FanqieBookSummary[]
+  /** 几本都有的标签：融合后的题材骨架。 */
+  sharedTags: string[]
+  /** 被选中的书各自带进来、别的书没有的标签，说明这单不是同质堆叠。 */
+  addedTags: string[]
+  /** 候选里同题材但没进这一单的本数，方便再换一单。 */
+  alternatives: number
+}
+
+/** 一本参考作品自身值不值得进融合：在读数、章节长度是否落在主流区间、结构是否完整。 */
+function bookValue(book: FanqieBookSummary): number {
+  const popularity = clamp(Math.log10(book.readCount + 1) / 7, 0, 1)
+  const perChapter = book.chapterCount > 0 ? book.wordNumber / book.chapterCount : 0
+  const fit = perChapter >= 2000 && perChapter <= 4000 ? 1 : perChapter >= 1500 && perChapter <= 4500 ? 0.6 : 0.3
+  const status = book.status === 'completed' ? 1 : book.status === 'ongoing' ? 0.6 : 0.2
+  return 0.5 * popularity + 0.3 * fit + 0.2 * status
+}
+
+/**
+ * 一键配单：从当前候选里挑出一组可以直接融合的参考作品。
+ * 先找题材最靠中间的那本当骨架，再逐本补进「和新书有共同标签、又带着新卖点」的作品；
+ * 只看书籍页字段，不调模型，同样的候选每次给出同样的结果。
+ */
+export function suggestFanqieBundle(
+  candidates: readonly FanqieBookSummary[],
+  maxBooks = 3,
+): FanqieBundleSuggestion | null {
+  const unique: FanqieBookSummary[] = []
+  const seen = new Set<string>()
+  for (const candidate of candidates) {
+    if (seen.has(candidate.bookId)) continue
+    seen.add(candidate.bookId)
+    unique.push(candidate)
+  }
+  if (unique.length < 2) return null
+
+  const limit = clamp(Math.round(maxBooks), 2, FANQIE_FUSION_MAX_BOOKS)
+
+  // 骨架优先：和越多候选共题材的书，越适合当这一单的主参考，避免让一本爆款跑偏整单。
+  const centrality = (book: FanqieBookSummary): number => {
+    const others = unique.filter(other => other !== book)
+    const linked = others.filter(other => other.tags.some(tag => book.tags.includes(tag))).length
+    return others.length === 0 ? 0 : linked / others.length
+  }
+  const ranked = [...unique].sort((left, right) => {
+    const leftScore = 0.45 * bookValue(left) + 0.55 * centrality(left)
+    const rightScore = 0.45 * bookValue(right) + 0.55 * centrality(right)
+    return rightScore - leftScore || right.readCount - left.readCount || left.bookId.localeCompare(right.bookId)
+  })
+
+  const picked: FanqieBookSummary[] = [ranked[0]]
+  const union = new Set(ranked[0].tags)
+  while (picked.length < limit) {
+    let best: FanqieBookSummary | null = null
+    let bestScore = -1
+    for (const candidate of ranked) {
+      if (picked.includes(candidate)) continue
+      // 1 表示这根标签在已选的每一本里都有，整合度最高；0.5 表示只和其中一本沾边；0 是完全无关。
+      const anchor = candidate.tags.some(tag => picked.every(book => book.tags.includes(tag)))
+        ? 1
+        : candidate.tags.some(tag => picked.some(book => book.tags.includes(tag))) ? 0.5 : 0
+      const fresh = candidate.tags.filter(tag => !union.has(tag))
+      const score = 0.4 * bookValue(candidate) + 0.4 * anchor + 0.2 * Math.min(1, fresh.length / 2)
+      if (score > bestScore) {
+        bestScore = score
+        best = candidate
+      }
+    }
+    if (!best) break
+    picked.push(best)
+    for (const tag of best.tags) union.add(tag)
+  }
+
+  const shared = sharedTags(picked)
+  return {
+    books: picked,
+    sharedTags: shared,
+    addedTags: [...union].filter(tag => !shared.includes(tag)),
+    alternatives: unique.filter(book => !picked.includes(book) && book.tags.some(tag => union.has(tag))).length,
+  }
 }
 
 /** 差异标签：各书独有的标签，用来提示哪些卖点不能混成一锅。 */
@@ -133,18 +299,12 @@ export function buildFanqieFusionBrief(
   books: readonly FanqieBookSummary[],
   focus = '',
 ): FanqieFusionBrief {
-  if (books.length === 0) throw new Error('融合简报需要至少一部参考作品')
-  if (books.length > FANQIE_FUSION_MAX_BOOKS) throw new Error(`一次最多融合 ${FANQIE_FUSION_MAX_BOOKS} 部参考作品`)
+  if (books.length === 0) throw new Error('FANQIE_SELECTION_EMPTY')
+  if (books.length > FANQIE_FUSION_MAX_BOOKS) throw new Error('FANQIE_SELECTION_TOO_MANY')
 
   const shared = sharedTags(books)
   const distinctive = distinctiveTags(books)
-  const suggestedTotalChapters = clamp(median(books.map(book => book.chapterCount).filter(count => count > 0)), 30, 300)
-  const perChapterSamples = books
-    .filter(book => book.chapterCount > 0 && book.wordNumber > 0)
-    .map(book => book.wordNumber / book.chapterCount)
-  const suggestedWordsPerChapter = perChapterSamples.length > 0
-    ? clamp(Math.round(median(perChapterSamples) / 100) * 100, 1500, 6000)
-    : 3000
+  const { chapters: suggestedTotalChapters, wordsPerChapter: suggestedWordsPerChapter } = planScale(books)
 
   const sections: string[] = []
   sections.push(`【多书融合选题】参考了 ${books.length} 部番茄小说作品，请把它们共同有效的部分融合成一部原创长篇。`)

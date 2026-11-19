@@ -57,7 +57,7 @@ There are only so many ways to earn from web fiction; what separates authors is 
 A route you can actually start on:
 
 1. Open "Fanqie library → Genre rankings", look at two or three genres, and pick one with plenty of charting books that you can also write.
-2. Tick two or three books of the same kind, describe the direction you want, and generate a new book setup. References supply genre and structure only; characters, place names, and plot are all new.
+2. Choose "Suggest a bundle" to let the app draft three books of one genre, read the diagnosis (genre, scale, pace), then choose "AI set the direction" and generate the new book setup. References supply genre and structure only; characters, place names, and plot are all new.
 3. Write the first ten chapters as a test: generate blueprints ten chapters at a time, draft with batch write, then review and revise chapter by chapter.
 4. Submit those ten chapters to a platform, or start serializing directly, and let the retention numbers decide whether to speed up. If the numbers are bad, change genre and start over; the sunk cost is ten days.
 
@@ -99,7 +99,7 @@ Wanjuan works in the order a novel gets written: you are the author, it is your 
 
 Find books on Fanqie by title, keyword, or book link, or browse rankings by genre: 19 male-lead and 18 female-lead categories, each listing that category's ranked books with covers, synopses, word counts, and serial status. It reads public book pages only: cover, title, author, tags, synopsis, word count, serial status, and every chapter title. Chapter text is never fetched.
 
-Tick two to five books, describe the direction you want, pick a folder, and enter a name for the new book (or choose "AI title" and let the model propose a few from the selected books), then choose "Fuse and create book". The app creates the book, writes the total chapter count and words per chapter from the median of the references, and asks AI to generate the setup, architecture, and core outline. References supply genre and structure only; the fused result never reuses their characters, place names, or specific plot.
+Rather not pick one by one? Choose "Suggest a bundle": the app drafts three books from the current results by genre skeleton, chapter pace, and readership, and explains the shared genre plus what each book adds. Once you tick two to five books, a diagnosis panel shows the genre, the scale to plan for (chapters x words per chapter), how much the tags overlap, and whether the pace runs faster or slower than the platform norm. Write the direction yourself, or choose "AI set the direction" to get two directions from the model and click one to fill it in; titles work the same way through "AI title". Pick a folder, confirm the name, then choose "Fuse and create book": the app creates the book, writes the total chapter count and words per chapter from the median of the references, and asks AI to generate the setup, architecture, and core outline. References supply genre and structure only; the fused result never reuses their characters, place names, or specific plot.
 
 Keyword search locates book IDs through Bing site search. When that service is unavailable, the app falls back to ranking entries whose titles match, and you can always paste a book link.
 

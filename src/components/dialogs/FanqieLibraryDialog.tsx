@@ -11,12 +11,16 @@ import { displayedErrorMessage } from '../../i18n/app-errors'
 import { useLocaleStore } from '../../stores/locale-store'
 import { useProjectStore } from '../../stores/project-store'
 import { projectSessionContextFromProject } from '../../shared/project-session-context'
+import { pluralEn } from '../../shared/plural-en'
 import {
   buildFanqieFusionBrief,
+  buildFanqieSelectionInsight,
   FANQIE_FUSION_MAX_BOOKS,
+  suggestFanqieBundle,
   type FanqieBookSummary,
   type FanqieRankPage,
   type FanqieSearchResult,
+  type FanqieSelectionInsight,
 } from '../../shared/fanqie'
 import { routeModelId } from '../../services/model-routing'
 import type { ProjectDirectoryGrant } from '../../shared/ipc-channels'
@@ -58,8 +62,8 @@ function BookMeta({ book }: { book: FanqieBookSummary }) {
         book.author || text('作者未知', 'Unknown author'),
         book.tags.join('、'),
         book.chapterCount > 0
-          ? text(`${book.chapterCount} 章 · ${book.wordNumber.toLocaleString('zh-CN')} 字 · ${statusZh}`, `${book.chapterCount} chapters · ${book.wordNumber.toLocaleString('en-US')} words · ${statusEn}`)
-          : text(`${book.wordNumber.toLocaleString('zh-CN')} 字`, `${book.wordNumber.toLocaleString('en-US')} words`),
+          ? text(`${book.chapterCount} 章 · ${book.wordNumber.toLocaleString('zh-CN')} 字 · ${statusZh}`, `${book.chapterCount} ${pluralEn(book.chapterCount, 'chapter')} · ${book.wordNumber.toLocaleString('en-US')} ${pluralEn(book.wordNumber, 'word')} · ${statusEn}`)
+          : text(`${book.wordNumber.toLocaleString('zh-CN')} 字`, `${book.wordNumber.toLocaleString('en-US')} ${pluralEn(book.wordNumber, 'word')}`),
         book.readCount > 0 ? text(`${book.readCount.toLocaleString('zh-CN')} 人在读`, `${book.readCount.toLocaleString('en-US')} reading`) : '',
       ].filter(Boolean).join('｜')}
     </span>
@@ -88,11 +92,56 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
   const [fusing, setFusing] = useState(false)
   const [naming, setNaming] = useState(false)
   const [titleOptions, setTitleOptions] = useState<string[]>([])
+  const [directing, setDirecting] = useState(false)
+  const [focusOptions, setFocusOptions] = useState<string[]>([])
+  const [bundleNote, setBundleNote] = useState('')
 
   const suggestedTitle = useMemo(
     () => (selected.length >= 2 ? buildFanqieFusionBrief(selected).suggestedTitle : ''),
     [selected],
   )
+
+  const insight = useMemo<FanqieSelectionInsight | null>(
+    () => (selected.length > 0 ? buildFanqieSelectionInsight(selected) : null),
+    [selected],
+  )
+
+  /** 把选书诊断翻成两句提示：题材叠在一起会不会跑偏，节奏比平台主流快还是慢。 */
+  const insightNotes = useMemo(() => {
+    if (!insight) return []
+    const percent = Math.round(insight.overlap * 100)
+    const words = insight.wordsPerChapter.toLocaleString('zh-CN')
+    const wordsEn = insight.wordsPerChapter.toLocaleString('en-US')
+    const blend = insight.blend === 'scattered'
+      ? text(
+        `标签只重合 ${percent}%，几本差得远，融出来容易四不像。挑一本当骨架，其余只借节奏。`,
+        `Tags overlap only ${percent}%; the references are far apart, so the fusion can lose its shape. Use one book as the skeleton and borrow pacing from the rest.`,
+      )
+      : insight.blend === 'identical'
+        ? text(
+          `标签重合 ${percent}%，几本几乎同类，容易和参考作品撞车。换一本不同题材进来，或把取向写具体。`,
+          `Tags overlap ${percent}%; the books are nearly the same genre, so the result may collide with the references. Add a different genre or write a more specific direction.`,
+        )
+        : text(
+          `标签重合 ${percent}%，骨架一致，还能各带一点新意。`,
+          `Tags overlap ${percent}%; the skeleton is shared and each book still adds something new.`,
+        )
+    const pace = insight.density === 'thin'
+      ? text(
+        `每章 ${words} 字，比平台主流短，日更省力，单章要有更硬的钩子。`,
+        `${wordsEn} ${pluralEn(insight.wordsPerChapter, 'word')} per chapter is shorter than the platform norm: easier to ship daily, so each chapter needs a harder hook.`,
+      )
+      : insight.density === 'thick'
+        ? text(
+          `每章 ${words} 字偏长，写完一章比参考作品更费时间。`,
+          `${wordsEn} ${pluralEn(insight.wordsPerChapter, 'word')} per chapter is long; each chapter costs more time than the references did.`,
+        )
+        : text(
+          `每章 ${words} 字，和参考作品的节奏一致。`,
+          `${wordsEn} ${pluralEn(insight.wordsPerChapter, 'word')} per chapter matches the reference rhythm.`,
+        )
+    return [blend, pace]
+  }, [insight, text])
 
   const candidates = tab === 'rank' ? rank?.candidates ?? [] : result?.candidates ?? []
   const note = tab === 'rank' ? rank?.note : result?.note
@@ -109,7 +158,7 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
       const response = await ipc.invoke('fanqie:search', keyword.trim())
       if (!response.success || !response.result) {
         setResult(null)
-        setError(response.error ?? text('番茄书库暂时不可用', 'The Fanqie library is unavailable right now'))
+        setError(displayedErrorMessage(locale, response.error, text('番茄书库暂时不可用', 'The Fanqie library is unavailable right now')))
         return
       }
       setResult(response.result)
@@ -130,7 +179,7 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
       const response = await ipc.invoke('fanqie:rank', nextCategoryId ? { gender: nextGender, categoryId: nextCategoryId } : { gender: nextGender })
       if (!response.success || !response.result) {
         setRank(null)
-        setError(response.error ?? text('番茄榜单暂时不可用', 'The Fanqie ranking is unavailable right now'))
+        setError(displayedErrorMessage(locale, response.error, text('番茄榜单暂时不可用', 'The Fanqie ranking is unavailable right now')))
         return
       }
       setRank(response.result)
@@ -156,14 +205,37 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
   }
 
   const toggleBook = (book: FanqieBookSummary) => {
+    const picked = selected.some(item => item.bookId === book.bookId)
+    const next = picked
+      ? selected.filter(item => item.bookId !== book.bookId)
+      : selected.length >= FANQIE_FUSION_MAX_BOOKS ? selected : [...selected, book]
+    setSelected(next)
     setTitleOptions([])
-    setSelected(previous => {
-      if (previous.some(item => item.bookId === book.bookId)) {
-        return previous.filter(item => item.bookId !== book.bookId)
-      }
-      if (previous.length >= FANQIE_FUSION_MAX_BOOKS) return previous
-      return [...previous, book]
-    })
+    setFocusOptions([])
+    setBundleNote('')
+    // 选到第二本还没起名时先放上推荐名，省得点融合时被「请先起个名字」挡住。
+    if (next.length >= 2 && !bookName.trim()) setBookName(buildFanqieFusionBrief(next).suggestedTitle)
+  }
+
+  /** 一键配单：按题材骨架与节奏从当前候选里挑三本，并把为什么这么配写在下面。 */
+  const pickBundle = () => {
+    const suggestion = suggestFanqieBundle(candidates, 3)
+    if (!suggestion) {
+      setError(text('候选还不够配一单，至少要有两本', 'Not enough candidates to draft a set; at least two are needed'))
+      return
+    }
+    setError('')
+    setTitleOptions([])
+    setFocusOptions([])
+    setSelected(suggestion.books)
+    if (!bookName.trim()) setBookName(buildFanqieFusionBrief(suggestion.books).suggestedTitle)
+    const names = suggestion.books.map(book => `《${book.bookName}》`).join('')
+    const shared = suggestion.sharedTags.slice(0, 2).join('、')
+    const added = suggestion.addedTags.slice(0, 3).join('、')
+    setBundleNote(text(
+      `配了 ${suggestion.books.length} 本：${names}。${shared ? `共同 ${shared}` : '没有共同标签，只借节奏'}${added ? `，另外带来 ${added}` : ''}。${suggestion.alternatives > 0 ? `同题材还有 ${suggestion.alternatives} 本可换。` : ''}`,
+      `Drafted ${suggestion.books.length}: ${suggestion.books.map(book => `"${book.bookName}"`).join(' ')}. ${shared ? `Shared ${shared}` : 'No shared tag, borrowing pace only'}${added ? `, plus ${added}` : ''}. ${suggestion.alternatives > 0 ? `${suggestion.alternatives} more in the same genre are available.` : ''}`,
+    ))
   }
 
   const pickFolder = async () => {
@@ -171,35 +243,40 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
     if (folder) setSavePath(folder)
   }
 
+  /** 单次补全：起名与定方向共用。模型没配、或生成失败时返回空串，并给出提示。 */
+  const completeOnce = useCallback(async (system: string, prompt: string, maxTokens: number) => {
+    const modelId = routeModelId('generate-global-config')
+    if (!modelId) {
+      setError(text('请先在设置里配置 AI 模型，这一步需要模型', 'Configure an AI model in Settings first; this step needs a model'))
+      return ''
+    }
+    const res = await ipc.invoke('llm:complete-once', { modelId, system, prompt, maxTokens, timeoutMs: 45_000 })
+    if (!res.success) {
+      setError(displayedErrorMessage(locale, res.error, text('这次生成没有成功，请再试一次', 'That generation did not succeed; please try again')))
+      return ''
+    }
+    return String(res.text ?? '')
+  }, [locale, text])
+
   /** 一键起名：按已选参考作品与融合取向，让模型出几个候选书名，点一下就填进去。 */
   const suggestTitles = async () => {
     if (naming || selected.length === 0) return
-    const modelId = routeModelId('generate-global-config')
-    if (!modelId) {
-      setError(text('请先在设置里配置 AI 模型，起名需要模型', 'Configure an AI model in Settings first; naming needs a model'))
-      return
-    }
     setNaming(true)
     setError('')
     try {
-      const res = await ipc.invoke('llm:complete-once', {
-        modelId,
-        system: text(
+      const raw = await completeOnce(
+        text(
           '你是中文网文书名策划。只输出书名，一行一个，不要编号、引号和任何解释。',
           'You are a Chinese web-novel title strategist. Output only titles, one per line, no numbering, quotes, or explanations.',
         ),
-        prompt: text(
+        text(
           `根据参考作品融合出一部原创长篇，请起 5 个候选书名。要求：4-8 个字，网文风，有记忆点，不与参考作品重名。融合取向：${focus.trim() || '未指定'}。\n参考作品：\n${selected.map(book => `《${book.bookName}》标签：${book.tags.join('、') || '无'}`).join('\n')}`,
           `Fuse the reference works into one original long-form novel and propose 5 candidate titles. Requirements: 4-8 words, web-novel flavor, memorable, not duplicating any reference title. Fusion focus: ${focus.trim() || 'unspecified'}.\nReference works:\n${selected.map(book => `"${book.bookName}" tags: ${book.tags.join(', ') || 'none'}`).join('\n')}`,
         ),
-        maxTokens: 200,
-        timeoutMs: 45_000,
-      })
-      if (!res.success) {
-        setError(res.error ?? text('起名没有成功，请再试一次', 'Naming failed; please try again'))
-        return
-      }
-      const options = String(res.text ?? '')
+        200,
+      )
+      if (!raw) return
+      const options = raw
         .split('\n')
         .map(line => line.replace(/^[\s\d.、·\-—]+/u, '').replace(/[《》"「」『』]/gu, '').trim())
         .filter(Boolean)
@@ -208,6 +285,44 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
       if (options[0] && !bookName.trim()) setBookName(options[0])
     } finally {
       setNaming(false)
+    }
+  }
+
+  /** 一键定方向：按已选作品的标签、规模与在读数，让模型写两条可直接用的融合取向。 */
+  const suggestFocus = async () => {
+    if (directing || selected.length === 0) return
+    setDirecting(true)
+    setError('')
+    try {
+      const catalog = selected.map((book, index) => {
+        const perChapter = book.chapterCount > 0 ? Math.round(book.wordNumber / book.chapterCount) : 0
+        return text(
+          `${index + 1}.《${book.bookName}》标签：${book.tags.join('、') || '无'}｜在读 ${book.readCount.toLocaleString('zh-CN')}${perChapter > 0 ? `｜每章约 ${perChapter} 字` : ''}｜${book.status === 'completed' ? '已完结' : book.status === 'ongoing' ? '连载中' : '状态未知'}`,
+          `${index + 1}. "${book.bookName}" tags: ${book.tags.join(', ') || 'none'} | ${book.readCount.toLocaleString('en-US')} reading${perChapter > 0 ? ` | about ${perChapter} ${pluralEn(perChapter, 'word')} per chapter` : ''} | ${book.status}`,
+        )
+      }).join('\n')
+      const scale = insight ? text(`${insight.totalChapters} 章、每章约 ${insight.wordsPerChapter} 字`, `${insight.totalChapters} ${pluralEn(insight.totalChapters, 'chapter')} of about ${insight.wordsPerChapter} ${pluralEn(insight.wordsPerChapter, 'word')}`) : ''
+      const raw = await completeOnce(
+        text(
+          '你是中文网文选题策划。只输出融合方向，一行一条，不要编号、标题和解释。',
+          'You are a Chinese web-fiction development editor. Output only fusion directions, one per line, with no numbering, headings, or commentary.',
+        ),
+        text(
+          `要为一部融合长篇定方向，规模 ${scale}。参考作品：\n${catalog}\n\n写 2 条融合方向，每条 60 到 90 字，必须包含：一句话卖点、目标读者、主角处境与他的优势、与参考作品的明显区别。两条方向要不同，一条偏稳，一条偏新。`,
+          `Set the direction for a fused long-form novel of ${scale}. Reference works:\n${catalog}\n\nWrite 2 fusion directions, each 40 to 60 words, each covering: a one-line pitch, the target reader, the lead's situation and edge, and a clear difference from the references. Make the two directions different: one safer, one fresher.`,
+        ),
+        400,
+      )
+      if (!raw) return
+      const options = raw
+        .split('\n')
+        .map(line => line.replace(/^[\s\d.、·\-—]+/u, '').replace(/^["「『]|["」』]$/gu, '').trim())
+        .filter(Boolean)
+        .slice(0, 3)
+      setFocusOptions(options)
+      if (options[0] && !focus.trim()) setFocus(options[0])
+    } finally {
+      setDirecting(false)
     }
   }
 
@@ -277,7 +392,7 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
     )
     if (!written.success) {
       setFusing(false)
-      setError(written.error ?? text('规模没有写进作品，融合已取消', 'The scale was not saved, so fusing stopped'))
+      setError(displayedErrorMessage(locale, written.error, text('规模没有写进作品，融合已取消', 'The scale was not saved, so fusing stopped')))
       return
     }
     publishSavedNovelConfig(changes, projectSession, 'none')
@@ -383,6 +498,17 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
           {error && <Notice tone="warn" title={text('没有读出来', 'Could not read it')}>{error}</Notice>}
           {note && !error && <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{note}</p>}
 
+          {candidates.length >= 2 && (
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                {text('不想一本本挑：按题材骨架和节奏自动配一单。', 'Rather not pick one by one: draft a set by genre skeleton and pace.')}
+              </p>
+              <Button type="button" variant="text" size="sm" onClick={pickBundle}>
+                {text('帮我配一单', 'Suggest a bundle')}
+              </Button>
+            </div>
+          )}
+
           {candidates.length > 0 && (
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label={text('书籍结果', 'Book results')}>
               {candidates.map(book => {
@@ -432,19 +558,72 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
                     </Button>
                   ))}
                 {selected.length > 0 && (
-                  <Button type="button" variant="text" size="sm" onClick={() => setSelected([])}>{text('清空', 'Clear')}</Button>
+                  <Button type="button" variant="text" size="sm" onClick={() => { setSelected([]); setBundleNote('') }}>{text('清空', 'Clear')}</Button>
                 )}
               </div>
+              {bundleNote && (
+                <p className="mt-1 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{bundleNote}</p>
+              )}
             </div>
 
+            {insight && (
+              <div className="rounded-lg border px-3 py-2 space-y-1" style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)' }}>
+                <p className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
+                  {text(`这套组合：${insight.primaryTag || '题材待定'}`, `This combination: ${insight.primaryTag || 'genre undecided'}`)}
+                  <span style={{ color: 'var(--color-text-muted)' }}>
+                    {' ｜ '}
+                    {text(
+                      `中位在读 ${insight.medianReads.toLocaleString('zh-CN')} 人，${insight.completedCount}/${insight.bookCount} 完结`,
+                      `median ${insight.medianReads.toLocaleString('en-US')} reading, ${insight.completedCount} of ${insight.bookCount} completed`,
+                    )}
+                  </span>
+                </p>
+                <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                  {text(
+                    `规模：${insight.totalChapters} 章 × 每章约 ${insight.wordsPerChapter.toLocaleString('zh-CN')} 字`,
+                    `Scale: ${insight.totalChapters} ${pluralEn(insight.totalChapters, 'chapter')} × about ${insight.wordsPerChapter.toLocaleString('en-US')} ${pluralEn(insight.wordsPerChapter, 'word')}`,
+                  )}
+                </p>
+                {insightNotes.map(note => (
+                  <p key={note} className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{note}</p>
+                ))}
+              </div>
+            )}
+
             <div>
-              <Label htmlFor="fanqie-focus">{text('融合取向（可留空）', 'Fusion focus (optional)')}</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="fanqie-focus">{text('融合取向（可留空）', 'Fusion focus (optional)')}</Label>
+                <Button
+                  type="button"
+                  variant="text"
+                  size="sm"
+                  disabled={directing || selected.length === 0}
+                  onClick={() => void suggestFocus()}
+                >
+                  {directing ? text('正在定方向…', 'Setting the direction…') : text('AI 定方向', 'AI set the direction')}
+                </Button>
+              </div>
               <Textarea
                 id="fanqie-focus"
                 value={focus}
                 placeholder={text('例如：保留悬疑结构，用更快的爽感节奏，主角改成女性。', 'For example: keep the mystery structure, move faster, and make the lead a woman.')}
                 onChange={event => setFocus(event.target.value)}
               />
+              {focusOptions.length > 0 && (
+                <div className="space-y-2 mt-2">
+                  {focusOptions.map(option => (
+                    <button
+                      key={option}
+                      type="button"
+                      className="block w-full rounded-lg border px-3 py-2 text-left text-xs"
+                      style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)', color: 'var(--color-text-secondary)' }}
+                      onClick={() => setFocus(option)}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>

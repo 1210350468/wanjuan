@@ -7,6 +7,8 @@ export const zhCN = {
   'error.knowledgeBaseNativeUnavailable': '知识库不可用：Windows 原生组件加载失败。请重新安装或下载完整发布包。',
   'error.legacyVectorMigrationBlocked': '旧版知识库数据需要先修复后才能继续。请修正项目中的 vectors.json，然后重试。',
   'error.projectNotOpen': '请先打开项目。',
+  'error.fanqieSelectionEmpty': '至少要有一部参考作品，先在番茄书库里勾选书籍。',
+  'error.fanqieSelectionTooMany': '一次最多融合 5 部参考作品，去掉几本再试。',
   'error.embeddingModelNotConfigured': '请先配置向量模型。',
   'error.projectStoragePathUnsupported': '项目路径过深，部分本地存储不可用。请把项目文件夹移到靠近磁盘根目录的位置（例如 D:\\Novels）后重试。',
   'error.projectLegacyImportRequired': '这是旧版项目，请通过“导入旧项目”创建新版副本后继续。旧项目会保留。',

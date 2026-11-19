@@ -5,6 +5,8 @@ export const enUS = {
   'error.knowledgeBaseNativeUnavailable': 'The knowledge base is unavailable because its Windows native component could not be loaded. Reinstall or download the complete release package.',
   'error.legacyVectorMigrationBlocked': 'Legacy knowledge-base data must be repaired before continuing. Fix vectors.json in the project, then try again.',
   'error.projectNotOpen': 'Open a project first.',
+  'error.fanqieSelectionEmpty': 'At least one reference book is needed. Pick books in the Fanqie library first.',
+  'error.fanqieSelectionTooMany': 'Up to 5 reference books can be fused at once. Remove some and try again.',
   'error.embeddingModelNotConfigured': 'Configure an embedding model first.',
   'error.projectStoragePathUnsupported': 'The project path is too deep for some local storage. Move the project folder closer to the drive root (for example, D:\\Novels), then try again.',
   'error.projectLegacyImportRequired': 'This is a legacy project. Use Import legacy project to create a new copy. The original is kept.',

@@ -9,6 +9,7 @@ import { Notice } from '../ui/Notice'
 import { confirm as confirmAction } from '../ui/Confirm'
 import { ipc } from '../../services/ipc-client'
 import { displayedErrorMessage } from '../../i18n/app-errors'
+import { pluralEn } from '../../shared/plural-en'
 import { useLocaleStore } from '../../stores/locale-store'
 import { RECOMMENDED_WRITING_SKILL_REPOS } from '../../shared/writing-skill-sources'
 import {
@@ -87,7 +88,7 @@ export default function SkillMarketplaceDialog({ open, onClose, installedNames, 
         const response = await ipc.invoke('skills:scan-sources')
         if (!active) return
         if (!response.success) {
-          setError(response.error ?? text('推荐来源扫描失败', 'Recommended source scan failed'))
+          setError(displayedErrorMessage(locale, response.error, text('推荐来源扫描失败', 'Recommended source scan failed')))
           return
         }
         setSourceScans(response.sources ?? [])
@@ -131,7 +132,7 @@ export default function SkillMarketplaceDialog({ open, onClose, installedNames, 
       if (!response.success || !response.scan) {
         setScan(null)
         setSelected([])
-        setError(response.error ?? text('仓库扫描失败', 'Repository scan failed'))
+        setError(displayedErrorMessage(locale, response.error, text('仓库扫描失败', 'Repository scan failed')))
         return
       }
       setScan(response.scan)
@@ -161,7 +162,7 @@ export default function SkillMarketplaceDialog({ open, onClose, installedNames, 
       const response = await ipc.invoke('skills:search-repos', query)
       if (!response.success || !response.repositories) {
         setRepositories([])
-        setError(response.error ?? text('仓库搜索失败', 'Repository search failed'))
+        setError(displayedErrorMessage(locale, response.error, text('仓库搜索失败', 'Repository search failed')))
         return
       }
       setRepositories(response.repositories)
@@ -223,7 +224,7 @@ export default function SkillMarketplaceDialog({ open, onClose, installedNames, 
           detail: result.success
             ? text(
                 `已安装${inspection.bundledFiles?.length ? `，并入 ${inspection.bundledFiles.length} 份附带文本` : ''}`,
-                `Installed${inspection.bundledFiles?.length ? ` with ${inspection.bundledFiles.length} reference files` : ''}`,
+                `Installed${inspection.bundledFiles?.length ? ` with ${inspection.bundledFiles.length} ${pluralEn(inspection.bundledFiles.length, 'reference file', 'reference files')}` : ''}`,
               )
             : result.error ?? text('安装失败', 'Installation failed'),
         })
@@ -263,7 +264,7 @@ export default function SkillMarketplaceDialog({ open, onClose, installedNames, 
               <Input
                 id="skill-marketplace-repo"
                 value={repository}
-                placeholder="owner/repo，或 https://github.com/owner/repo"
+                placeholder={text('owner/repo，或 https://github.com/owner/repo', 'owner/repo, or https://github.com/owner/repo')}
                 onChange={event => setRepository(event.target.value)}
                 onKeyDown={event => { if (event.key === 'Enter') void runScan(repository) }}
               />
@@ -408,7 +409,7 @@ export default function SkillMarketplaceDialog({ open, onClose, installedNames, 
                                 candidate.suggestedStage ? text(STAGE_COPY[candidate.suggestedStage][0], STAGE_COPY[candidate.suggestedStage][1]) : '',
                                 candidate.repo,
                                 candidate.language,
-                                text(`${candidate.bundledReferences} 份附带文本`, `${candidate.bundledReferences} reference files`),
+                                text(`${candidate.bundledReferences} 份附带文本`, `${candidate.bundledReferences} ${pluralEn(candidate.bundledReferences, 'reference file', 'reference files')}`),
                                 formatBytes(candidate.utf8Bytes),
                               ].filter(Boolean).join('｜')}
                             </span>

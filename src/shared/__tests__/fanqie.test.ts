@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildFanqieFusionBrief,
+  buildFanqieSelectionInsight,
   FANQIE_FUSION_MAX_BOOKS,
   FANQIE_TITLE_SAMPLE_LIMIT,
   parseFanqieBookId,
   sampleChapterTitles,
+  suggestFanqieBundle,
   type FanqieBookSummary,
 } from '../fanqie'
 
@@ -89,8 +91,111 @@ describe('buildFanqieFusionBrief', () => {
   })
 
   it('没有可行参考时直接失败，超过上限也失败', () => {
-    expect(() => buildFanqieFusionBrief([])).toThrow('融合简报需要至少一部参考作品')
+    expect(() => buildFanqieFusionBrief([])).toThrow('FANQIE_SELECTION_EMPTY')
     const many = Array.from({ length: FANQIE_FUSION_MAX_BOOKS + 1 }, (_, index) => book({ bookId: `70000000000000000${index}` }))
-    expect(() => buildFanqieFusionBrief(many)).toThrow(`一次最多融合 ${FANQIE_FUSION_MAX_BOOKS} 部参考作品`)
+    expect(() => buildFanqieFusionBrief(many)).toThrow('FANQIE_SELECTION_TOO_MANY')
+  })
+})
+
+describe('buildFanqieSelectionInsight', () => {
+  it('题材取共同标签，规模与融合简报一致', () => {
+    const insight = buildFanqieSelectionInsight([
+      book(),
+      book({ bookId: '7000000000000000002', bookName: '规则怪谈', tags: ['悬疑脑洞', '规则怪谈'], chapterCount: 400, wordNumber: 800_000 }),
+      book({ bookId: '7000000000000000003', bookName: '求生实录', tags: ['悬疑脑洞', '求生'], chapterCount: 200, wordNumber: 400_000 }),
+    ])
+    expect(insight.primaryTag).toBe('悬疑脑洞')
+    expect(insight.sharedTags).toEqual(['悬疑脑洞'])
+    expect(insight.overlap).toBe(0.2)
+    expect(insight.totalChapters).toBe(300)
+    expect(insight.wordsPerChapter).toBe(2000)
+    expect(insight.medianReads).toBe(1_713_524)
+    expect(insight.completedCount).toBe(3)
+    expect(insight.density).toBe('thin')
+    expect(insight.blend).toBe('balanced')
+  })
+
+  it('标签完全不重合时判为题材分散', () => {
+    const insight = buildFanqieSelectionInsight([
+      book({ tags: ['悬疑脑洞', '推理'] }),
+      book({ bookId: '7000000000000000002', tags: ['都市日常', '种田'] }),
+    ])
+    expect(insight.overlap).toBe(0)
+    expect(insight.blend).toBe('scattered')
+    expect(insight.primaryTag).toBe('悬疑脑洞')
+  })
+
+  it('标签完全重合时判为同质', () => {
+    const insight = buildFanqieSelectionInsight([
+      book(),
+      book({ bookId: '7000000000000000002', tags: ['悬疑脑洞', '推理', '无限流'] }),
+    ])
+    expect(insight.overlap).toBe(1)
+    expect(insight.blend).toBe('identical')
+  })
+
+  it('快节奏的单本参考判为偏薄，长章判为偏厚', () => {
+    expect(buildFanqieSelectionInsight([book({ chapterCount: 2000, wordNumber: 3_000_000 })]).density).toBe('thin')
+    expect(buildFanqieSelectionInsight([book({ chapterCount: 100, wordNumber: 500_000 })]).density).toBe('thick')
+  })
+
+  it('没有参考作品时直接失败，超过上限也失败', () => {
+    expect(() => buildFanqieSelectionInsight([])).toThrow('FANQIE_SELECTION_EMPTY')
+    const many = Array.from({ length: FANQIE_FUSION_MAX_BOOKS + 1 }, (_, index) => book({ bookId: `70000000000000000${index}` }))
+    expect(() => buildFanqieSelectionInsight(many)).toThrow('FANQIE_SELECTION_TOO_MANY')
+  })
+})
+
+describe('suggestFanqieBundle', () => {
+  const candidates: FanqieBookSummary[] = [
+    book({ bookId: '7000000000000000001', bookName: '十日终焉', tags: ['悬疑脑洞', '推理', '无限流'], readCount: 1_713_524 }),
+    book({ bookId: '7000000000000000002', bookName: '规则怪谈', tags: ['悬疑脑洞', '规则怪谈', '都市'], readCount: 902_000, chapterCount: 600, wordNumber: 1_800_000, status: 'ongoing' }),
+    book({ bookId: '7000000000000000003', bookName: '刑侦档案', tags: ['悬疑脑洞', '刑侦', '破案'], readCount: 1_204_000, chapterCount: 800, wordNumber: 2_400_000 }),
+    book({ bookId: '7000000000000000004', bookName: '都市种田', tags: ['都市日常', '种田', '轻松'], readCount: 6_800_000, chapterCount: 900, wordNumber: 2_700_000 }),
+    book({ bookId: '7000000000000000005', bookName: '冷门推理', tags: ['悬疑', '推理'], readCount: 1_100, chapterCount: 120, wordNumber: 260_000 })
+  ]
+
+  it('配出一单：留共同标签当骨架，带进独有标签，跳过跑偏的爆款', () => {
+    const suggestion = suggestFanqieBundle(candidates)
+    expect(suggestion).not.toBeNull()
+    expect(suggestion!.books).toHaveLength(3)
+    const names = suggestion!.books.map(entry => entry.bookName)
+    expect(names[0]).toBe('十日终焉')
+    expect(names).not.toContain('都市种田')
+    expect(suggestion!.sharedTags).toEqual(['悬疑脑洞'])
+    expect(suggestion!.addedTags.length).toBeGreaterThan(0)
+    expect(suggestion!.addedTags).not.toContain('悬疑脑洞')
+    expect(suggestion!.alternatives).toBeGreaterThanOrEqual(1)
+  })
+
+  it('候选少于两本时给不出建议', () => {
+    expect(suggestFanqieBundle([])).toBeNull()
+    expect(suggestFanqieBundle([candidates[0]])).toBeNull()
+  })
+
+  it('候选很少时配满候选，不重复同一本', () => {
+    const suggestion = suggestFanqieBundle([candidates[0], candidates[0], candidates[2]], 3)
+    expect(suggestion!.books.map(entry => entry.bookId)).toEqual(['7000000000000000001', '7000000000000000003'])
+    expect(suggestion!.alternatives).toBe(0)
+  })
+
+  it('候选很多时最多配到上限', () => {
+    const many = Array.from({ length: 9 }, (_, index) => book({
+      bookId: `70000000000000001${index}`,
+      bookName: `悬疑${index}`,
+      tags: ['悬疑脑洞', `卖点${index}`],
+      readCount: 500_000 + index * 1000,
+    }))
+    const suggestion = suggestFanqieBundle(many, FANQIE_FUSION_MAX_BOOKS + 3)
+    expect(suggestion!.books).toHaveLength(FANQIE_FUSION_MAX_BOOKS)
+    expect(new Set(suggestion!.books.map(entry => entry.bookId)).size).toBe(FANQIE_FUSION_MAX_BOOKS)
+  })
+
+  it('标签完全相同时没有新增卖点，但照样能配', () => {
+    const twin = book({ bookId: '7000000000000000002' })
+    const suggestion = suggestFanqieBundle([book(), twin], 2)
+    expect(suggestion!.books).toHaveLength(2)
+    expect(suggestion!.sharedTags).toEqual(['悬疑脑洞', '推理', '无限流'])
+    expect(suggestion!.addedTags).toEqual([])
   })
 })

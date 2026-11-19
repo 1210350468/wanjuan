@@ -18,6 +18,8 @@ import {
   WRITING_SKILL_NAME_PATTERN,
 } from '../../src/shared/writing-skills'
 import { RECOMMENDED_WRITING_SKILL_REPOS } from '../../src/shared/writing-skill-sources'
+import { localize, resolveLocale } from '../../src/i18n/core'
+import { mainText } from '../i18n'
 
 /**
  * 从 GitHub 采集写作 Skill：读取 SKILL.md，按它引用的相对路径把 references 文本一并下载。
@@ -28,6 +30,20 @@ const SKILL_MARKDOWN_NAME = 'skill.md'
 const REPOSITORY_SCAN_LIMIT = 40
 const REPOSITORY_SCAN_CONCURRENCY = 6
 const REPOSITORY_JSON_MAX_BYTES = 8 * 1024 * 1024
+
+/**
+ * 这里的报错会原样回到渲染层，所以要按界面语言给一份。
+ * 服务层拿不到 Electron app（单元测试也直接引用本模块），语言按「设置里选过的，否则系统语言」；
+ * 设置目录还没就绪时退回系统语言，不因为一句提示再抛一个错。
+ */
+function text(zhCNText: string, enUSText: string): string {
+  const systemLocale = Intl.DateTimeFormat().resolvedOptions().locale
+  try {
+    return mainText(systemLocale, zhCNText, enUSText)
+  } catch {
+    return localize(resolveLocale(systemLocale), zhCNText, enUSText)
+  }
+}
 
 export type GitHubSkillErrorCode = 'URL_INVALID' | 'REPOSITORY_UNAVAILABLE' | 'SKILL_MARKDOWN_MISSING' | 'SKILL_MARKDOWN_INVALID'
 
@@ -41,7 +57,7 @@ export class GitHubSkillError extends Error {
 function safeSegment(value: string, label: string): string {
   const decoded = decodeURIComponent(value)
   if (!isSafeSkillPathSegment(decoded)) {
-    throw new GitHubSkillError('URL_INVALID', `Invalid GitHub ${label}`)
+    throw new GitHubSkillError('URL_INVALID', text(`GitHub 地址里的 ${label} 不合法`, `Invalid GitHub ${label}`))
   }
   return decoded
 }
@@ -59,15 +75,17 @@ async function fetchText(url: string, accept: string, maxBytes = MAX_WRITING_SKI
   })
   if (response.status === 404) return undefined
   if (!response.ok) {
-    throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', `GitHub 返回 ${response.status}`)
+    throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', text(`GitHub 返回 ${response.status}`, `GitHub returned ${response.status}`))
   }
   const declared = Number(response.headers.get('content-length') ?? 0)
-  if (declared > maxBytes) throw new GitHubSkillError('SKILL_MARKDOWN_INVALID', '文件超过大小上限')
-  const text = await response.text()
-  if (Buffer.byteLength(text, 'utf8') > maxBytes) {
-    throw new GitHubSkillError('SKILL_MARKDOWN_INVALID', '文件超过大小上限')
+  if (declared > maxBytes) {
+    throw new GitHubSkillError('SKILL_MARKDOWN_INVALID', text('文件超过大小上限', 'The file is larger than the size limit'))
   }
-  return text
+  const body = await response.text()
+  if (Buffer.byteLength(body, 'utf8') > maxBytes) {
+    throw new GitHubSkillError('SKILL_MARKDOWN_INVALID', text('文件超过大小上限', 'The file is larger than the size limit'))
+  }
+  return body
 }
 
 /** SKILL.md 所在目录，作为 Skill 根目录。 */
@@ -129,21 +147,25 @@ export async function loadGitHubWritingSkill(sourceUrl: string): Promise<LoadedG
       'application/vnd.github+json',
       1024 * 1024,
     )
-    if (repository === undefined) throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', 'GitHub 仓库不存在')
+    if (repository === undefined) {
+      throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', text('GitHub 仓库不存在', 'The GitHub repository does not exist'))
+    }
     let parsed: { default_branch?: unknown }
     try {
       parsed = JSON.parse(repository) as { default_branch?: unknown }
     } catch {
-      throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', 'GitHub 仓库信息无法解析')
+      throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', text('GitHub 仓库信息无法解析', 'The GitHub repository info could not be parsed'))
     }
     if (typeof parsed.default_branch !== 'string' || !WRITING_SKILL_NAME_PATTERN.test(parsed.default_branch)) {
-      throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', 'GitHub 返回了不支持的默认分支')
+      throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', text('GitHub 返回了不支持的默认分支', 'GitHub returned an unsupported default branch'))
     }
     ref = parsed.default_branch
   }
 
   const raw = await fetchText(rawUrl(location.owner, location.repo, ref, location.path), 'text/plain')
-  if (raw === undefined) throw new GitHubSkillError('SKILL_MARKDOWN_MISSING', '仓库里没有这个 SKILL.md')
+  if (raw === undefined) {
+    throw new GitHubSkillError('SKILL_MARKDOWN_MISSING', text('仓库里没有这个 SKILL.md', 'That repository has no SKILL.md'))
+  }
 
   const body = inspectWritingSkillMarkdown(raw).content
   const bundle = await fetchBundledFiles(location, ref, body)
@@ -164,30 +186,37 @@ export async function loadGitHubWritingSkill(sourceUrl: string): Promise<LoadedG
 /** 仓库地址：owner/repo、仓库页链接，可带 /tree/{ref}/{path} 指定分支与子目录。 */
 export function parseGitHubRepositoryInput(input: string): GitHubRepositoryTarget {
   const trimmed = input.trim()
-  if (!trimmed) throw new GitHubSkillError('URL_INVALID', '请输入 GitHub 仓库地址')
+  if (!trimmed) throw new GitHubSkillError('URL_INVALID', text('请输入 GitHub 仓库地址', 'Enter a GitHub repository address'))
   if (!trimmed.includes('://') && !trimmed.includes('@')) {
     const parts = trimmed.split('/').filter(Boolean)
-    if (parts.length < 2 || parts.length > 2) throw new GitHubSkillError('URL_INVALID', '仓库地址写成 owner/repo，或者粘贴仓库页链接')
+    if (parts.length < 2 || parts.length > 2) {
+      throw new GitHubSkillError(
+        'URL_INVALID',
+        text('仓库地址写成 owner/repo，或者粘贴仓库页链接', 'Write owner/repo, or paste the repository page link'),
+      )
+    }
     return { owner: safeSegment(parts[0], 'owner'), repo: safeSegment(parts[1].replace(/\.git$/i, ''), 'repository') }
   }
   let url: URL
   try {
     url = new URL(trimmed)
   } catch {
-    throw new GitHubSkillError('URL_INVALID', 'GitHub 地址无效')
+    throw new GitHubSkillError('URL_INVALID', text('GitHub 地址无效', 'The GitHub URL is invalid'))
   }
   if (url.protocol !== 'https:' || url.username || url.password || url.port) {
-    throw new GitHubSkillError('URL_INVALID', '只支持公开的 HTTPS GitHub 地址')
+    throw new GitHubSkillError('URL_INVALID', text('只支持公开的 HTTPS GitHub 地址', 'Only public HTTPS GitHub addresses are supported'))
   }
-  if (url.hostname !== 'github.com') throw new GitHubSkillError('URL_INVALID', '只支持 github.com 上的仓库')
+  if (url.hostname !== 'github.com') {
+    throw new GitHubSkillError('URL_INVALID', text('只支持 github.com 上的仓库', 'Only repositories on github.com are supported'))
+  }
   const parts = url.pathname.split('/').filter(Boolean)
-  if (parts.length < 2) throw new GitHubSkillError('URL_INVALID', '地址里缺少仓库名')
+  if (parts.length < 2) throw new GitHubSkillError('URL_INVALID', text('地址里缺少仓库名', 'The address has no repository name'))
   const target: GitHubRepositoryTarget = {
     owner: safeSegment(parts[0], 'owner'),
     repo: safeSegment(parts[1].replace(/\.git$/i, ''), 'repository'),
   }
   if (parts[2] === 'tree') {
-    if (parts.length < 4) throw new GitHubSkillError('URL_INVALID', '地址里缺少分支名')
+    if (parts.length < 4) throw new GitHubSkillError('URL_INVALID', text('地址里缺少分支名', 'The address has no branch name'))
     target.ref = safeSegment(parts[3], 'ref')
     const prefix = parts.slice(4).filter(Boolean).map((part, index) => safeSegment(part, `path segment ${index + 1}`)).join('/')
     if (prefix) target.pathPrefix = prefix
@@ -215,7 +244,9 @@ export async function scanGitHubSkillRepository(input: string): Promise<GitHubSk
     'application/vnd.github+json',
     1024 * 1024,
   )
-  if (repository === undefined) throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', '仓库不存在，或不是公开仓库')
+  if (repository === undefined) {
+    throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', text('仓库不存在，或不是公开仓库', 'The repository does not exist, or is not public'))
+  }
   let defaultBranch: string
   try {
     const parsed = JSON.parse(repository) as { default_branch?: unknown }
@@ -224,7 +255,7 @@ export async function scanGitHubSkillRepository(input: string): Promise<GitHubSk
     }
     defaultBranch = parsed.default_branch
   } catch {
-    throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', 'GitHub 返回了不支持的默认分支')
+    throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', text('GitHub 返回了不支持的默认分支', 'GitHub returned an unsupported default branch'))
   }
   const ref = target.ref ?? defaultBranch
 
@@ -233,7 +264,9 @@ export async function scanGitHubSkillRepository(input: string): Promise<GitHubSk
     'application/vnd.github+json',
     REPOSITORY_JSON_MAX_BYTES,
   )
-  if (tree === undefined) throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', '读不到仓库的文件列表')
+  if (tree === undefined) {
+    throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', text('读不到仓库的文件列表', 'The repository file list could not be read'))
+  }
   let paths: string[]
   try {
     const parsed = JSON.parse(tree) as { tree?: Array<{ path?: unknown; type?: unknown }>; truncated?: boolean }
@@ -241,7 +274,7 @@ export async function scanGitHubSkillRepository(input: string): Promise<GitHubSk
       .filter(entry => entry.type === 'blob' && typeof entry.path === 'string')
       .map(entry => entry.path as string)
   } catch {
-    throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', '仓库文件列表无法解析')
+    throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', text('仓库文件列表无法解析', 'The repository file list could not be parsed'))
   }
 
   const skillPaths = skillPathsFromTree(paths, target.pathPrefix)
@@ -293,22 +326,27 @@ const repositorySearchCache = new Map<string, { at: number; repositories: GitHub
 /** 按关键字搜 GitHub 仓库：用仓库搜索接口，结果带简介与最后更新时间。 */
 export async function searchGitHubRepositories(query: string): Promise<GitHubRepositorySummary[]> {
   const trimmed = query.trim()
-  if (!trimmed) throw new GitHubSkillError('URL_INVALID', '请输入要搜索的关键字')
-  if (trimmed.length > 120) throw new GitHubSkillError('URL_INVALID', '关键字太长')
+  if (!trimmed) throw new GitHubSkillError('URL_INVALID', text('请输入要搜索的关键字', 'Enter a keyword to search'))
+  if (trimmed.length > 120) throw new GitHubSkillError('URL_INVALID', text('关键字太长', 'The keyword is too long'))
   const cached = repositorySearchCache.get(trimmed)
   if (cached && Date.now() - cached.at < REPOSITORY_SEARCH_TTL_MS) return cached.repositories
 
   const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(trimmed)}&sort=stars&order=desc&per_page=${REPOSITORY_SEARCH_LIMIT}`
-  const text = await fetchText(url, 'application/vnd.github+json', REPOSITORY_JSON_MAX_BYTES)
-  if (text === undefined) throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', '搜索没有返回结果')
+  const payload = await fetchText(url, 'application/vnd.github+json', REPOSITORY_JSON_MAX_BYTES)
+  if (payload === undefined) {
+    throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', text('搜索没有返回结果', 'The search returned no result'))
+  }
   let parsed: { items?: Array<Record<string, unknown>>; message?: unknown }
   try {
-    parsed = JSON.parse(text) as { items?: Array<Record<string, unknown>>; message?: unknown }
+    parsed = JSON.parse(payload) as { items?: Array<Record<string, unknown>>; message?: unknown }
   } catch {
-    throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', '搜索结果的格式无法解析')
+    throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', text('搜索结果的格式无法解析', 'The search result could not be parsed'))
   }
   if (typeof parsed.message === 'string') {
-    throw new GitHubSkillError('REPOSITORY_UNAVAILABLE', parsed.message === 'Validation Failed' ? '关键字不合法' : parsed.message)
+    throw new GitHubSkillError(
+      'REPOSITORY_UNAVAILABLE',
+      parsed.message === 'Validation Failed' ? text('关键字不合法', 'The keyword is invalid') : parsed.message,
+    )
   }
   const repositories: GitHubRepositorySummary[] = []
   for (const item of parsed.items ?? []) {

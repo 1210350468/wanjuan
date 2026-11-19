@@ -9,6 +9,8 @@ import {
   type FanqieRankRequest,
   type FanqieSearchResult,
 } from '../../src/shared/fanqie'
+import { localize, resolveLocale } from '../../src/i18n/core'
+import { mainText } from '../i18n'
 
 /**
  * 番茄书库读取：只抓公开的书籍详情页、榜单页与榜单分类接口。
@@ -25,6 +27,16 @@ export class FanqieLibraryError extends Error {
   constructor(readonly code: FanqieLibraryErrorCode, message: string) {
     super(message)
     this.name = 'FanqieLibraryError'
+  }
+}
+
+/** 这里的报错会原样回到渲染层；语言按「设置里选过的，否则系统语言」，设置目录没就绪时退回系统语言。 */
+function text(zhCNText: string, enUSText: string): string {
+  const systemLocale = Intl.DateTimeFormat().resolvedOptions().locale
+  try {
+    return mainText(systemLocale, zhCNText, enUSText)
+  } catch {
+    return localize(resolveLocale(systemLocale), zhCNText, enUSText)
   }
 }
 
@@ -62,26 +74,31 @@ async function fetchText(url: string, options: { referer?: string; maxBytes: num
     redirect: 'follow',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
-  if (!response.ok) throw new FanqieLibraryError('NETWORK', `番茄书库返回 ${response.status}`)
+  if (!response.ok) {
+    throw new FanqieLibraryError('NETWORK', text(`番茄书库返回 ${response.status}`, `The Fanqie library returned ${response.status}`))
+  }
   const declared = Number(response.headers.get('content-length') ?? 0)
-  if (declared > options.maxBytes) throw new FanqieLibraryError('LIMIT', '番茄书库返回的页面过大')
-  const text = await response.text()
-  if (Buffer.byteLength(text, 'utf8') > options.maxBytes) throw new FanqieLibraryError('LIMIT', '番茄书库返回的页面过大')
-  return text
+  const tooLarge = () => new FanqieLibraryError('LIMIT', text('番茄书库返回的页面过大', 'The page returned by the Fanqie library is too large'))
+  if (declared > options.maxBytes) throw tooLarge()
+  const body = await response.text()
+  if (Buffer.byteLength(body, 'utf8') > options.maxBytes) throw tooLarge()
+  return body
 }
 
 /** 从 HTML 里截出 `__INITIAL_STATE__` 的 JSON 对象，按字符串边界扫描括号，避免字符串里的花括号打断配对。 */
 function extractInitialState(html: string, label: string): Record<string, unknown> {
   const marker = '__INITIAL_STATE__='
   const markerAt = html.indexOf(marker)
-  if (markerAt < 0) throw new FanqieLibraryError('PARSE', `番茄${label}缺少初始数据`)
-  const text = html.slice(markerAt + marker.length)
+  if (markerAt < 0) {
+    throw new FanqieLibraryError('PARSE', text(`番茄${label}缺少初始数据`, `The Fanqie ${label} has no initial data`))
+  }
+  const source = html.slice(markerAt + marker.length)
   let depth = 0
   let inString = false
   let escaped = false
   let end = -1
-  for (let index = 0; index < text.length; index++) {
-    const char = text[index]
+  for (let index = 0; index < source.length; index++) {
+    const char = source[index]
     if (inString) {
       if (escaped) escaped = false
       else if (char === '\\') escaped = true
@@ -95,8 +112,10 @@ function extractInitialState(html: string, label: string): Record<string, unknow
       if (depth === 0) { end = index + 1; break }
     }
   }
-  if (end < 0) throw new FanqieLibraryError('PARSE', `番茄${label}的初始数据不完整`)
-  return parseStateObject(text.slice(0, end), label)
+  if (end < 0) {
+    throw new FanqieLibraryError('PARSE', text(`番茄${label}的初始数据不完整`, `The Fanqie ${label} initial data is incomplete`))
+  }
+  return parseStateObject(source.slice(0, end), label)
 }
 
 /** 榜单页会把没有值的字段写成裸 `undefined`，不是合法 JSON；一次替换后重试。 */
@@ -108,11 +127,11 @@ function parseStateObject(raw: string, label: string): Record<string, unknown> {
     try {
       parsed = JSON.parse(raw.replace(/:undefined(?=[,}\]])/g, ':null'))
     } catch {
-      throw new FanqieLibraryError('PARSE', `番茄${label}的初始数据无法解析`)
+      throw new FanqieLibraryError('PARSE', text(`番茄${label}的初始数据无法解析`, `The Fanqie ${label} initial data could not be parsed`))
     }
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new FanqieLibraryError('PARSE', `番茄${label}的初始数据格式不对`)
+    throw new FanqieLibraryError('PARSE', text(`番茄${label}的初始数据格式不对`, `The Fanqie ${label} initial data has the wrong shape`))
   }
   return parsed as Record<string, unknown>
 }
@@ -159,7 +178,7 @@ function readCategoryTags(value: unknown): string[] {
     try {
       entries = JSON.parse(entries)
     } catch {
-      throw new FanqieLibraryError('PARSE', '番茄书籍页的标签无法解析')
+      throw new FanqieLibraryError('PARSE', text('番茄书籍页的标签无法解析', 'The tags on the Fanqie book page could not be parsed'))
     }
   }
   if (!Array.isArray(entries)) return []
@@ -186,9 +205,11 @@ function readChapterTitles(value: unknown): string[] {
 
 function readBookPageState(state: Record<string, unknown>): BookPageState {
   const page = asRecord(state.page)
-  if (!page) throw new FanqieLibraryError('PARSE', '番茄书籍页缺少作品数据')
+  if (!page) {
+    throw new FanqieLibraryError('PARSE', text('番茄书籍页缺少作品数据', 'The Fanqie book page has no book data'))
+  }
   const bookName = asString(page.bookName).trim()
-  if (!bookName) throw new FanqieLibraryError('NOT_FOUND', '番茄没有返回这本书')
+  if (!bookName) throw new FanqieLibraryError('NOT_FOUND', text('番茄没有返回这本书', 'Fanqie did not return this book'))
   const chapterTitles = readChapterTitles(page.chapterListWithVolume)
   return {
     bookName,
@@ -223,7 +244,7 @@ function toSummary(bookId: string, state: BookPageState): FanqieBookSummary {
 
 /** 读取单本书的公开元数据。 */
 export async function loadFanqieBook(bookId: string): Promise<FanqieBookSummary> {
-  if (!/^\d{8,}$/.test(bookId)) throw new FanqieLibraryError('NOT_FOUND', '书号无效')
+  if (!/^\d{8,}$/.test(bookId)) throw new FanqieLibraryError('NOT_FOUND', text('书号无效', 'The book ID is invalid'))
   const cached = bookCache.get(bookId)
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.summary
   const html = await fetchText(`https://fanqienovel.com/page/${bookId}`, {
@@ -276,7 +297,9 @@ function readCategories(state: Record<string, unknown>): FanqieRankCategories {
   }
   const male = read(list?.male)
   const female = read(list?.female)
-  if (male.length === 0 && female.length === 0) throw new FanqieLibraryError('PARSE', '番茄榜单没有返回分类')
+  if (male.length === 0 && female.length === 0) {
+    throw new FanqieLibraryError('PARSE', text('番茄榜单没有返回分类', 'The Fanqie ranking returned no categories'))
+  }
   return { male, female }
 }
 
@@ -375,7 +398,9 @@ async function bingBookIds(keyword: string): Promise<string[]> {
 /** 关键词检索：先按书号直取，再用 Bing 站内检索，最后用榜单书名兜底。 */
 export async function searchFanqieBooks(keyword: string): Promise<FanqieSearchResult> {
   const trimmed = keyword.trim()
-  if (!trimmed) throw new FanqieLibraryError('NOT_FOUND', '请输入书名、关键词或番茄书籍链接')
+  if (!trimmed) {
+    throw new FanqieLibraryError('NOT_FOUND', text('请输入书名、关键词或番茄书籍链接', 'Enter a title, keyword, or Fanqie book link'))
+  }
 
   const directId = parseFanqieBookId(trimmed)
   if (directId) {
@@ -401,7 +426,10 @@ export async function searchFanqieBooks(keyword: string): Promise<FanqieSearchRe
   const rank = await loadFanqieRank()
   const matched = rank.candidates.filter(book => book.bookName.includes(trimmed) || book.author.includes(trimmed))
   if (matched.length === 0) {
-    throw new FanqieLibraryError('NOT_FOUND', `没有找到与“${trimmed}”相关的作品，可以直接粘贴番茄书籍链接`)
+    throw new FanqieLibraryError('NOT_FOUND', text(
+      `没有找到与“${trimmed}”相关的作品，可以直接粘贴番茄书籍链接`,
+      `No book matching "${trimmed}" was found; paste a Fanqie book link instead`,
+    ))
   }
   return { source: 'rank', candidates: matched, note: note ?? '这些是榜单里书名匹配的作品。' }
 }

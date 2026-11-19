@@ -55,6 +55,7 @@ beforeEach(async () => {
     if (channel === 'fanqie:search') return { success: true, result: { source: 'keyword', candidates } }
     if (channel === 'fanqie:rank') return { success: true, result: rankPage(payload?.gender ?? 1, payload?.categoryId || '1141') }
     if (channel === 'dialog:select-folder') return { grantId: 'grant-1', displayName: '我的小说' }
+    if (channel === 'llm:complete-once') return { success: true, text: '第一条方向：悬疑骨架，节奏更快。\n第二条方向：加入都市日常，主打成长。' }
     throw new Error(`Unexpected IPC channel ${channel}`)
   })
   Object.defineProperty(window, 'aiNovelAPI', {
@@ -127,5 +128,61 @@ describe('番茄书库', () => {
     await act(async () => fuseButton.click())
     await expect.element(page.getByText(/请先在设置里配置 AI 模型/u)).toBeVisible()
     expect(invoke).not.toHaveBeenCalledWith('project:create', expect.anything())
+  })
+
+  it('勾选之后给出这套组合的题材、规模与风险提示', async () => {
+    await page.getByLabelText('书名、关键词或书籍链接').fill('十日终焉')
+    await act(async () => page.getByRole('button', { name: '搜索' }).click())
+    const list = page.getByRole('list', { name: '书籍结果' })
+    await act(async () => list.getByText('十日终焉', { exact: true }).click())
+    await act(async () => list.getByText('规则怪谈', { exact: true }).click())
+
+    await expect.element(page.getByText(/这套组合：悬疑脑洞/u)).toBeVisible()
+    await expect.element(page.getByText(/规模：300 章 × 每章约 2,100 字/u)).toBeVisible()
+    await expect.element(page.getByText(/标签重合 33%，骨架一致，还能各带一点新意。/u)).toBeVisible()
+    await expect.element(page.getByText(/每章 2,100 字，比平台主流短/u)).toBeVisible()
+  })
+
+  it('帮我配一单：一键选好参考作品并说明为什么这么配', async () => {
+    await page.getByLabelText('书名、关键词或书籍链接').fill('十日终焉')
+    await act(async () => page.getByRole('button', { name: '搜索' }).click())
+
+    await act(async () => page.getByRole('button', { name: '帮我配一单' }).click())
+    await expect.element(page.getByText('已选 2 本（最多 5 本）')).toBeVisible()
+    await expect.element(page.getByText(/配了 2 本：《/u)).toBeVisible()
+    await expect.element(page.getByText(/共同 悬疑脑洞/u)).toBeVisible()
+    await expect.element(page.getByRole('button', { name: '融合并新建作品' })).toBeEnabled()
+    // 没手动起名时先用推荐名占位，融合不会被名字挡住。
+    await expect.element(page.getByLabelText('新作品名称')).toHaveValue('悬疑脑洞融合')
+
+    // 手动改选之后，上一单的说明不再挂着。
+    const list = page.getByRole('list', { name: '书籍结果' })
+    await act(async () => list.getByText('规则怪谈', { exact: true }).click())
+    await expect.element(page.getByText('已选 1 本（最多 5 本）')).toBeVisible()
+    expect(document.body.textContent).not.toContain('配了 2 本')
+  })
+
+  it('AI 定方向把两条候选写出来，点一条填进融合取向', async () => {
+    useLLMStore.setState({
+      ...originalLLMState,
+      models: [{ id: 'model-1', name: '测试模型', purposes: ['generation'] }],
+      defaultModelId: 'model-1',
+      stageModelIds: {},
+    } as never)
+
+    await page.getByLabelText('书名、关键词或书籍链接').fill('十日终焉')
+    await act(async () => page.getByRole('button', { name: '搜索' }).click())
+    const list = page.getByRole('list', { name: '书籍结果' })
+    await act(async () => list.getByText('十日终焉', { exact: true }).click())
+    await act(async () => list.getByText('规则怪谈', { exact: true }).click())
+
+    await act(async () => page.getByRole('button', { name: 'AI 定方向' }).click())
+    expect(invoke).toHaveBeenCalledWith('llm:complete-once', expect.objectContaining({ modelId: 'model-1' }))
+    await expect.element(page.getByRole('button', { name: '第一条方向：悬疑骨架，节奏更快。' })).toBeVisible()
+
+    const focus = page.getByLabelText('融合取向（可留空）')
+    await expect.element(focus).toHaveValue('第一条方向：悬疑骨架，节奏更快。')
+    await act(async () => page.getByRole('button', { name: '第二条方向：加入都市日常，主打成长。' }).click())
+    await expect.element(focus).toHaveValue('第二条方向：加入都市日常，主打成长。')
   })
 })
