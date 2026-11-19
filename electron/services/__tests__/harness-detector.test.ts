@@ -170,7 +170,9 @@ describe('openHarnessLogin', () => {
     const { calls, unref, spawnImpl } = fakeSpawn()
     expect(openHarnessLogin('codex', { platform: 'win32', spawnImpl })).toEqual({ command: 'codex login' })
     expect(calls[0]?.command).toBe('cmd.exe')
-    expect(calls[0]?.args.join(' ')).toContain('codex login')
+    expect(calls[0]?.args.join(' ')).toContain('start cmd /k codex login')
+    // start 的空标题经过 Node 参数转义后会变成找不到的文件名，不能再写回去。
+    expect(calls[0]?.args.join(' ')).not.toContain('start ""')
     expect(calls[0]?.options).toMatchObject({ detached: true, stdio: 'ignore' })
     // windowsHide 会把 start 开出来的终端一起藏掉，点了登录就像没反应。
     expect(calls[0]?.options?.windowsHide).not.toBe(true)

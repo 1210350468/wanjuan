@@ -236,8 +236,9 @@ export function openHarnessLogin(id: HarnessId, { platform = process.platform, s
   if (!spec) throw new Error(text('不认识这个执行器', 'Unknown harness'))
   if (platform === 'win32') {
     // 登录命令都来自上面的常量表，不含作者输入；`cmd /k` 让窗口在登录后留着，方便看结果。
-    // 不能加 windowsHide：它会把 start 开出来的新终端一起藏掉，点了登录就像没反应。
-    const child = spawnImpl('cmd.exe', ['/c', `start "" cmd /k ${spec.loginCommand}`], { detached: true, stdio: 'ignore' })
+    // 不要写 start ""：Node 会把嵌套引号转义，cmd 会把空标题当成文件名去打开，弹「找不到 \ 文件」。
+    // 不加密切标题时，start 的第一个裸词就是命令本身。
+    const child = spawnImpl('cmd.exe', ['/c', `start cmd /k ${spec.loginCommand}`], { detached: true, stdio: 'ignore' })
     child.unref()
     return { command: spec.loginCommand }
   }
