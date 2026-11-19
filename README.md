@@ -198,6 +198,8 @@
 
 除了填 API Key，也可以让万卷直接调用你已经登录的命令行 agent：订阅了 ChatGPT 就填 `codex`，有 Google 账号就填 `gemini`，用 Claude 就填 `claude`，这些工具走的是你自己的订阅额度，不用另外配 Key。
 
+进到这一页不用自己查命令：软件会扫一遍 PATH（含 `~/.local/bin`、Homebrew、npm 全局目录这些图形启动时拿不到的目录），跑一次 `--version`，再看凭据文件在不在，把 `codex`、`gemini`、`claude`、`agy` 的「装没装、什么版本、登录没登录」直接列出来。已经登录的点「用这个」就把命令与参数填好；没登录的点「登录」，会在系统终端里打开 `codex login` 或 `claude`（在 Claude Code 里输入 `/login`），授权完切回应用会自动重新检测。
+
 ```text
 设置 → AI 模型 → 新建 → 服务商：本机执行器（CLI）
 执行器：  Codex / Gemini CLI / Claude Code / agy / 自定义
@@ -206,9 +208,10 @@
 ```
 
 <p align="center">
-  <img src="docs/assets/readme/retro/settings-harness.png" alt="设置页的本机执行器：服务商选「本机执行器（CLI）」，执行器选 Codex 预设后自动填好命令 codex 与参数 exec {{prompt}}" width="100%" />
+  <img src="docs/assets/readme/retro/settings-harness.png" alt="设置页的本机执行器：上面列出检测到的 Codex、Claude Code、agy 与它们的版本和登录状态，点「用这个」后自动填好命令 codex 与参数 exec {{prompt}}" width="100%" />
 </p>
 
+检测只读：凭据文件只判断存在与大小，不读取内容，也不会上传。登录交给系统终端，应用本身不接触 token。
 参数里写 `{{prompt}}` 表示把提示词放在那个位置；不写就让提示词从标准输入送进去。执行器没有 system 角色，提示词按消息顺序拼成一段。它不返回 token 用量，所以正文生成的用量统计会缺这一段，适合选题、起名、定方向这类小任务。
 
 ### 用 Ollama 跑本地模型

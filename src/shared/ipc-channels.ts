@@ -642,6 +642,18 @@ export interface LLMChannels {
   }
 }
 
+/** 本机执行器（codex / gemini / claude / agy）的探测与登录。 */
+export interface HarnessChannels {
+  'harness:detect': {
+    args: []
+    return: { success: boolean; detection?: import('./harness').HarnessDetection; error?: string }
+  }
+  'harness:login': {
+    args: [request: { id: import('./harness').HarnessId }]
+    return: { success: boolean; command?: string; error?: string }
+  }
+}
+
 // ===== 公共数据类型 =====
 export interface ProjectData {
   id: string
@@ -1439,7 +1451,7 @@ export interface MCPChannels {
 }
 
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = LegacyRosterGenerationChannels & CharacterAvatarChannels & CloudBackupChannels & GraphGenerationChannels & FinalizationGenerationChannels & EditorInlineGenerationChannels & ImportGenerationChannels & AgentGenerationChannels & ReviewRevisionGenerationInvokeChannels & FinalizedCharacterGenerationChannels & CharacterProposalChannels & GenerationOwnerChannels & StartupChannels & WindowChannels & OfficialHomepageChannels & ModelProviderResourceChannels & ConfigChannels & UpdateChannels & ProjectChannels & FileChannels & AppDataChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ChapterLifecycleChannels & ImportChannels & FanqieChannels & MCPChannels
+export type AllInvokeChannels = LegacyRosterGenerationChannels & CharacterAvatarChannels & CloudBackupChannels & GraphGenerationChannels & FinalizationGenerationChannels & EditorInlineGenerationChannels & ImportGenerationChannels & AgentGenerationChannels & ReviewRevisionGenerationInvokeChannels & FinalizedCharacterGenerationChannels & CharacterProposalChannels & GenerationOwnerChannels & StartupChannels & WindowChannels & OfficialHomepageChannels & ModelProviderResourceChannels & ConfigChannels & UpdateChannels & ProjectChannels & FileChannels & AppDataChannels & LLMChannels & HarnessChannels & DatabaseChannels & KnowledgeBaseChannels & ChapterLifecycleChannels & ImportChannels & FanqieChannels & MCPChannels
 export type AllEventChannels = GenerationOwnerEvents & UpdateStateEvents & WindowEvents
 
 /** 提取 invoke 频道名 */

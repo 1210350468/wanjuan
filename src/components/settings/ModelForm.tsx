@@ -16,6 +16,7 @@ import { displayedErrorMessage, englishWithReason } from '../../i18n/app-errors'
 import { ModelReasoningOverrideSettings, ModelCapabilitySources, ProjectCreativeStrategySettings } from './ReasoningPolicySettings'
 import { openModelProviderResource } from './model-provider-resource'
 import { ModelNameField } from './ModelNameField'
+import { HarnessDetectPanel } from './HarnessDetectPanel'
 
 /** 停止输入 base_url 或 API Key 这么久之后自动获取模型列表。 */
 const AUTO_DISCOVERY_DELAY_MS = 500
@@ -532,6 +533,8 @@ export function ModelForm({
 
       {isHarness && (
         <div className="space-y-3 rounded-lg p-3" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-hover)' }}>
+          {/* 先扫描本机：装了什么、登录没登录，作者不用自己去查。 */}
+          <HarnessDetectPanel onPick={(candidate) => applyHarnessPreset(candidate.id)} />
           <div>
             <Label htmlFor="model-harness-preset">{text('执行器', 'Harness')}</Label>
             <NativeSelect

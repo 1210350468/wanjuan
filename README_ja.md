@@ -198,6 +198,8 @@
 
 API キーの代わりに、すでにログインしているコマンドライン agent をそのまま呼べます。ChatGPT を契約していれば `codex`、Google アカウントがあれば `gemini`、Claude なら `claude` を指定します。いずれも自分の契約枠を使うので、別のキーは要りません。
 
+コマンドを自分で調べる必要はありません。この画面は PATH（GUI 起動では引き継がれない `~/.local/bin`、Homebrew、npm のグローバルディレクトリも含む）を走査し、`--version` を 1 回実行し、認証情報ファイルの有無を確認して、`codex`、`gemini`、`claude`、`agy` の「入っているか、どのバージョンか、ログイン済みか」を一覧で出します。ログイン済みなら「これを使う」でコマンドと引数が入り、未ログインなら「ログイン」でシステムのターミナルに `codex login` または `claude`（Claude Code 内で `/login`）が開きます。アプリに戻ると自動で再検出します。
+
 ```text
 設定 → AI モデル → 新規 → プロバイダー: ローカル実行器（CLI）
 実行器:  Codex / Gemini CLI / Claude Code / agy / カスタム
@@ -208,8 +210,10 @@ API キーの代わりに、すでにログインしているコマンドライ�
 引数に `{{prompt}}` を書くとその位置にプロンプトが入り、書かなければ標準入力から渡します。実行器には system ロールがないため、メッセージは順番に連結されます。token 使用量は返らないので本文生成の集計はその分欠けますが、选题、タイトル、方向づけのような小さい作業に向いています。
 
 <p align="center">
-  <img src="docs/assets/readme/retro-en/settings-harness.png" alt="設定のローカル実行器：プロバイダーで「ローカル実行器（CLI）」を選び、実行器で Codex プリセットを選ぶとコマンド codex と引数 exec {{prompt}} が入る" width="100%" />
+  <img src="docs/assets/readme/retro-en/settings-harness.png" alt="設定のローカル実行器：検出された Codex、Claude Code、agy とそれぞれのバージョン・ログイン状態が並び、「これを使う」でコマンド codex と引数 exec {{prompt}} が入る" width="100%" />
 </p>
+
+検出は読み取りのみです。認証情報ファイルは存在とサイズだけを見て中身は読まず、どこにも送信しません。ログインはシステムのターミナルで行うので、アプリ自身は token に触れません。
 
 ### Ollama でローカルモデルを動かす
 

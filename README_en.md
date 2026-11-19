@@ -198,6 +198,8 @@ Semantic search in the knowledge base needs a separate embedding model, configur
 
 Besides an API key, Wanjuan can call an agent CLI you are already signed in to: with a ChatGPT subscription use `codex`, with a Google account use `gemini`, with Claude use `claude`. Those tools spend your own subscription quota, so no separate key is needed.
 
+You do not have to work out the command yourself. The page scans PATH (including `~/.local/bin`, Homebrew, and the npm global directory, which a GUI launch does not inherit), runs `--version` once, and checks whether credential files exist, then lists `codex`, `gemini`, `claude`, and `agy` with their version and sign-in state. Choose "Use this" on a signed-in one and the command and arguments are filled in; choose "Sign in" on the others and the system terminal opens `codex login` or `claude` (type `/login` inside Claude Code). Come back to the app and it checks again by itself.
+
 ```text
 Settings -> AI models -> New -> Provider: Local harness (CLI)
 Harness:  Codex / Gemini CLI / Claude Code / agy / Custom
@@ -208,8 +210,10 @@ Arguments: exec {{prompt}}
 Put `{{prompt}}` where the prompt should go in the arguments; leave it out and the prompt is written to standard input. A harness has no system role, so messages are joined in order. It reports no token usage, so generation accounting misses that part; it suits small tasks such as topic picking, titles, and directions.
 
 <p align="center">
-  <img src="docs/assets/readme/retro-en/settings-harness.png" alt="The harness settings page: provider Local harness (CLI) with the Codex preset filling in command codex and arguments exec {{prompt}}" width="100%" />
+  <img src="docs/assets/readme/retro-en/settings-harness.png" alt="The harness settings page: detected Codex, Claude Code, and agy with their versions and sign-in state; choosing Use this on Codex fills in command codex and arguments exec {{prompt}}" width="100%" />
 </p>
+
+Detection is read-only: credential files are checked for existence and size, never read, and nothing is uploaded. Sign-in happens in the system terminal, so the app itself never touches a token.
 
 ### Run a local model with Ollama
 
