@@ -180,8 +180,13 @@ describe('stable reference knowledge receipt', () => {
       data: [{ index: 0, embedding: [0.1, 0.2, 0.3] }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     let finishFirstEmbedding!: (response: Response) => void
+    let observeFetch!: () => void
+    const fetchObserved = new Promise<void>((resolve) => {
+      observeFetch = resolve
+    })
     const fetchMock = vi.fn()
       .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        observeFetch()
         finishFirstEmbedding = resolve
       }))
       .mockImplementation(async () => embeddingResponse())
@@ -202,7 +207,10 @@ describe('stable reference knowledge receipt', () => {
       'openai',
       embeddingModel,
     )
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    // 不能在这里用 vi.waitFor：假计时器开启时它每轮会把假 Date 往前推 50ms，
+    // 还没等到 fetch 就把 100ms 的导入授权烧过期，导致 import 走 FTS-only。
+    await fetchObserved
+    expect(fetchMock).toHaveBeenCalledTimes(1)
 
     vi.setSystemTime(2_101)
     const takeover = ImportRunRepository.startOrResume('single-flight-run', 'renderer-b', 2_101, 10_000)
@@ -263,8 +271,13 @@ describe('stable reference knowledge receipt', () => {
       data: [{ index: 0, embedding: [0.1, 0.2, 0.3] }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     let finishFirstEmbedding!: (response: Response) => void
+    let observeFetch!: () => void
+    const fetchObserved = new Promise<void>((resolve) => {
+      observeFetch = resolve
+    })
     const fetchMock = vi.fn()
       .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        observeFetch()
         finishFirstEmbedding = resolve
       }))
       .mockImplementation(async () => embeddingResponse())
@@ -287,7 +300,9 @@ describe('stable reference knowledge receipt', () => {
         embeddingOptions: { chunkSize: 100, chunkOverlap: 0, batchSize: 1 },
       },
     )
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    // 同上：用 fetch 调用信号代替 vi.waitFor，避免轮询推进假 Date 烧掉授权租约。
+    await fetchObserved
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     vi.setSystemTime(3_101)
     finishFirstEmbedding(embeddingResponse())
 

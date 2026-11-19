@@ -29,6 +29,17 @@ function tempRoot(prefix: string): string {
   return root
 }
 
+/** 逐文件复制：受限运行时会拦截 fs.cpSync 的 recursive 分支并直接结束进程。 */
+function copyDirectory(source: string, destination: string): void {
+  fs.mkdirSync(destination, { recursive: true })
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    const from = path.join(source, entry.name)
+    const to = path.join(destination, entry.name)
+    if (entry.isDirectory()) copyDirectory(from, to)
+    else fs.copyFileSync(from, to)
+  }
+}
+
 function dataFileFooters(databaseDirectory: string): string[] {
   const footers: string[] = []
   for (const table of fs.readdirSync(databaseDirectory)) {
@@ -136,7 +147,7 @@ describe('LanceDB 契约', () => {
       .map(file => /^\.vela\/lancedb\/([^/]+)\.lance\//.exec(file)?.[1])
       .filter((name): name is string => Boolean(name)))].sort()
     const directory = path.join(tempRoot('lance-contract-fixture-'), 'lancedb')
-    fs.cpSync(path.join(FIXTURE_ROOT, caseDirectory, '.vela', 'lancedb'), directory, { recursive: true })
+    copyDirectory(path.join(FIXTURE_ROOT, caseDirectory, '.vela', 'lancedb'), directory)
 
     const db = await openLanceDatabase(directory)
     try {
