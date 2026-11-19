@@ -157,10 +157,10 @@ describe('detectHarnesses', () => {
 
 describe('openHarnessLogin', () => {
   const fakeSpawn = () => {
-    const calls: { command: string, args: string[] }[] = []
+    const calls: { command: string, args: string[], options?: Record<string, unknown> }[] = []
     const unref = vi.fn()
-    const spawnImpl = ((command: string, args: string[]) => {
-      calls.push({ command, args })
+    const spawnImpl = ((command: string, args: string[], options?: Record<string, unknown>) => {
+      calls.push({ command, args, options })
       return { unref } as never
     }) as never
     return { calls, unref, spawnImpl }
@@ -171,6 +171,9 @@ describe('openHarnessLogin', () => {
     expect(openHarnessLogin('codex', { platform: 'win32', spawnImpl })).toEqual({ command: 'codex login' })
     expect(calls[0]?.command).toBe('cmd.exe')
     expect(calls[0]?.args.join(' ')).toContain('codex login')
+    expect(calls[0]?.options).toMatchObject({ detached: true, stdio: 'ignore' })
+    // windowsHide 会把 start 开出来的终端一起藏掉，点了登录就像没反应。
+    expect(calls[0]?.options?.windowsHide).not.toBe(true)
     expect(unref).toHaveBeenCalled()
   })
 

@@ -103,7 +103,8 @@ describe('本机执行器检测', () => {
     const signIn = [...row('claude')!.querySelectorAll('button')].find(button => button.textContent?.includes('登录'))
     await act(async () => signIn?.click())
     await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('harness:login', { id: 'claude' }))
-    await vi.waitFor(() => expect(container?.textContent).toContain('已在终端打开 claude'))
+    await vi.waitFor(() => expect(container?.textContent).toContain('已尝试在终端打开 claude'))
+    expect(container?.textContent).toContain('请自己打开终端运行 claude')
   })
 
   it('检测接口报错时说明原因，不留一片空白', async () => {

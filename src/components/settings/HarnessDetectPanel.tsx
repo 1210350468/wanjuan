@@ -89,9 +89,10 @@ export function HarnessDetectPanel({ onPick }: HarnessDetectPanelProps) {
         setError(displayedErrorMessage(locale, result.error))
         return
       }
+      const command = result.command ?? candidate.loginCommand
       setNotice(text(
-        `已在终端打开 ${result.command ?? candidate.loginCommand}。${LOGIN_STEPS[candidate.id][0]}`,
-        `Opened ${result.command ?? candidate.loginCommand} in a terminal. ${LOGIN_STEPS[candidate.id][1]}`,
+        `已尝试在终端打开 ${command}。没看到窗口的话，请自己打开终端运行 ${command}。${LOGIN_STEPS[candidate.id][0]}`,
+        `Tried to open ${command} in a terminal. If no window appears, open a terminal yourself and run ${command}. ${LOGIN_STEPS[candidate.id][1]}`,
       ))
     } catch (cause) {
       setError(displayedErrorMessage(locale, cause instanceof Error ? cause.message : undefined))
