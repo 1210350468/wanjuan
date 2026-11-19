@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   buildFanqieFusionBrief,
   buildFanqieSelectionInsight,
+  buildFanqieSelectionScore,
   FANQIE_FUSION_MAX_BOOKS,
   FANQIE_TITLE_SAMPLE_LIMIT,
   parseFanqieBookId,
   sampleChapterTitles,
+  scoreFanqieBook,
   suggestFanqieBundle,
   type FanqieBookSummary,
 } from '../fanqie'
@@ -106,7 +108,8 @@ describe('buildFanqieSelectionInsight', () => {
     ])
     expect(insight.primaryTag).toBe('悬疑脑洞')
     expect(insight.sharedTags).toEqual(['悬疑脑洞'])
-    expect(insight.overlap).toBe(0.2)
+    // 三本各 3、2、2 个标签，共同标签 1 个：分母取平均 2.33 个，重合 3/7。
+    expect(insight.overlap).toBeCloseTo(3 / 7, 5)
     expect(insight.totalChapters).toBe(300)
     expect(insight.wordsPerChapter).toBe(2000)
     expect(insight.medianReads).toBe(1_713_524)
@@ -146,6 +149,75 @@ describe('buildFanqieSelectionInsight', () => {
   })
 })
 
+describe('scoreFanqieBook', () => {
+  it('热度按对数刻度给分：在读越多分越高，且封在 0 到 100', () => {
+    const low = scoreFanqieBook(book({ readCount: 1_000 }))
+    const mid = scoreFanqieBook(book({ readCount: 1_000_000 }))
+    const high = scoreFanqieBook(book({ readCount: 50_000_000 }))
+    expect(low.heat).toBe(0)
+    expect(mid.heat).toBeGreaterThan(70)
+    expect(mid.heat).toBeLessThan(80)
+    expect(high.heat).toBe(100)
+  })
+
+  it('单章字数落在主流区间给满分，明显偏短偏厚都扣分', () => {
+    expect(scoreFanqieBook(book({ chapterCount: 1000, wordNumber: 3_000_000 })).pace).toBe(100)
+    expect(scoreFanqieBook(book({ chapterCount: 1500, wordNumber: 3_000_000 })).pace).toBe(80)
+    expect(scoreFanqieBook(book({ chapterCount: 2000, wordNumber: 3_000_000 })).pace).toBe(60)
+    expect(scoreFanqieBook(book({ chapterCount: 200, wordNumber: 1_400_000 })).pace).toBe(40)
+  })
+
+  it('完结的结构分高于连载，连载按已写章数递增', () => {
+    const completed = scoreFanqieBook(book({ chapterCount: 600, status: 'completed' }))
+    const longRunning = scoreFanqieBook(book({ chapterCount: 600, status: 'ongoing' }))
+    const justStarted = scoreFanqieBook(book({ chapterCount: 40, status: 'ongoing' }))
+    expect(completed.structure).toBe(100)
+    expect(longRunning.structure).toBeLessThan(completed.structure)
+    expect(justStarted.structure).toBeLessThan(longRunning.structure)
+  })
+
+  it('缺章数或字数时不留满分，总分仍在 0 到 100', () => {
+    const unknown = scoreFanqieBook(book({ chapterCount: 0, wordNumber: 0, readCount: 0, status: 'unknown' }))
+    expect(unknown.retention).toBe(0)
+    expect(unknown.pace).toBe(30)
+    expect(unknown.total).toBeGreaterThanOrEqual(0)
+    expect(unknown.total).toBeLessThanOrEqual(100)
+  })
+})
+
+describe('buildFanqieSelectionScore', () => {
+  it('四维取中位数，题材集中时给满分，总分在 0 到 100', () => {
+    const score = buildFanqieSelectionScore([
+      book(),
+      book({ bookId: '7000000000000000002', tags: ['悬疑脑洞', '规则怪谈'], chapterCount: 400, wordNumber: 1_000_000, status: 'ongoing' }),
+      book({ bookId: '7000000000000000003', tags: ['悬疑脑洞', '刑侦'], chapterCount: 500, wordNumber: 1_500_000 }),
+    ])
+    expect(score.books).toHaveLength(3)
+    expect(score.focus).toBe(100)
+    expect(score.total).toBeGreaterThan(50)
+    expect(score.total).toBeLessThanOrEqual(100)
+  })
+
+  it('标签分散与几乎同质都拉低集中度', () => {
+    const scattered = buildFanqieSelectionScore([
+      book({ tags: ['悬疑脑洞', '推理'] }),
+      book({ bookId: '7000000000000000002', tags: ['都市日常', '种田'] }),
+    ])
+    const identical = buildFanqieSelectionScore([
+      book(),
+      book({ bookId: '7000000000000000002', tags: ['悬疑脑洞', '推理', '无限流'] }),
+    ])
+    expect(scattered.focus).toBe(45)
+    expect(identical.focus).toBe(55)
+    expect(scattered.total).toBeLessThan(identical.total + 60)
+  })
+
+  it('选书诊断里带出这套组合的评分，且和单独调用一致', () => {
+    const books = [book(), book({ bookId: '7000000000000000002', tags: ['悬疑脑洞', '刑侦'] })]
+    expect(buildFanqieSelectionInsight(books).score).toEqual(buildFanqieSelectionScore(books))
+  })
+})
+
 describe('suggestFanqieBundle', () => {
   const candidates: FanqieBookSummary[] = [
     book({ bookId: '7000000000000000001', bookName: '十日终焉', tags: ['悬疑脑洞', '推理', '无限流'], readCount: 1_713_524 }),
@@ -166,6 +238,10 @@ describe('suggestFanqieBundle', () => {
     expect(suggestion!.addedTags.length).toBeGreaterThan(0)
     expect(suggestion!.addedTags).not.toContain('悬疑脑洞')
     expect(suggestion!.alternatives).toBeGreaterThanOrEqual(1)
+    // 配单结果自带评分，界面直接显示，不用再算一遍。
+    expect(suggestion!.score.total).toBeGreaterThan(0)
+    expect(suggestion!.score.total).toBeLessThanOrEqual(100)
+    expect(suggestion!.score.focus).toBe(100)
   })
 
   it('候选少于两本时给不出建议', () => {
@@ -175,7 +251,7 @@ describe('suggestFanqieBundle', () => {
 
   it('候选很少时配满候选，不重复同一本', () => {
     const suggestion = suggestFanqieBundle([candidates[0], candidates[0], candidates[2]], 3)
-    expect(suggestion!.books.map(entry => entry.bookId)).toEqual(['7000000000000000001', '7000000000000000003'])
+    expect(suggestion!.books.map(entry => entry.bookId).sort()).toEqual(['7000000000000000001', '7000000000000000003'])
     expect(suggestion!.alternatives).toBe(0)
   })
 

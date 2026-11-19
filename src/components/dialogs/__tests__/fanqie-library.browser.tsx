@@ -139,8 +139,26 @@ describe('番茄书库', () => {
 
     await expect.element(page.getByText(/这套组合：悬疑脑洞/u)).toBeVisible()
     await expect.element(page.getByText(/规模：300 章 × 每章约 2,100 字/u)).toBeVisible()
-    await expect.element(page.getByText(/标签重合 33%，骨架一致，还能各带一点新意。/u)).toBeVisible()
+    await expect.element(page.getByText(/标签重合 50%，骨架一致，还能各带一点新意。/u)).toBeVisible()
     await expect.element(page.getByText(/每章 2,100 字，比平台主流短/u)).toBeVisible()
+
+    // 多维度评分：综合分 + 五个分项，勾选之后就能看到。
+    const scorePanel = page.getByLabelText('这套组合的评分')
+    await expect.element(scorePanel.getByText('综合', { exact: true })).toBeVisible()
+    await expect.element(scorePanel.getByText('92', { exact: true })).toBeVisible()
+    for (const label of ['题材集中', '热度', '追读', '结构', '节奏']) {
+      await expect.element(scorePanel.getByText(label, { exact: true })).toBeVisible()
+    }
+  })
+
+  it('每张候选卡片直接给出综合评分，挑书前就能比', async () => {
+    await page.getByLabelText('书名、关键词或书籍链接').fill('十日终焉')
+    await act(async () => page.getByRole('button', { name: '搜索' }).click())
+    const list = page.getByRole('list', { name: '书籍结果' })
+    const badges = list.element().querySelectorAll('span[title^="综合评分"]')
+    expect(badges).toHaveLength(2)
+    expect(Number(badges[0].textContent)).toBeGreaterThan(0)
+    expect(Number(badges[0].textContent)).toBeLessThanOrEqual(100)
   })
 
   it('帮我配一单：一键选好参考作品并说明为什么这么配', async () => {

@@ -130,6 +130,111 @@ export type FanqieChapterDensity = 'thin' | 'normal' | 'thick'
 /** 几本书叠在一起之后的题材重合程度：分散、正常、几乎同类。 */
 export type FanqieBlendRisk = 'scattered' | 'balanced' | 'identical'
 
+/**
+ * 共同标签占「每本平均标签数」的比例，0 到 1。
+ * 用平均标签数当分母而不是并集：每本各带一个独有的细分标签时，并集会把这些差异都算进分母，
+ * 让本来同属一个题材的组合看起来像各不相干。
+ */
+function overlapRatio(books: readonly FanqieBookSummary[]): number {
+  const total = books.reduce((sum, book) => sum + book.tags.length, 0)
+  if (total === 0) return 0
+  return clamp(sharedTags(books).length / (total / books.length), 0, 1)
+}
+
+/**
+ * 单本参考作品的四维评分，0 到 100。
+ * 维度与阈值取自番茄上常见的量级，只用书籍页的公开字段，同样的数据每次得分相同。
+ */
+export interface FanqieBookScore {
+  /** 热度：在读人数，按 1 千到 1 千万的对数刻度铺满。 */
+  heat: number
+  /** 追读强度：在读人数除以章节数，看每章聚住多少读者。 */
+  retention: number
+  /** 结构完整度：完结优于连载，连载按已写章数给分，越完整越能把节奏照下来。 */
+  structure: number
+  /** 单章节奏：单章字数是否落在平台主流的 2200 到 3800 字。 */
+  pace: number
+  /** 加权总分。 */
+  total: number
+}
+
+function heatScore(readCount: number): number {
+  return clamp(Math.round((Math.log10(readCount + 1) - 3) / 4 * 100), 0, 100)
+}
+
+function retentionScore(book: FanqieBookSummary): number {
+  if (book.chapterCount <= 0 || book.readCount <= 0) return 0
+  return clamp(Math.round((Math.log10(book.readCount / book.chapterCount) - 1) / 2 * 100), 0, 100)
+}
+
+function structureScore(book: FanqieBookSummary): number {
+  if (book.chapterCount <= 0) return 20
+  if (book.status === 'completed') return 100
+  if (book.status === 'ongoing') return clamp(Math.round(book.chapterCount / 300 * 80), 20, 90)
+  return 40
+}
+
+function paceScore(book: FanqieBookSummary): number {
+  if (book.chapterCount <= 0 || book.wordNumber <= 0) return 30
+  const perChapter = book.wordNumber / book.chapterCount
+  if (perChapter >= 2200 && perChapter <= 3800) return 100
+  if (perChapter >= 1800 && perChapter <= 4200) return 80
+  if (perChapter >= 1500 && perChapter <= 4800) return 60
+  return 40
+}
+
+export function scoreFanqieBook(book: FanqieBookSummary): FanqieBookScore {
+  const heat = heatScore(book.readCount)
+  const retention = retentionScore(book)
+  const structure = structureScore(book)
+  const pace = paceScore(book)
+  return {
+    heat,
+    retention,
+    structure,
+    pace,
+    total: Math.round(0.3 * heat + 0.2 * retention + 0.25 * structure + 0.25 * pace),
+  }
+}
+
+export interface FanqieSelectionScore {
+  /** 几本的中位分数，避免一本爆款把整单分数抬起来。 */
+  heat: number
+  retention: number
+  structure: number
+  pace: number
+  /** 题材集中度：标签太散扣分，几本几乎同质也扣分。 */
+  focus: number
+  total: number
+  books: FanqieBookScore[]
+}
+
+/** 这一单组合的评分：四维取中位数，再加上题材集中度。 */
+export function buildFanqieSelectionScore(books: readonly FanqieBookSummary[]): FanqieSelectionScore {
+  if (books.length === 0) throw new Error('FANQIE_SELECTION_EMPTY')
+  if (books.length > FANQIE_FUSION_MAX_BOOKS) throw new Error('FANQIE_SELECTION_TOO_MANY')
+
+  const scores = books.map(scoreFanqieBook)
+  const heat = median(scores.map(score => score.heat))
+  const retention = median(scores.map(score => score.retention))
+  const structure = median(scores.map(score => score.structure))
+  const pace = median(scores.map(score => score.pace))
+  const overlap = overlapRatio(books)
+  const focus = books.length < 2
+    ? 100
+    : overlap < 0.2 ? 45 : overlap >= 0.8 ? 55 : 100
+
+  return {
+    heat,
+    retention,
+    structure,
+    pace,
+    focus,
+    total: Math.round(0.22 * heat + 0.16 * retention + 0.2 * structure + 0.2 * pace + 0.22 * focus),
+    books: scores,
+  }
+}
+
 export interface FanqieSelectionInsight {
   bookCount: number
   /** 题材判断：优先用共同标签，没有共同标签时取出现次数最多的标签。 */
@@ -143,19 +248,20 @@ export interface FanqieSelectionInsight {
   completedCount: number
   density: FanqieChapterDensity
   blend: FanqieBlendRisk
+  /** 这套组合的多维评分。 */
+  score: FanqieSelectionScore
 }
 
 /**
  * 选书诊断：只根据书籍页的公开字段算，不调模型。
- * 给作者回答三个问题：这算哪个题材、要写多大的规模、这几本叠在一起有没有风险。
+ * 给作者回答三个问题：这算哪个题材、要写多大的规模、这几本叠在一起有没有风险；再给一套分项评分。
  */
 export function buildFanqieSelectionInsight(books: readonly FanqieBookSummary[]): FanqieSelectionInsight {
   if (books.length === 0) throw new Error('FANQIE_SELECTION_EMPTY')
   if (books.length > FANQIE_FUSION_MAX_BOOKS) throw new Error('FANQIE_SELECTION_TOO_MANY')
 
   const shared = sharedTags(books)
-  const union = new Set(books.flatMap(book => book.tags))
-  const overlap = union.size === 0 ? 0 : shared.length / union.size
+  const overlap = overlapRatio(books)
   const { chapters, wordsPerChapter } = planScale(books)
   const density: FanqieChapterDensity = wordsPerChapter < 2200 ? 'thin' : wordsPerChapter > 3800 ? 'thick' : 'normal'
   const blend: FanqieBlendRisk = books.length < 2
@@ -173,6 +279,7 @@ export function buildFanqieSelectionInsight(books: readonly FanqieBookSummary[])
     completedCount: books.filter(book => book.status === 'completed').length,
     density,
     blend,
+    score: buildFanqieSelectionScore(books),
   }
 }
 
@@ -184,15 +291,13 @@ export interface FanqieBundleSuggestion {
   addedTags: string[]
   /** 候选里同题材但没进这一单的本数，方便再换一单。 */
   alternatives: number
+  /** 这一单自己的多维评分，界面直接显示。 */
+  score: FanqieSelectionScore
 }
 
-/** 一本参考作品自身值不值得进融合：在读数、章节长度是否落在主流区间、结构是否完整。 */
+/** 一本参考作品自身值不值得进融合：直接用多维评分的总分。 */
 function bookValue(book: FanqieBookSummary): number {
-  const popularity = clamp(Math.log10(book.readCount + 1) / 7, 0, 1)
-  const perChapter = book.chapterCount > 0 ? book.wordNumber / book.chapterCount : 0
-  const fit = perChapter >= 2000 && perChapter <= 4000 ? 1 : perChapter >= 1500 && perChapter <= 4500 ? 0.6 : 0.3
-  const status = book.status === 'completed' ? 1 : book.status === 'ongoing' ? 0.6 : 0.2
-  return 0.5 * popularity + 0.3 * fit + 0.2 * status
+  return scoreFanqieBook(book).total / 100
 }
 
 /**
@@ -256,6 +361,7 @@ export function suggestFanqieBundle(
     sharedTags: shared,
     addedTags: [...union].filter(tag => !shared.includes(tag)),
     alternatives: unique.filter(book => !picked.includes(book) && book.tags.some(tag => union.has(tag))).length,
+    score: buildFanqieSelectionScore(picked),
   }
 }
 

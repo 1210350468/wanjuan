@@ -16,6 +16,7 @@ import {
   buildFanqieFusionBrief,
   buildFanqieSelectionInsight,
   FANQIE_FUSION_MAX_BOOKS,
+  scoreFanqieBook,
   suggestFanqieBundle,
   type FanqieBookSummary,
   type FanqieRankPage,
@@ -66,6 +67,19 @@ function BookMeta({ book }: { book: FanqieBookSummary }) {
           : text(`${book.wordNumber.toLocaleString('zh-CN')} 字`, `${book.wordNumber.toLocaleString('en-US')} ${pluralEn(book.wordNumber, 'word')}`),
         book.readCount > 0 ? text(`${book.readCount.toLocaleString('zh-CN')} 人在读`, `${book.readCount.toLocaleString('en-US')} reading`) : '',
       ].filter(Boolean).join('｜')}
+    </span>
+  )
+}
+
+/** 一条分项评分：标签、进度条、数值。用主题色画条，不写颜色字面量。 */
+function ScoreBar({ label, value }: { label: string; value: number }) {
+  return (
+    <span className="flex items-center gap-2">
+      <span className="w-12 shrink-0 text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>{label}</span>
+      <span className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--color-hover)' }}>
+        <span className="block h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, value))}%`, background: 'var(--color-accent)' }} />
+      </span>
+      <span className="w-7 shrink-0 text-right text-[0.7rem] tabular-nums" style={{ color: 'var(--color-text-secondary)' }}>{value}</span>
     </span>
   )
 }
@@ -233,8 +247,8 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
     const shared = suggestion.sharedTags.slice(0, 2).join('、')
     const added = suggestion.addedTags.slice(0, 3).join('、')
     setBundleNote(text(
-      `配了 ${suggestion.books.length} 本：${names}。${shared ? `共同 ${shared}` : '没有共同标签，只借节奏'}${added ? `，另外带来 ${added}` : ''}。${suggestion.alternatives > 0 ? `同题材还有 ${suggestion.alternatives} 本可换。` : ''}`,
-      `Drafted ${suggestion.books.length}: ${suggestion.books.map(book => `"${book.bookName}"`).join(' ')}. ${shared ? `Shared ${shared}` : 'No shared tag, borrowing pace only'}${added ? `, plus ${added}` : ''}. ${suggestion.alternatives > 0 ? `${suggestion.alternatives} more in the same genre are available.` : ''}`,
+      `配了 ${suggestion.books.length} 本：${names}，综合 ${suggestion.score.total} 分。${shared ? `共同 ${shared}` : '没有共同标签，只借节奏'}${added ? `，另外带来 ${added}` : ''}。${suggestion.alternatives > 0 ? `同题材还有 ${suggestion.alternatives} 本可换。` : ''}`,
+      `Drafted ${suggestion.books.length}: ${suggestion.books.map(book => `"${book.bookName}"`).join(' ')}. Overall ${suggestion.score.total}. ${shared ? `Shared ${shared}` : 'No shared tag, borrowing pace only'}${added ? `, plus ${added}` : ''}. ${suggestion.alternatives > 0 ? `${suggestion.alternatives} more in the same genre are available.` : ''}`,
     ))
   }
 
@@ -529,7 +543,16 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
                     >
                       <BookCover book={book} size="md" />
                       <span className="flex min-w-0 flex-1 flex-col gap-1">
-                        <span className="line-clamp-2 text-sm font-medium text-[var(--color-text)]">{book.bookName}</span>
+                        <span className="flex items-start gap-1">
+                          <span className="line-clamp-2 flex-1 text-sm font-medium text-[var(--color-text)]">{book.bookName}</span>
+                          <span
+                            className="shrink-0 rounded border px-1 text-[0.65rem] tabular-nums"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-accent)' }}
+                            title={text('综合评分：热度、追读、结构、节奏', 'Overall score: heat, retention, structure, pace')}
+                          >
+                            {scoreFanqieBook(book).total}
+                          </span>
+                        </span>
                         <BookMeta book={book} />
                         {book.abstract && (
                           <span className="line-clamp-2 text-[0.7rem] leading-5" style={{ color: 'var(--color-text-muted)' }}>
@@ -587,6 +610,14 @@ export default function FanqieLibraryDialog({ open, onClose }: FanqieLibraryDial
                 {insightNotes.map(note => (
                   <p key={note} className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{note}</p>
                 ))}
+                <div className="grid grid-cols-1 gap-x-4 gap-y-1 pt-1 sm:grid-cols-2" role="group" aria-label={text('这套组合的评分', 'Score for this combination')}>
+                  <ScoreBar label={text('综合', 'Overall')} value={insight.score.total} />
+                  <ScoreBar label={text('题材集中', 'Focus')} value={insight.score.focus} />
+                  <ScoreBar label={text('热度', 'Heat')} value={insight.score.heat} />
+                  <ScoreBar label={text('追读', 'Retention')} value={insight.score.retention} />
+                  <ScoreBar label={text('结构', 'Structure')} value={insight.score.structure} />
+                  <ScoreBar label={text('节奏', 'Pace')} value={insight.score.pace} />
+                </div>
               </div>
             )}
 
